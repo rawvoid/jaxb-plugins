@@ -10,6 +10,10 @@
     <name>jaxb-plugins</name>
     <url>https://github.com/rawvoid/jaxb-plugins</url>
 
+    <modules>
+        <module>plugins</module>
+    </modules>
+
     <properties>
         <encoding>UTF-8</encoding>
         <java.version>21</java.version>
