@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins"
+           elementFormDefault="qualified">
+
+    <xs:complexType name="Person">
+        <xs:sequence>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="age" type="xs:int"/>
+            <xs:element name="active" type="xs:boolean"/>
+            <xs:element name="readonlyField" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="person" type="tns:Person"/>
+</xs:schema>
