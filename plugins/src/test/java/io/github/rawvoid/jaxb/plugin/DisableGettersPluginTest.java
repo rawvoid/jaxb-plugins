@@ -3,7 +3,6 @@ package io.github.rawvoid.jaxb.plugin;
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
@@ -20,12 +19,7 @@ class DisableGettersPluginTest extends AbstractXJCMojoTestCase {
             if (!clazz.getSimpleName().equals("Person")) {
                 return;
             }
-            var methods = clazz.getDeclaredMethods();
-            var getter = Arrays.stream(methods)
-                .filter(this::isGetter)
-                .findAny()
-                .orElse(null);
-            assertThat(getter).isNotNull();
+            assertThat(hasGetter(clazz)).isTrue();
         });
     }
 
@@ -35,15 +29,13 @@ class DisableGettersPluginTest extends AbstractXJCMojoTestCase {
             if (!clazz.getSimpleName().equals("Person")) {
                 return;
             }
-            var methods = clazz.getDeclaredMethods();
-            for (var method : methods) {
-                assertThat(isGetter(method)).isFalse();
-            }
+            assertThat(hasGetter(clazz)).isFalse();
         });
     }
 
-    public boolean isGetter(Method method) {
-        var name = method.getName();
-        return (name.startsWith("get") || name.startsWith("is")) && method.getParameterCount() == 0;
+    public boolean hasGetter(Class<?> clazz) {
+        var methods = clazz.getDeclaredMethods();
+        return Arrays.stream(methods)
+            .anyMatch(method -> (method.getName().startsWith("get") || method.getName().startsWith("is")) && method.getParameterCount() == 0);
     }
 }
