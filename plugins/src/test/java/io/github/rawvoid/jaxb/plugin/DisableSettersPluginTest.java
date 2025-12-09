@@ -20,17 +20,13 @@ class DisableSettersPluginTest extends AbstractXJCMojoTestCase {
             if (!clazz.getSimpleName().equals("Person")) {
                 return;
             }
-
             assertThat(hasSetter(clazz)).isTrue();
         });
     }
 
     @Test
     void testPlugin() throws Exception {
-        var args = List.of(
-            "-Xdisable-setters"
-        );
-        testExecute(args, clazz -> {
+        testExecute(List.of("-" + DisableSettersPlugin.OPTION_NAME), clazz -> {
             if (!clazz.getSimpleName().equals("Person")) {
                 return;
             }
