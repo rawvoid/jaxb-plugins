@@ -18,8 +18,8 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
     void testAnnotatePlugin() throws Exception {
         var args = List.of(
             "-Xannotate",
-            "-Xannotate-class=@jakarta.xml.bind.annotation.XmlSeeAlso(value = {java.lang.Object.class, java.lang.String.class})=regx:.*Person",
-            "-Xannotate-field=@jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter(jakarta.xml.bind.annotation.adapters.CollapsedStringAdapter.class)=regx:.*name"
+            "-Xannotate-class=@jakarta.xml.bind.annotation.XmlSeeAlso(value = {java.lang.Object.class, java.lang.String.class})=regex:.*Person",
+            "-Xannotate-field=@jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter(jakarta.xml.bind.annotation.adapters.CollapsedStringAdapter.class)=regex:.*name"
         );
         testExecute(args, clazz -> {
             if (!clazz.getSimpleName().equals("Person")) return;

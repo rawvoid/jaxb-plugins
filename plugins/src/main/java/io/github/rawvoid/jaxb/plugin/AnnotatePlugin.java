@@ -46,14 +46,14 @@ public class AnnotatePlugin extends Plugin {
             ## Configuration Options
             These options provide precise control over where annotations are added and to what extent they match.
             
-            * **-%s=<annotation>[=regx:pattern]**   -> Add annotation to generated **classes**.
+            * **-%s=<annotation>[=regex:pattern]**   -> Add annotation to generated **classes**.
                 e.g. -%s=@lombok.Data
-                e.g. -%s=@MyAnnotation=regx:com.example.*
+                e.g. -%s=@MyAnnotation=regex:com.example.*
             
-            * **-%s=<annotation>[=regx:pattern]**   -> Add annotation to generated **fields**.
-                e.g. -%s=@lombok.Getter=regx:org.example.Person.*
+            * **-%s=<annotation>[=regex:pattern]**   -> Add annotation to generated **fields**.
+                e.g. -%s=@lombok.Getter=regex:org.example.Person.*
             
-            * **-%s=<annotation>[=regx:pattern]     -> Add annotation to generated **methods**.
+            * **-%s=<annotation>[=regex:pattern]     -> Add annotation to generated **methods**.
                 e.g. -%s=@lombok.Generated
             
             """.formatted(
@@ -101,18 +101,18 @@ public class AnnotatePlugin extends Plugin {
             XAnnotation<?> xAnnotation;
 
             var line = arg.substring(idx + optionName.length() + 1);
-            var regxIdx = line.indexOf("=regx:");
-            if (regxIdx > -1) {
-                var regx = line.substring(regxIdx + "=regx:".length());
-                var annotation = line.substring(line.indexOf('@'), regxIdx);
-                pattern = Pattern.compile(regx);
+            var regexIdx = line.indexOf("=regex:");
+            if (regexIdx > -1) {
+                var regex = line.substring(regexIdx + "=regex:".length());
+                var annotation = line.substring(line.indexOf('@'), regexIdx);
+                pattern = Pattern.compile(regex);
                 xAnnotation = XAnnotationParser.INSTANCE.parse(annotation);
             } else {
                 xAnnotation = XAnnotationParser.INSTANCE.parse(line.substring(line.indexOf('@')));
             }
             return new Config(pattern, xAnnotation);
         } catch (Exception e) {
-            throw new BadCommandLineException("Invalid config: %s. Please check the format: -%s=<annotation>[=regx:pattern]".formatted(arg, optionName), e);
+            throw new BadCommandLineException("Invalid config: %s. Please check the format: -%s=<annotation>[=regex:pattern]".formatted(arg, optionName), e);
         }
     }
 
