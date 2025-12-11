@@ -12,6 +12,7 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.io.IOException;
+import java.lang.annotation.Repeatable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -156,7 +157,17 @@ public class AnnotatePlugin extends Plugin {
             .toList();
         matchedConfigs.forEach(config -> {
             var xAnnotation = config.annotation;
-            var annotationUse = target.annotate(xAnnotation.getAnnotationClass());
+            var annotationClass = xAnnotation.getAnnotationClass();
+            var existingSameAnnotations = target.annotations().stream()
+                .filter(a -> a.getAnnotationClass().fullName().equals(annotationClass.getName()))
+                .toList();
+
+            if (!existingSameAnnotations.isEmpty()) {
+                if (annotationClass.getAnnotation(Repeatable.class) == null) {
+                    existingSameAnnotations.forEach(target::removeAnnotation);
+                }
+            }
+            var annotationUse = target.annotate(annotationClass);
             xAnnotation.getFieldsList().forEach(field ->
                 fillAnnotationParam(annotationUse, field.getName(), field.getValue()));
         });

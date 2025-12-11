@@ -1,6 +1,8 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlSeeAlso;
 import org.junit.jupiter.api.Test;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
@@ -36,6 +38,20 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
 
             var ageField = clazz.getDeclaredField("age");
             assertThat(ageField.getDeclaredAnnotation(jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter.class)).isNull();
+        });
+    }
+
+    @Test
+    void testDuplicateAnnotation() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-Xannotate-class=@jakarta.xml.bind.annotation.XmlAccessorType(jakarta.xml.bind.annotation.XmlAccessType.NONE)"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            var generatedAnnotation = clazz.getDeclaredAnnotation(XmlAccessorType.class);
+            assertThat(generatedAnnotation).isNotNull();
+            assertThat(generatedAnnotation.value()).isEqualTo(XmlAccessType.NONE);
         });
     }
 
