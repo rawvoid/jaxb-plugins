@@ -8,6 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.jvnet.jaxb.maven.AbstractXJCMojo;
 import org.jvnet.jaxb.maven.XJCMojo;
 
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
 import java.io.File;
 import java.io.IOException;
@@ -18,10 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -102,14 +102,33 @@ public abstract class AbstractXJCMojoTestCase {
 
     protected void compileGeneratedJavaFiles() throws Exception {
         var compiler = ToolProvider.getSystemJavaCompiler();
-        var fm = compiler.getStandardFileManager(null, null, null);
+
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+
+        var fm = compiler.getStandardFileManager(diagnostics, Locale.getDefault(), null);
 
         var options = getCompileOptions();
-
         var javaFiles = fm.getJavaFileObjectsFromPaths(getGeneratedJavaFiles());
-        var task = compiler.getTask(null, fm, null, options, null, javaFiles);
 
-        task.call();
+        var task = compiler.getTask(null, fm, diagnostics, options, null, javaFiles);
+        var result = task.call();
+
+        if (result == null || !result) {
+            StringBuilder errorReport = new StringBuilder("Java class compile failed\n");
+
+            for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
+                if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
+                    errorReport.append("Error on file: ")
+                        .append(diagnostic.getSource().getName())
+                        .append("\n  Line ")
+                        .append(diagnostic.getLineNumber())
+                        .append(": ")
+                        .append(diagnostic.getMessage(Locale.getDefault()))
+                        .append("\n");
+                }
+            }
+            throw new RuntimeException(errorReport.toString());
+        }
     }
 
     protected List<String> getCompileOptions() {
