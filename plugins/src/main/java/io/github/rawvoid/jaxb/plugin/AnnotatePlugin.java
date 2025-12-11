@@ -199,12 +199,12 @@ public class AnnotatePlugin extends Plugin {
                     throw new IllegalStateException("Unexpected value: " + paramValue);
                 }
                 var array = annotationUse.paramArray(paramName);
-                iterable.forEach(item -> fullArrayParam(array, item));
+                iterable.forEach(item -> fillArrayParam(array, item));
             }
         }
     }
 
-    public void fullArrayParam(JAnnotationArrayMember array, Object value) {
+    public void fillArrayParam(JAnnotationArrayMember array, Object value) {
         switch (value) {
             case String strValue -> array.param(strValue);
             case Integer intValue -> array.param(intValue);
