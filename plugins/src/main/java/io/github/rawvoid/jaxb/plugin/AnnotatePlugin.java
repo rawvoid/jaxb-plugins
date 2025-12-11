@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.StringJoiner;
 import java.util.regex.Pattern;
 
 /**
@@ -131,64 +130,36 @@ public class AnnotatePlugin extends Plugin {
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
         outline.getClasses().forEach(classOutline -> {
             var jDefinedClass = classOutline.implClass;
+            var className = jDefinedClass.fullName();
 
-            var matchedClassConfigs = getMatchedClassConfigs(jDefinedClass);
-            matchedClassConfigs.forEach(config -> {
-                var xAnnotation = config.annotation;
-                var annotationUse = jDefinedClass.annotate(xAnnotation.getAnnotationClass());
-                xAnnotation.getFieldsList().forEach(field ->
-                    fillAnnotationParam(annotationUse, field.getName(), field.getValue()));
-            });
+            if (!classConfigs.isEmpty()) {
+                addAnnotation(jDefinedClass, className, classConfigs);
+            }
 
-            jDefinedClass.fields().values().forEach(field -> {
-                var matchedFieldConfigs = getMatchedFieldConfigs(jDefinedClass, field);
-                for (var config : matchedFieldConfigs) {
-                    var xAnnotation = config.annotation;
-                    var annotationUse = field.annotate(xAnnotation.getAnnotationClass());
-                    xAnnotation.getFieldsList().forEach(fieldParam ->
-                        fillAnnotationParam(annotationUse, fieldParam.getName(), fieldParam.getValue()));
-                }
-            });
+            if (!fieldConfigs.isEmpty()) {
+                jDefinedClass.fields().values().forEach(field ->
+                    addAnnotation(field, className + "." + field.name(), fieldConfigs));
+            }
 
-            jDefinedClass.methods().forEach(method -> {
-                var matchedMethodConfigs = getMatchedMethodConfigs(jDefinedClass, method);
-                for (var config : matchedMethodConfigs) {
-                    var xAnnotation = config.annotation;
-                    var annotationUse = method.annotate(xAnnotation.getAnnotationClass());
-                    xAnnotation.getFieldsList().forEach(field ->
-                        fillAnnotationParam(annotationUse, field.getName(), field.getValue()));
-                }
-            });
+            if (!methodConfigs.isEmpty()) {
+                jDefinedClass.methods().forEach(method ->
+                    addAnnotation(method, className + "." + method.name(), methodConfigs));
+            }
         });
 
         return true;
     }
 
-    public List<Config> getMatchedClassConfigs(JDefinedClass jDefinedClass) {
-        var className = jDefinedClass.fullName();
-        return classConfigs.stream()
-            .filter(config -> config.pattern == null || config.pattern.matcher(className).matches())
+    public void addAnnotation(JAnnotatable target, String targetName, List<Config> configs) {
+        var matchedConfigs = configs.stream()
+            .filter(config -> config.pattern == null || config.pattern.matcher(targetName).matches())
             .toList();
-    }
-
-    public List<Config> getMatchedMethodConfigs(JDefinedClass jDefinedClass, JMethod jMethod) {
-        var methodName = new StringJoiner(".")
-            .add(jDefinedClass.fullName())
-            .add(jMethod.name())
-            .toString();
-        return methodConfigs.stream()
-            .filter(config -> config.pattern == null || config.pattern.matcher(methodName).matches())
-            .toList();
-    }
-
-    public List<Config> getMatchedFieldConfigs(JDefinedClass jDefinedClass, JFieldVar jFieldVar) {
-        var fieldName = new StringJoiner(".")
-            .add(jDefinedClass.fullName())
-            .add(jFieldVar.name())
-            .toString();
-        return fieldConfigs.stream()
-            .filter(config -> config.pattern == null || config.pattern.matcher(fieldName).matches())
-            .toList();
+        matchedConfigs.forEach(config -> {
+            var xAnnotation = config.annotation;
+            var annotationUse = target.annotate(xAnnotation.getAnnotationClass());
+            xAnnotation.getFieldsList().forEach(field ->
+                fillAnnotationParam(annotationUse, field.getName(), field.getValue()));
+        });
     }
 
     protected void fillAnnotationParam(JAnnotationUse annotationUse, String paramName, Object paramValue) {
