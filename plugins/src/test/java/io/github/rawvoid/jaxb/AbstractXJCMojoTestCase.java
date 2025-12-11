@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -58,7 +57,9 @@ public abstract class AbstractXJCMojoTestCase {
         compileGeneratedJavaFiles();
         var classes = loadGeneratedClasses();
         if (classConsumer != null) {
-            classes.forEach(classConsumer);
+            for (var clazz : classes) {
+                classConsumer.accept(clazz);
+            }
         }
         return classes;
     }
@@ -190,6 +191,10 @@ public abstract class AbstractXJCMojoTestCase {
                 }
             }
         });
+    }
+
+    public interface Consumer<T> {
+        void accept(T t) throws Exception;
     }
 
 }
