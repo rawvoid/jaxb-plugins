@@ -20,6 +20,17 @@
             <version>4.0.6</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>org.jvnet.jaxb</groupId>
+            <artifactId>jaxb-annox</artifactId>
+            <version>4.0.12</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.42</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- test dependencies -->
 

@@ -1,2 +1,3 @@
 io.github.rawvoid.jaxb.plugin.DisableGettersPlugin
 io.github.rawvoid.jaxb.plugin.DisableSettersPlugin
+io.github.rawvoid.jaxb.plugin.AnnotatePlugin
