@@ -12,6 +12,7 @@
 
     <name>jaxb-plugins</name>
     <url>https://github.com/rawvoid/jaxb-plugins</url>
+    <description>JAXB plugins</description>
 
     <dependencies>
         <dependency>
