@@ -34,3 +34,7 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Maven ###
+.mvn/
+pom.xml.versionsBackup
