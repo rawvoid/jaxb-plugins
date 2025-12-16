@@ -6,16 +6,21 @@ import com.sun.tools.xjc.Plugin;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * @author Rawvoid
  */
 public abstract class AbstractPlugin extends Plugin {
 
-    private final Map<Class<?>, TextParser<?>> textParsers = new HashMap<>();
+    private final Map<Class<?>, TextParser<?>> textParsersByOptionType = new HashMap<>();
+    private final Map<String, TextParser<?>> textParsersByOptionName = new HashMap<>();
+
+    private boolean optionParsed = false;
 
     public AbstractPlugin() {
         initDefaultTextParsers();
@@ -78,11 +83,150 @@ public abstract class AbstractPlugin extends Plugin {
 
     @Override
     public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
-        return super.parseArgument(opt, args, i);
+        if (optionParsed) return 0;
+        var option = getClass().getAnnotation(Option.class);
+        if (option == null) {
+            throw new BadCommandLineException("Plugin must be annotated with @Option");
+        }
+        try {
+            var count = parseArgument(this, args, i);
+            if (count > 0) optionParsed = true;
+            return count;
+        } catch (Exception e) {
+            throw new BadCommandLineException("Error parsing plugin option %s: %s".formatted(option.name(), e.getMessage()), e);
+        }
+    }
+
+    public int parseArgument(Object object, String[] args, int i) throws Exception {
+        var clazz = object.getClass();
+        var optionFields = getOptionFields(clazz);
+        int count = 0, j = i;
+        for (; j < args.length; j++) {
+            var arg = args[j].trim();
+            boolean optionMatched = false;
+            for (var optionField : optionFields) {
+                var fieldType = optionField.getType();
+                var option = optionField.getAnnotation(Option.class);
+                var optionFlag = option.prefix() + option.name();
+                var optionDelimiter = option.delimiter();
+                if (arg.trim().equals(optionFlag)) {
+                    optionMatched = true;
+                    if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
+                        setFieldValue(object, optionField, true, "true");
+                        j++;
+                    } else if (Collection.class.isAssignableFrom(fieldType)) {
+                        var elementType = getElementType(optionField);
+                        Collection<Object> collection = createCollection(fieldType);
+                        setFieldValue(object, optionField, collection, "[]");
+                        j++;
+                        TextParser<?> parser = getParser(option, elementType);
+                        if (parser == null) {
+                            if (elementType.getClassLoader() != null) {
+                                Object elementValue = elementType.getConstructor().newInstance();
+                                collection.add(elementValue);
+                                var x = parseArgument(elementValue, args, j);
+                                j += x;
+                            } else {
+                                throw new BadCommandLineException("Text parser not found for type: %s".formatted(elementType.getName()));
+                            }
+                        }
+                    } else {
+                        throw new BadCommandLineException("Option %s must have a value".formatted(optionFlag));
+                    }
+                } else {
+                    var pattern = Pattern.compile("^" + optionFlag + "/s*" + optionDelimiter + "(.*)");
+                    var matcher = pattern.matcher(arg);
+                    if (matcher.matches()) {
+                        optionMatched = true;
+                        j++;
+                        var textValue = matcher.group(1);
+                        TextParser<?> parser = getParser(option, fieldType);
+                        if (parser == null) {
+                            if (fieldType.getClassLoader() != null) {
+                                Object value = fieldType.getConstructor().newInstance();
+                                var x = parseArgument(value, args, j);
+                                if (x > 0) {
+                                    j += x;
+                                    setFieldValue(object, optionField, value, textValue);
+                                }
+                            } else if (Collection.class.isAssignableFrom(fieldType)) {
+                                var elementType = getElementType(optionField);
+                                parser = getParser(option, elementType);
+                                if (parser == null) {
+                                    throw new BadCommandLineException("Text parser not found for type: %s".formatted(elementType.getName()));
+                                }
+                                Collection<Object> collection = createCollection(fieldType);
+                                setFieldValue(object, optionField, collection, "[]");
+                                while (true) {
+                                    var elementValue = elementType.getConstructor().newInstance();
+                                    var x = parseArgument(elementValue, args, j);
+                                    if (x > 0) {
+                                        collection.add(elementValue);
+                                        j += x;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else {
+                                throw new BadCommandLineException("Text parser not found for type: %s".formatted(fieldType.getName()));
+                            }
+                        } else {
+                            var value = parser.parse(option.name(), textValue);
+                            setFieldValue(object, optionField, value, textValue);
+                        }
+                    }
+                }
+            }
+            if (optionMatched) {
+                count += j - i;
+            } else {
+                break;
+            }
+        }
+        return count;
+    }
+
+    private TextParser<?> getParser(Option option, Class<?> fieldType) {
+        return textParsersByOptionName.getOrDefault(option.name(), textParsersByOptionType.get(fieldType));
+    }
+
+    private Collection<Object> createCollection(Class<?> collectionType) {
+        try {
+            if (collectionType.isInterface()) {
+                if (collectionType.equals(List.class)) {
+                    return new ArrayList<>();
+                } else if (collectionType.equals(Set.class)) {
+                    return new HashSet<>();
+                } else if (collectionType.equals(Queue.class)) {
+                    return new ArrayDeque<>();
+                } else {
+                    throw new IllegalArgumentException("Unsupported collection type: " + collectionType.getName());
+                }
+            } else if (Modifier.isAbstract(collectionType.getModifiers())) {
+                throw new IllegalArgumentException("Unsupported abstract collection type: " + collectionType.getName());
+            } else {
+                return (Collection<Object>) collectionType.getConstructor().newInstance();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error creating collection of type " + collectionType.getName(), e);
+        }
+    }
+
+    private void setFieldValue(Object object, Field field, Object value, String textValue) {
+        try {
+            field.setAccessible(true);
+            field.set(object, value);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Error setting field %s with value %s".formatted(field.getName(), textValue), e);
+        }
     }
 
     public <T> void registerTextParser(Class<T> clazz, TextParser<T> parser) {
-        textParsers.put(clazz, parser);
+        textParsersByOptionType.put(clazz, parser);
+    }
+
+    public <T> void registerTextParser(String optionName, TextParser<T> parser) {
+        textParsersByOptionName.put(optionName, parser);
     }
 
     public abstract String getOptionDescription();
@@ -91,23 +235,23 @@ public abstract class AbstractPlugin extends Plugin {
      * Initializes the default text parsers for common types.
      */
     private void initDefaultTextParsers() {
-        registerTextParser(int.class, (optionName, text) -> Integer.parseInt(text.toString()));
-        registerTextParser(Integer.class, (optionName, text) -> Integer.parseInt(text.toString()));
-        registerTextParser(boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString()));
-        registerTextParser(Boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString()));
-        registerTextParser(double.class, (optionName, text) -> Double.parseDouble(text.toString()));
-        registerTextParser(Double.class, (optionName, text) -> Double.parseDouble(text.toString()));
-        registerTextParser(float.class, (optionName, text) -> Float.parseFloat(text.toString()));
-        registerTextParser(Float.class, (optionName, text) -> Float.parseFloat(text.toString()));
-        registerTextParser(short.class, (optionName, text) -> Short.parseShort(text.toString()));
-        registerTextParser(Short.class, (optionName, text) -> Short.parseShort(text.toString()));
-        registerTextParser(byte.class, (optionName, text) -> Byte.parseByte(text.toString()));
-        registerTextParser(Byte.class, (optionName, text) -> Byte.parseByte(text.toString()));
-        registerTextParser(char.class, (optionName, text) -> text.toString().charAt(0));
-        registerTextParser(Character.class, (optionName, text) -> text.toString().charAt(0));
-        registerTextParser(long.class, (optionName, text) -> Long.parseLong(text.toString()));
-        registerTextParser(Long.class, (optionName, text) -> Long.parseLong(text.toString()));
-        registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString()));
+        registerTextParser(boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
+        registerTextParser(Boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
+        registerTextParser(int.class, (optionName, text) -> Integer.parseInt(text.toString().trim()));
+        registerTextParser(Integer.class, (optionName, text) -> Integer.parseInt(text.toString().trim()));
+        registerTextParser(double.class, (optionName, text) -> Double.parseDouble(text.toString().trim()));
+        registerTextParser(Double.class, (optionName, text) -> Double.parseDouble(text.toString().trim()));
+        registerTextParser(float.class, (optionName, text) -> Float.parseFloat(text.toString().trim()));
+        registerTextParser(Float.class, (optionName, text) -> Float.parseFloat(text.toString().trim()));
+        registerTextParser(short.class, (optionName, text) -> Short.parseShort(text.toString().trim()));
+        registerTextParser(Short.class, (optionName, text) -> Short.parseShort(text.toString().trim()));
+        registerTextParser(byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
+        registerTextParser(Byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
+        registerTextParser(char.class, (optionName, text) -> text.toString().trim().charAt(0));
+        registerTextParser(Character.class, (optionName, text) -> text.toString().trim().charAt(0));
+        registerTextParser(long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
+        registerTextParser(Long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
+        registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString().trim()));
     }
 
     private List<Field> getOptionFields(Class<?> clazz) {
