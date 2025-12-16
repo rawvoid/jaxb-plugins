@@ -81,67 +81,71 @@ public abstract class AbstractPlugin extends Plugin {
             throw new BadCommandLineException("Plugin must be annotated with @Option");
         }
         try {
-            var count = parseArgument(this, args, i);
-            if (count > 0) optionParsed = true;
-            return count;
+            var arg = args[i].trim();
+            if (arg.equals(getOptionName())) {
+                var count = parseArgument(this, args, i + 1);
+                optionParsed = true;
+                return count;
+            }
         } catch (Exception e) {
             throw new BadCommandLineException("Error parsing plugin option %s: %s".formatted(option.name(), e.getMessage()), e);
         }
+        return 0;
     }
 
     public int parseArgument(Object object, String[] args, int i) throws Exception {
         var clazz = object.getClass();
         var optionFields = getOptionFields(clazz);
+
         int count = 0, j = i;
         for (; j < args.length; j++) {
             var arg = args[j].trim();
-            boolean optionMatched = false;
+            Field matchedOptionField = null;
             for (var optionField : optionFields) {
                 var fieldType = optionField.getType();
                 var option = optionField.getAnnotation(Option.class);
                 var optionFlag = option.prefix() + option.name();
-                var optionDelimiter = option.delimiter();
                 if (arg.trim().equals(optionFlag)) {
-                    optionMatched = true;
+                    j++;
+                    matchedOptionField = optionField;
                     if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
                         setFieldValue(object, optionField, true, "true");
-                        j++;
                     } else if (Collection.class.isAssignableFrom(fieldType)) {
                         var elementType = getElementType(optionField);
                         Collection<Object> collection = createCollection(fieldType);
                         setFieldValue(object, optionField, collection, "[]");
-                        j++;
-                        TextParser<?> parser = getParser(option, elementType);
-                        if (parser == null) {
-                            if (elementType.getClassLoader() != null) {
-                                Object elementValue = elementType.getConstructor().newInstance();
+
+                        while (true) {
+                            var elementValue = elementType.getConstructor().newInstance();
+                            var x = parseArgument(elementValue, args, j);
+                            if (x > 0) {
                                 collection.add(elementValue);
-                                var x = parseArgument(elementValue, args, j);
                                 j += x;
                             } else {
-                                throw new BadCommandLineException("Text parser not found for type: %s".formatted(elementType.getName()));
+                                break;
                             }
+                        }
+                    } else if (fieldType.getClassLoader() != null) {
+                        var value = fieldType.getConstructor().newInstance();
+                        var x = parseArgument(value, args, j);
+                        if (x > 0) {
+                            j += x;
+                            setFieldValue(object, optionField, value, "");
                         }
                     } else {
                         throw new BadCommandLineException("Option %s must have a value".formatted(optionFlag));
                     }
                 } else {
-                    var pattern = Pattern.compile("^" + optionFlag + "/s*" + optionDelimiter + "(.*)");
+                    var delimiter = option.delimiter();
+                    var pattern = Pattern.compile("^" + optionFlag + "\\s*" + delimiter + "(.*)");
                     var matcher = pattern.matcher(arg);
                     if (matcher.matches()) {
-                        optionMatched = true;
                         j++;
+                        matchedOptionField = optionField;
                         var textValue = matcher.group(1);
                         TextParser<?> parser = getParser(option, fieldType);
                         if (parser == null) {
-                            if (fieldType.getClassLoader() != null) {
-                                Object value = fieldType.getConstructor().newInstance();
-                                var x = parseArgument(value, args, j);
-                                if (x > 0) {
-                                    j += x;
-                                    setFieldValue(object, optionField, value, textValue);
-                                }
-                            } else if (Collection.class.isAssignableFrom(fieldType)) {
+                            if (Collection.class.isAssignableFrom(fieldType)) {
                                 var elementType = getElementType(optionField);
                                 parser = getParser(option, elementType);
                                 if (parser == null) {
@@ -149,12 +153,16 @@ public abstract class AbstractPlugin extends Plugin {
                                 }
                                 Collection<Object> collection = createCollection(fieldType);
                                 setFieldValue(object, optionField, collection, "[]");
+                                var value = parser.parse(option.name(), textValue);
+                                collection.add(value);
                                 while (true) {
-                                    var elementValue = elementType.getConstructor().newInstance();
-                                    var x = parseArgument(elementValue, args, j);
-                                    if (x > 0) {
-                                        collection.add(elementValue);
-                                        j += x;
+                                    arg = args[j];
+                                    matcher = pattern.matcher(arg);
+                                    if (matcher.matches()) {
+                                        j++;
+                                        textValue = matcher.group(1);
+                                        value = parser.parse(option.name(), textValue);
+                                        collection.add(value);
                                     } else {
                                         break;
                                     }
@@ -169,7 +177,8 @@ public abstract class AbstractPlugin extends Plugin {
                     }
                 }
             }
-            if (optionMatched) {
+            if (matchedOptionField != null) {
+                optionFields.remove(matchedOptionField);
                 count += j - i;
             } else {
                 break;
