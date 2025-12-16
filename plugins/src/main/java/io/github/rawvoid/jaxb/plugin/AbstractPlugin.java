@@ -27,58 +27,50 @@ public abstract class AbstractPlugin extends Plugin {
     }
 
     @Override
-    public String getUsage() {
-        var joiner = new StringJoiner("\n");
-        var usage = new StringBuilder();
-        usage.append("  ").append(getOptionName());
-        var description = getOptionDescription();
-        if (description != null && !description.isBlank()) {
-            usage.append("        :  ").append(getOptionDescription());
+    public String getOptionName() {
+        Option option = getClass().getAnnotation(Option.class);
+        if (option == null) {
+            throw new IllegalStateException("Plugin must be annotated with @Option: " + getClass().getName());
         }
-        joiner.add(usage);
+        return option.prefix() + option.name();
+    }
 
-        var options = getOptionFields(getClass());
-        fillUsage(options, joiner, 1);
+    @Override
+    public String getUsage() {
+        LinkedHashMap<String, String> usages = new LinkedHashMap<>();
+        usages.put(getOptionName(), getClass().getAnnotation(Option.class).description());
+        collectOptionUsages(getClass(), " ".repeat(4), usages);
+
+        var maxLength = usages.keySet().stream()
+            .mapToInt(String::length)
+            .max()
+            .orElse(0);
+        StringJoiner joiner = new StringJoiner("\n");
+        usages.forEach((optionHead, description) -> {
+            var padding = maxLength - optionHead.length();
+            var usage = "  " + optionHead + " ".repeat(padding) + "        :  " + description;
+            joiner.add(usage);
+        });
         return joiner.toString();
     }
 
-    public void fillUsage(List<Field> fields, StringJoiner joiner, int deep) {
-        var indent = "  ".repeat(deep);
-        var optionNameMaxLength = fields.stream()
-            .mapToInt(field -> field.getName().length())
-            .max()
-            .orElse(0);
-
-        fields.forEach(field -> {
-            var fieldType = field.getType();
-            if (Map.class.isAssignableFrom(fieldType)) {
-                var className = field.getDeclaringClass().getName();
-                var fieldFullName = className + "." + field.getName();
-                throw new IllegalStateException("Map type is not supported for option field: " + fieldFullName);
-            }
-            String usage = getUsage(field.getAnnotation(Option.class), indent, optionNameMaxLength);
-            joiner.add(usage);
+    public void collectOptionUsages(Class<?> clazz, String indent, LinkedHashMap<String, String> usages) {
+        var optionFields = getOptionFields(clazz);
+        for (var optionField : optionFields) {
+            var fieldType = optionField.getType();
+            var option = optionField.getAnnotation(Option.class);
+            var optionHead = indent + option.prefix() + option.name();
+            usages.put(optionHead, option.description());
 
             if (fieldType.getClassLoader() != null) {
-                fillUsage(Arrays.asList(fieldType.getDeclaredFields()), joiner, deep + 1);
+                collectOptionUsages(fieldType, indent.repeat(2), usages);
             } else if (Collection.class.isAssignableFrom(fieldType)) {
-                var elementType = getElementType(field);
+                var elementType = getElementType(optionField);
                 if (elementType.getClassLoader() != null) {
-                    fillUsage(Arrays.asList(elementType.getDeclaredFields()), joiner, deep + 1);
+                    collectOptionUsages(elementType, indent.repeat(2), usages);
                 }
             }
-        });
-    }
-
-    private String getUsage(Option option, String indent, int maxLength) {
-        var usage = new StringBuilder();
-        usage.append(indent).append(option.name());
-        var description = option.description();
-        if (description != null && !description.isBlank()) {
-            usage.repeat(' ', maxLength - option.name().length());
-            usage.append("    :  ").append(description);
         }
-        return usage.toString();
     }
 
     @Override
@@ -228,8 +220,6 @@ public abstract class AbstractPlugin extends Plugin {
     public <T> void registerTextParser(String optionName, TextParser<T> parser) {
         textParsersByOptionName.put(optionName, parser);
     }
-
-    public abstract String getOptionDescription();
 
     /**
      * Initializes the default text parsers for common types.
