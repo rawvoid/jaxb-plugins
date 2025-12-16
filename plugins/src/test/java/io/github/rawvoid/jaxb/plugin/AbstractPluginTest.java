@@ -10,6 +10,7 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -58,9 +59,12 @@ class AbstractPluginTest {
         assertThat(plugin.isEnabled).isTrue();
         assertThat(plugin.intList).containsExactly(1, 2, 3);
         assertThat(plugin.intList2).containsExactly(4, 5, 6);
-        assertThat(plugin.annotationList.getFirst().annotation.getAnnotationClass()).isEqualTo(jakarta.xml.bind.annotation.XmlElement.class);
+        assertThat(plugin.annotationList.size()).isEqualTo(2);
+        assertThat(plugin.annotationList.getFirst().annotation.size()).isEqualTo(1);
+        assertThat(plugin.annotationList.getFirst().annotation.getFirst().getAnnotationClass()).isEqualTo(jakarta.xml.bind.annotation.XmlElement.class);
         assertThat(plugin.annotationList.getFirst().regex.pattern()).isEqualTo(".*");
-        assertThat(plugin.annotationList.get(1).annotation.getAnnotationClass()).isEqualTo(jakarta.xml.bind.annotation.XmlRootElement.class);
+        assertThat(plugin.annotationList.get(1).annotation.size()).isEqualTo(1);
+        assertThat(plugin.annotationList.get(1).annotation.getFirst().getAnnotationClass()).isEqualTo(jakarta.xml.bind.annotation.XmlRootElement.class);
         assertThat(plugin.annotationList.get(1).regex).isNull();
         assertThat(plugin.magicString).isEqualTo("abcdef");
         assertThat(plugin.config.className).isEqualTo(AbstractPluginTest.class);
@@ -97,7 +101,7 @@ class AbstractPluginTest {
         private static class AnnotationInfo {
 
             @Option(name = "annotation", description = "The annotation to be processed")
-            XAnnotation<?> annotation;
+            ArrayList<XAnnotation<?>> annotation;
 
             @Option(name = "regex", description = "The regex pattern to match the annotation")
             Pattern regex;

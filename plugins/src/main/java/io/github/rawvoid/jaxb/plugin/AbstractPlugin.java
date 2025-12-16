@@ -288,6 +288,8 @@ public abstract class AbstractPlugin extends Plugin {
                     Type actualType = actualTypeArgs[0];
                     if (actualType instanceof Class<?>) {
                         return (Class<?>) actualType;
+                    } else if (actualType instanceof ParameterizedType) {
+                        return (Class<?>) ((ParameterizedType) actualType).getRawType();
                     }
                 }
             }
