@@ -206,7 +206,9 @@ public abstract class AbstractPlugin extends Plugin {
             } else if (Modifier.isAbstract(collectionType.getModifiers())) {
                 throw new IllegalArgumentException("Unsupported abstract collection type: " + collectionType.getName());
             } else {
-                return (Collection<Object>) newInstance(collectionType);
+                @SuppressWarnings("unchecked")
+                var collection = (Collection<Object>) newInstance(collectionType);
+                return collection;
             }
         } catch (Exception e) {
             throw new RuntimeException("Error creating collection of type " + collectionType.getName(), e);
