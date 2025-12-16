@@ -31,7 +31,7 @@ class AbstractPluginTest {
     }
 
     @Test
-    void testUsageWithOptions() throws BadCommandLineException, IOException {
+    void testParseArguments() throws BadCommandLineException, IOException {
         var plugin = new TestPlugin();
         plugin.registerTextParser(XAnnotation.class, ((optionName, text) -> XAnnotationParser.INSTANCE.parse(text.toString())));
         plugin.registerTextParser(Pattern.class, (optionName, text) -> Pattern.compile(text.toString()));
