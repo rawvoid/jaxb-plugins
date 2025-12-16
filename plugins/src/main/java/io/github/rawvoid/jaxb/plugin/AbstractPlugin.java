@@ -106,7 +106,6 @@ public abstract class AbstractPlugin extends Plugin {
                 var option = optionField.getAnnotation(Option.class);
                 var optionFlag = option.prefix() + option.name();
                 if (arg.trim().equals(optionFlag)) {
-                    j++;
                     matchedOptionField = optionField;
                     if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
                         setFieldValue(object, optionField, true, "true");
@@ -117,7 +116,7 @@ public abstract class AbstractPlugin extends Plugin {
 
                         while (true) {
                             var elementValue = newInstance(elementType);
-                            var x = parseArgument(elementValue, args, j);
+                            var x = parseArgument(elementValue, args, j + 1);
                             if (x > 0) {
                                 collection.add(elementValue);
                                 j += x;
@@ -127,7 +126,7 @@ public abstract class AbstractPlugin extends Plugin {
                         }
                     } else if (fieldType.getClassLoader() != null) {
                         var value = newInstance(fieldType);
-                        var x = parseArgument(value, args, j);
+                        var x = parseArgument(value, args, j + 1);
                         if (x > 0) {
                             j += x;
                             setFieldValue(object, optionField, value, "");
@@ -135,12 +134,12 @@ public abstract class AbstractPlugin extends Plugin {
                     } else {
                         throw new BadCommandLineException("Option %s must have a value".formatted(optionFlag));
                     }
+                    break;
                 } else {
                     var delimiter = option.delimiter();
                     var pattern = Pattern.compile("^" + optionFlag + "\\s*" + delimiter + "(.*)");
                     var matcher = pattern.matcher(arg);
                     if (matcher.matches()) {
-                        j++;
                         matchedOptionField = optionField;
                         var textValue = matcher.group(1);
                         TextParser<?> parser = getParser(option, fieldType);
@@ -155,8 +154,8 @@ public abstract class AbstractPlugin extends Plugin {
                                 setFieldValue(object, optionField, collection, "[]");
                                 var value = parser.parse(option.name(), textValue);
                                 collection.add(value);
-                                while (true) {
-                                    arg = args[j];
+                                for (var x = j + 1; x < args.length; x++) {
+                                    arg = args[x];
                                     matcher = pattern.matcher(arg);
                                     if (matcher.matches()) {
                                         j++;
@@ -174,12 +173,13 @@ public abstract class AbstractPlugin extends Plugin {
                             var value = parser.parse(option.name(), textValue);
                             setFieldValue(object, optionField, value, textValue);
                         }
+                        break;
                     }
                 }
             }
             if (matchedOptionField != null) {
                 optionFields.remove(matchedOptionField);
-                count += j - i;
+                count = j - i + 1;
             } else {
                 break;
             }
