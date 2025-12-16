@@ -116,7 +116,7 @@ public abstract class AbstractPlugin extends Plugin {
                         setFieldValue(object, optionField, collection, "[]");
 
                         while (true) {
-                            var elementValue = elementType.getConstructor().newInstance();
+                            var elementValue = newInstance(elementType);
                             var x = parseArgument(elementValue, args, j);
                             if (x > 0) {
                                 collection.add(elementValue);
@@ -126,7 +126,7 @@ public abstract class AbstractPlugin extends Plugin {
                             }
                         }
                     } else if (fieldType.getClassLoader() != null) {
-                        var value = fieldType.getConstructor().newInstance();
+                        var value = newInstance(fieldType);
                         var x = parseArgument(value, args, j);
                         if (x > 0) {
                             j += x;
@@ -206,7 +206,7 @@ public abstract class AbstractPlugin extends Plugin {
             } else if (Modifier.isAbstract(collectionType.getModifiers())) {
                 throw new IllegalArgumentException("Unsupported abstract collection type: " + collectionType.getName());
             } else {
-                return (Collection<Object>) collectionType.getConstructor().newInstance();
+                return (Collection<Object>) newInstance(collectionType);
             }
         } catch (Exception e) {
             throw new RuntimeException("Error creating collection of type " + collectionType.getName(), e);
@@ -219,6 +219,16 @@ public abstract class AbstractPlugin extends Plugin {
             field.set(object, value);
         } catch (IllegalAccessException e) {
             throw new RuntimeException("Error setting field %s with value %s".formatted(field.getName(), textValue), e);
+        }
+    }
+
+    private <T> T newInstance(Class<T> clazz) {
+        try {
+            var constructor = clazz.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException("Error creating instance of " + clazz.getName(), e);
         }
     }
 
