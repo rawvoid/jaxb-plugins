@@ -104,7 +104,7 @@ class AbstractPluginTest {
 
         private static class AnnotationInfo {
 
-            @Option(name = "annotation", placeholder = "annotation", description = "The annotation to be processed")
+            @Option(name = "annotation", placeholder = "annotation", required = true, description = "The annotation to be processed")
             ArrayList<XAnnotation<?>> annotation;
 
             @Option(name = "regex", placeholder = "regex", description = "The regex pattern to match the annotation")

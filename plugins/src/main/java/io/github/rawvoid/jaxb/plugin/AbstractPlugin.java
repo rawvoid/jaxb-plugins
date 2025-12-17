@@ -131,7 +131,7 @@ public abstract class AbstractPlugin extends Plugin {
 
         int count = 0, j = i;
         for (; j < args.length; j++) {
-            var arg = args[j].trim();
+            var arg = args[j];
             Field matchedOptionField = null;
             for (var optionField : optionFields) {
                 var fieldType = optionField.getType();
@@ -150,6 +150,7 @@ public abstract class AbstractPlugin extends Plugin {
                             var elementValue = newInstance(elementType);
                             var x = parseArgument(elementValue, args, j + 1);
                             if (x > 0) {
+                                applyDefaultValueAndValidate(elementValue);
                                 collection.add(elementValue);
                                 j += x;
                                 if (j + 1 < args.length && args[j + 1].trim().equals(optionFlag)) {
@@ -166,6 +167,7 @@ public abstract class AbstractPlugin extends Plugin {
                         var x = parseArgument(value, args, j + 1);
                         if (x > 0) {
                             j += x;
+                            applyDefaultValueAndValidate(value);
                             setFieldValue(object, optionField, value, "");
                         }
                     } else {
@@ -221,7 +223,43 @@ public abstract class AbstractPlugin extends Plugin {
                 break;
             }
         }
+        applyDefaultValueAndValidate(object);
         return count;
+    }
+
+    private void applyDefaultValueAndValidate(Object object) throws Exception {
+        var type = object.getClass();
+        if (type.getClassLoader() == null) return;
+        var optionFields = getOptionFields(type);
+        for (var optionField : optionFields) {
+            optionField.setAccessible(true);
+            var fieldType = optionField.getType();
+            var value = optionField.get(object);
+            var option = optionField.getAnnotation(Option.class);
+            var required = option.required();
+
+            if (Collection.class.isAssignableFrom(fieldType)) {
+                if (required && (value == null || ((Collection<?>) value).isEmpty())) {
+                    throw new BadCommandLineException("Option %s is required in type: %s"
+                        .formatted(option.prefix() + option.name(), type.getName()));
+                }
+            } else if (value == null) {
+                var defaultValueText = option.defaultValue();
+                if (!defaultValueText.isEmpty()) {
+                    TextParser<?> parser = getParser(option, optionField.getType());
+                    if (parser == null) {
+                        throw new BadCommandLineException("Text parser not found for option: %s in type: %s"
+                            .formatted(option.prefix() + option.name(), type.getName()));
+                    }
+                    var defaultValue = parser.parse(option.name(), defaultValueText);
+                    applyDefaultValueAndValidate(defaultValue);
+                    setFieldValue(object, optionField, defaultValue, defaultValueText);
+                } else if (required) {
+                    throw new BadCommandLineException("Option %s is required in type: %s"
+                        .formatted(option.prefix() + option.name(), type.getName()));
+                }
+            }
+        }
     }
 
     private TextParser<?> getParser(Option option, Class<?> fieldType) {
@@ -354,8 +392,8 @@ public abstract class AbstractPlugin extends Plugin {
         registerTextParser(Short.class, (optionName, text) -> Short.parseShort(text.toString().trim()));
         registerTextParser(byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
         registerTextParser(Byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
-        registerTextParser(char.class, (optionName, text) -> text.toString().trim().charAt(0));
-        registerTextParser(Character.class, (optionName, text) -> text.toString().trim().charAt(0));
+        registerTextParser(char.class, (optionName, text) -> text.toString().charAt(0));
+        registerTextParser(Character.class, (optionName, text) -> text.toString().charAt(0));
         registerTextParser(long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
         registerTextParser(Long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
         registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString().trim()));
