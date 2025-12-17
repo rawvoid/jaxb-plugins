@@ -174,7 +174,7 @@ public abstract class AbstractPlugin extends Plugin {
                     break;
                 } else {
                     var delimiter = option.delimiter();
-                    var pattern = Pattern.compile("^" + optionFlag + "\\s*" + delimiter + "(.*)");
+                    var pattern = Pattern.compile("^" + Pattern.quote(optionFlag) + "\\s*" + Pattern.quote(delimiter) + "(.*)");
                     var matcher = pattern.matcher(arg);
                     if (matcher.matches()) {
                         matchedOptionField = optionField;
