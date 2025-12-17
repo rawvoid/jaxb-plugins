@@ -45,6 +45,7 @@ class AbstractPluginTest {
             "-annotation-list",
             "-annotation=@jakarta.xml.bind.annotation.XmlElement",
             "-regex=.*",
+            "-annotation-list",
             "-annotation=@jakarta.xml.bind.annotation.XmlRootElement",
             "-int-list2=4,5,6",
             "-magic-string=def",

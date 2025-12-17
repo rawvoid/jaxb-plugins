@@ -152,6 +152,11 @@ public abstract class AbstractPlugin extends Plugin {
                             if (x > 0) {
                                 collection.add(elementValue);
                                 j += x;
+                                if (j + 1 < args.length && args[j + 1].trim().equals(optionFlag)) {
+                                    j++;
+                                } else {
+                                    break;
+                                }
                             } else {
                                 break;
                             }
