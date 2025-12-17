@@ -17,7 +17,7 @@ public abstract class AbstractPlugin extends Plugin {
     private final Map<Class<?>, TextParser<?>> textParsersByOptionType = new HashMap<>();
     private final Map<String, TextParser<?>> textParsersByOptionName = new HashMap<>();
 
-    private boolean optionParsed = false;
+    private boolean argumentParsed = false;
 
     public AbstractPlugin() {
         initDefaultTextParsers();
@@ -51,7 +51,7 @@ public abstract class AbstractPlugin extends Plugin {
         return joiner.toString();
     }
 
-    public void collectOptionUsages(Class<?> clazz, String indent, LinkedHashMap<String, String> usages) {
+    private void collectOptionUsages(Class<?> clazz, String indent, LinkedHashMap<String, String> usages) {
         var optionFields = getOptionFields(clazz);
         for (var optionField : optionFields) {
             var fieldType = optionField.getType();
@@ -72,7 +72,7 @@ public abstract class AbstractPlugin extends Plugin {
 
     @Override
     public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
-        if (optionParsed) return 0;
+        if (argumentParsed) return 0;
         var option = getClass().getAnnotation(Option.class);
         if (option == null) {
             throw new BadCommandLineException("Plugin must be annotated with @Option");
@@ -81,7 +81,7 @@ public abstract class AbstractPlugin extends Plugin {
             var arg = args[i].trim();
             if (arg.equals(getOptionName())) {
                 var count = parseArgument(this, args, i + 1);
-                optionParsed = true;
+                argumentParsed = true;
                 return count;
             }
         } catch (Exception e) {
@@ -90,7 +90,7 @@ public abstract class AbstractPlugin extends Plugin {
         return 0;
     }
 
-    public int parseArgument(Object object, String[] args, int i) throws Exception {
+    private int parseArgument(Object object, String[] args, int i) throws Exception {
         var clazz = object.getClass();
         var optionFields = getOptionFields(clazz);
 
@@ -239,30 +239,6 @@ public abstract class AbstractPlugin extends Plugin {
         textParsersByOptionName.put(optionName, parser);
     }
 
-    /**
-     * Initializes the default text parsers for common types.
-     */
-    private void initDefaultTextParsers() {
-        registerTextParser(boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
-        registerTextParser(Boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
-        registerTextParser(int.class, (optionName, text) -> Integer.parseInt(text.toString().trim()));
-        registerTextParser(Integer.class, (optionName, text) -> Integer.parseInt(text.toString().trim()));
-        registerTextParser(double.class, (optionName, text) -> Double.parseDouble(text.toString().trim()));
-        registerTextParser(Double.class, (optionName, text) -> Double.parseDouble(text.toString().trim()));
-        registerTextParser(float.class, (optionName, text) -> Float.parseFloat(text.toString().trim()));
-        registerTextParser(Float.class, (optionName, text) -> Float.parseFloat(text.toString().trim()));
-        registerTextParser(short.class, (optionName, text) -> Short.parseShort(text.toString().trim()));
-        registerTextParser(Short.class, (optionName, text) -> Short.parseShort(text.toString().trim()));
-        registerTextParser(byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
-        registerTextParser(Byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
-        registerTextParser(char.class, (optionName, text) -> text.toString().trim().charAt(0));
-        registerTextParser(Character.class, (optionName, text) -> text.toString().trim().charAt(0));
-        registerTextParser(long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
-        registerTextParser(Long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
-        registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString().trim()));
-        registerTextParser(Object.class, (optionName, text) -> text.toString().trim());
-    }
-
     private List<Field> getOptionFields(Class<?> clazz) {
         List<Field> fields = new ArrayList<>();
         var targetClass = clazz;
@@ -276,7 +252,7 @@ public abstract class AbstractPlugin extends Plugin {
         return fields;
     }
 
-    public Class<?> getCollectionElementType(Field field) {
+    private Class<?> getCollectionElementType(Field field) {
         Class<?> fieldType = field.getType();
         if (!Collection.class.isAssignableFrom(fieldType)) {
             throw new IllegalArgumentException("Field '%s' is not a Collection type.".formatted(field.getName()));
@@ -309,5 +285,26 @@ public abstract class AbstractPlugin extends Plugin {
             throw new IllegalArgumentException("Nested arrays are not supported. Field: '%s'".formatted(field.getName()));
         }
         return Object.class;
+    }
+
+    private void initDefaultTextParsers() {
+        registerTextParser(boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
+        registerTextParser(Boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
+        registerTextParser(int.class, (optionName, text) -> Integer.parseInt(text.toString().trim()));
+        registerTextParser(Integer.class, (optionName, text) -> Integer.parseInt(text.toString().trim()));
+        registerTextParser(double.class, (optionName, text) -> Double.parseDouble(text.toString().trim()));
+        registerTextParser(Double.class, (optionName, text) -> Double.parseDouble(text.toString().trim()));
+        registerTextParser(float.class, (optionName, text) -> Float.parseFloat(text.toString().trim()));
+        registerTextParser(Float.class, (optionName, text) -> Float.parseFloat(text.toString().trim()));
+        registerTextParser(short.class, (optionName, text) -> Short.parseShort(text.toString().trim()));
+        registerTextParser(Short.class, (optionName, text) -> Short.parseShort(text.toString().trim()));
+        registerTextParser(byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
+        registerTextParser(Byte.class, (optionName, text) -> Byte.parseByte(text.toString().trim()));
+        registerTextParser(char.class, (optionName, text) -> text.toString().trim().charAt(0));
+        registerTextParser(Character.class, (optionName, text) -> text.toString().trim().charAt(0));
+        registerTextParser(long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
+        registerTextParser(Long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
+        registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString().trim()));
+        registerTextParser(Object.class, (optionName, text) -> text.toString().trim());
     }
 }
