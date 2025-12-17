@@ -72,10 +72,13 @@ class AbstractPluginTest {
         assertThat(plugin.isEnabled).isTrue();
     }
 
-    @Option(prefix = "-X", name = "test-plugin", description = "Just a test plugin")
+    @Option(prefix = "-X", name = "test-plugin", description = """
+        Just a test plugin
+        JAXB plugin to test the abstract plugin
+        """)
     private static class TestPlugin extends AbstractPlugin {
 
-        @Option(name = "int-list", description = "The list of integers")
+        @Option(name = "int-list", description = "The list of integers", required = true)
         List<Integer> intList;
 
         @Option(name = "int-list2", description = "The list2 of integers")
@@ -84,7 +87,7 @@ class AbstractPluginTest {
         @Option(name = "annotation-list", description = "The list of annotations to be processed")
         List<AnnotationInfo> annotationList;
 
-        @Option(name = "config", description = "The config of the plugin")
+        @Option(name = "config", description = "The config of the plugin", required = true)
         Config config;
 
         @Option(name = "magic-string", description = "The magic string")
@@ -100,10 +103,10 @@ class AbstractPluginTest {
 
         private static class AnnotationInfo {
 
-            @Option(name = "annotation", description = "The annotation to be processed")
+            @Option(name = "annotation", placeholder = "annotation", description = "The annotation to be processed")
             ArrayList<XAnnotation<?>> annotation;
 
-            @Option(name = "regex", description = "The regex pattern to match the annotation")
+            @Option(name = "regex", placeholder = "regex", description = "The regex pattern to match the annotation")
             Pattern regex;
         }
 

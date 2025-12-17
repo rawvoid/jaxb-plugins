@@ -52,6 +52,13 @@ public @interface Option {
     String defaultValue() default "";
 
     /**
+     * The placeholder of the plugin option.
+     *
+     * @return the placeholder of the plugin option
+     */
+    String placeholder() default "";
+
+    /**
      * The description of the plugin option.
      *
      * @return the description of the plugin option

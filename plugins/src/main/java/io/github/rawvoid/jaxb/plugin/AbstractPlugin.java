@@ -34,30 +34,48 @@ public abstract class AbstractPlugin extends Plugin {
 
     @Override
     public String getUsage() {
-        LinkedHashMap<String, String> usages = new LinkedHashMap<>();
-        usages.put(getOptionName(), getClass().getAnnotation(Option.class).description());
+        LinkedHashMap<String, List<String>> usages = new LinkedHashMap<>();
+        usages.put(getOptionName(), getClass().getAnnotation(Option.class).description().lines().toList());
         collectOptionUsages(getClass(), " ".repeat(4), usages);
 
         var maxLength = usages.keySet().stream()
             .mapToInt(String::length)
             .max()
             .orElse(0);
-        StringJoiner joiner = new StringJoiner("\n");
-        usages.forEach((optionHead, description) -> {
+        StringJoiner usage = new StringJoiner("\n");
+        var prefix = "  ";
+        var delimiter = "        :  ";
+        usages.forEach((optionHead, descriptions) -> {
             var padding = maxLength - optionHead.length();
-            var usage = "  " + optionHead + " ".repeat(padding) + "        :  " + description;
-            joiner.add(usage);
+            var it = descriptions.iterator();
+            var description = it.next();
+            usage.add(prefix + optionHead + " ".repeat(padding) + delimiter + description);
+
+            int r = prefix.length() + optionHead.length() + padding + delimiter.length();
+            while (it.hasNext()) {
+                usage.add(" ".repeat(r) + it.next());
+            }
         });
-        return joiner.toString();
+        return usage.toString();
     }
 
-    private void collectOptionUsages(Class<?> clazz, String indent, LinkedHashMap<String, String> usages) {
+    private void collectOptionUsages(Class<?> clazz, String indent, LinkedHashMap<String, List<String>> usages) {
         var optionFields = getOptionFields(clazz);
         for (var optionField : optionFields) {
             var fieldType = optionField.getType();
+            var isCollection = Collection.class.isAssignableFrom(fieldType);
             var option = optionField.getAnnotation(Option.class);
-            var optionHead = indent + option.prefix() + option.name();
-            usages.put(optionHead, option.description());
+            var delimiter = option.delimiter();
+            var placeholder = option.placeholder();
+            if (placeholder.isEmpty()) {
+                placeholder = typePlaceholder(isCollection ? getCollectionElementType(optionField) : fieldType);
+            }
+            placeholder = placeholder == null ? "value" : placeholder;
+            var optionHead = new StringBuilder(indent).append(option.prefix()).append(option.name());
+            if (!isCollection || (getOptionFields(getCollectionElementType(optionField)).isEmpty())) {
+                optionHead.append(delimiter).append('<').append(placeholder).append('>');
+            }
+            usages.put(optionHead.toString(), formatUsageDescription(option, optionField));
 
             if (fieldType.getClassLoader() != null) {
                 collectOptionUsages(fieldType, indent.repeat(2), usages);
@@ -68,6 +86,23 @@ public abstract class AbstractPlugin extends Plugin {
                 }
             }
         }
+    }
+
+    private List<String> formatUsageDescription(Option option, Field field) {
+        var parts = new StringJoiner(" ");
+        if (!option.description().isEmpty()) {
+            parts.add(option.description());
+        }
+        if (option.required()) {
+            parts.add("[required]");
+        }
+        if (!option.defaultValue().isEmpty()) {
+            parts.add("[default=" + option.defaultValue() + "]");
+        }
+        if (Collection.class.isAssignableFrom(field.getType())) {
+            parts.add("[repeatable]");
+        }
+        return parts.toString().lines().toList();
     }
 
     @Override
@@ -285,6 +320,20 @@ public abstract class AbstractPlugin extends Plugin {
             throw new IllegalArgumentException("Nested arrays are not supported. Field: '%s'".formatted(field.getName()));
         }
         return Object.class;
+    }
+
+    private String typePlaceholder(Class<?> type) {
+        if (type.isPrimitive()) return type.getSimpleName().toLowerCase();
+        if (type.equals(Class.class)) return "class";
+        if (type.equals(Integer.class)) return "int";
+        if (type.equals(Long.class)) return "long";
+        if (type.equals(Double.class)) return "double";
+        if (type.equals(Float.class)) return "float";
+        if (type.equals(Short.class)) return "short";
+        if (type.equals(Byte.class)) return "byte";
+        if (type.equals(Character.class)) return "char";
+        if (type.equals(Boolean.class)) return "boolean";
+        return null;
     }
 
     private void initDefaultTextParsers() {
