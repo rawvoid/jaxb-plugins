@@ -1,19 +1,14 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.*;
-import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
-import com.sun.tools.xjc.Plugin;
-import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.outline.Outline;
 import org.jvnet.jaxb.annox.model.XAnnotation;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
-import java.io.IOException;
 import java.lang.annotation.Repeatable;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -23,108 +18,23 @@ import java.util.regex.Pattern;
  *
  * @author Rawvoid
  */
-public class AnnotatePlugin extends Plugin {
+@Option(name = "Xannotate", description = "Add custom annotations to generated Java artifacts")
+public class AnnotatePlugin extends AbstractPlugin {
 
-    public static final String OPTION_NAME = "Xannotate";
-    public static final String CLASS_OPTION_NAME = "%s-class".formatted(OPTION_NAME);
-    public static final String FIELD_OPTION_NAME = "%s-field".formatted(OPTION_NAME);
-    public static final String METHOD_OPTION_NAME = "%s-method".formatted(OPTION_NAME);
+    @Option(name = "add-to-class", description = "Add annotations to generated classes")
+    protected List<Config> classConfigs;
 
-    protected List<Config> classConfigs = new ArrayList<>();
-    protected List<Config> fieldConfigs = new ArrayList<>();
-    protected List<Config> methodConfigs = new ArrayList<>();
+    @Option(name = "add-to-field", description = "Add annotations to generated fields")
+    protected List<Config> fieldConfigs;
 
-    @Override
-    public String getOptionName() {
-        return OPTION_NAME;
-    }
+    @Option(name = "add-to-method", description = "Add annotations to generated methods")
+    protected List<Config> methodConfigs;
 
-    @Override
-    public String getUsage() {
-        return """
-            -%s: Enables the Annotation XJC Plugin. This plugin adds custom annotations to generated Java artifacts.
-            
-            ## Configuration Options
-            These options provide precise control over where annotations are added and to what extent they match.
-            
-            * **-%s=<annotation>[=regex:pattern]**   -> Add annotation to generated **classes**.
-                e.g. -%s=@lombok.Data
-                e.g. -%s=@MyAnnotation=regex:com.example.*
-            
-            * **-%s=<annotation>[=regex:pattern]**   -> Add annotation to generated **fields**.
-                e.g. -%s=@lombok.Getter=regex:org.example.Person.*
-            
-            * **-%s=<annotation>[=regex:pattern]     -> Add annotation to generated **methods**.
-                e.g. -%s=@lombok.Generated
-            
-            """.formatted(
-            OPTION_NAME,
-            CLASS_OPTION_NAME, CLASS_OPTION_NAME, CLASS_OPTION_NAME,
-            FIELD_OPTION_NAME, FIELD_OPTION_NAME,
-            METHOD_OPTION_NAME, METHOD_OPTION_NAME
-        );
-    }
-
-    @Override
-    public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
-        var arg = args[i];
-        if (arg.startsWith("-%s".formatted(CLASS_OPTION_NAME))) {
-            parseClassAnnotation(arg);
-        } else if (arg.startsWith("-%s".formatted(FIELD_OPTION_NAME))) {
-            parseFieldAnnotation(arg);
-        } else if (arg.startsWith("-%s".formatted(METHOD_OPTION_NAME))) {
-            parseMethodAnnotation(arg);
-        } else {
-            return 0;
-        }
-        return 1;
-    }
-
-    public void parseClassAnnotation(String annotationArg) throws BadCommandLineException {
-        var config = parseAnnotationConfig(annotationArg, CLASS_OPTION_NAME);
-        classConfigs.add(config);
-    }
-
-    public void parseFieldAnnotation(String annotationArg) throws BadCommandLineException {
-        var config = parseAnnotationConfig(annotationArg, FIELD_OPTION_NAME);
-        fieldConfigs.add(config);
-    }
-
-    public void parseMethodAnnotation(String annotationArg) throws BadCommandLineException {
-        var config = parseAnnotationConfig(annotationArg, METHOD_OPTION_NAME);
-        methodConfigs.add(config);
-    }
-
-    public Config parseAnnotationConfig(String arg, String optionName) throws BadCommandLineException {
-        try {
-            var idx = arg.indexOf(optionName);
-            Pattern pattern = null;
-            XAnnotation<?> xAnnotation;
-
-            var line = arg.substring(idx + optionName.length() + 1);
-            var regexIdx = line.indexOf("=regex:");
-            if (regexIdx > -1) {
-                var regex = line.substring(regexIdx + "=regex:".length());
-                var annotation = line.substring(line.indexOf('@'), regexIdx);
-                pattern = Pattern.compile(regex);
-                xAnnotation = XAnnotationParser.INSTANCE.parse(annotation);
-            } else {
-                xAnnotation = XAnnotationParser.INSTANCE.parse(line.substring(line.indexOf('@')));
-            }
-            return new Config(pattern, xAnnotation);
-        } catch (Exception e) {
-            throw new BadCommandLineException("Invalid config: %s. Please check the format: -%s=<annotation>[=regex:pattern]".formatted(arg, optionName), e);
-        }
-    }
-
-    @Override
-    public void onActivated(Options opts) throws BadCommandLineException {
-        super.onActivated(opts);
-    }
-
-    @Override
-    public void postProcessModel(Model model, ErrorHandler errorHandler) {
-        super.postProcessModel(model, errorHandler);
+    public AnnotatePlugin() {
+        registerTextParser(XAnnotation.class, (optionName, text) ->
+            XAnnotationParser.INSTANCE.parse(text.toString()));
+        registerTextParser(Pattern.class, (optionName, text) ->
+            Pattern.compile(text.toString()));
     }
 
     @Override
@@ -133,16 +43,16 @@ public class AnnotatePlugin extends Plugin {
             var jDefinedClass = classOutline.implClass;
             var className = jDefinedClass.fullName();
 
-            if (!classConfigs.isEmpty()) {
+            if (classConfigs != null && !classConfigs.isEmpty()) {
                 addAnnotation(jDefinedClass, className, classConfigs);
             }
 
-            if (!fieldConfigs.isEmpty()) {
+            if (fieldConfigs != null && !fieldConfigs.isEmpty()) {
                 jDefinedClass.fields().values().forEach(field ->
                     addAnnotation(field, className + "." + field.name(), fieldConfigs));
             }
 
-            if (!methodConfigs.isEmpty()) {
+            if (methodConfigs != null && !methodConfigs.isEmpty()) {
                 jDefinedClass.methods().forEach(method ->
                     addAnnotation(method, className + "." + method.name(), methodConfigs));
             }
@@ -153,7 +63,7 @@ public class AnnotatePlugin extends Plugin {
 
     public void addAnnotation(JAnnotatable target, String targetName, List<Config> configs) {
         var matchedConfigs = configs.stream()
-            .filter(config -> config.pattern == null || config.pattern.matcher(targetName).matches())
+            .filter(config -> config.regex == null || config.regex.matcher(targetName).matches())
             .toList();
         matchedConfigs.forEach(config -> {
             var xAnnotation = config.annotation;
@@ -224,6 +134,13 @@ public class AnnotatePlugin extends Plugin {
         }
     }
 
-    public record Config(Pattern pattern, XAnnotation<?> annotation) {
+    public static class Config {
+
+        @Option(name = "anno", required = true, placeholder = "annotation", description = "The annotation to be added")
+        XAnnotation<?> annotation;
+
+        @Option(name = "regex", description = "The regex pattern to match the target")
+        Pattern regex;
+
     }
 }

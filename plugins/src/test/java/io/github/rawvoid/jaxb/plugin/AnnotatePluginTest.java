@@ -20,8 +20,12 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
     void testAnnotatePlugin() throws Exception {
         var args = List.of(
             "-Xannotate",
-            "-Xannotate-class=@jakarta.xml.bind.annotation.XmlSeeAlso(value = {java.lang.Object.class, java.lang.String.class})=regex:.*Person",
-            "-Xannotate-field=@jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter(jakarta.xml.bind.annotation.adapters.CollapsedStringAdapter.class)=regex:.*name"
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(value = {java.lang.Object.class, java.lang.String.class})",
+            "-regex=.*Person",
+            "-add-to-field",
+            "-anno=@jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter(jakarta.xml.bind.annotation.adapters.CollapsedStringAdapter.class)",
+            "-regex=.*name"
         );
         testExecute(args, clazz -> {
             if (!clazz.getSimpleName().equals("Person")) return;
@@ -45,7 +49,9 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
     void testDuplicateAnnotation() throws Exception {
         var args = List.of(
             "-Xannotate",
-            "-Xannotate-class=@jakarta.xml.bind.annotation.XmlAccessorType(jakarta.xml.bind.annotation.XmlAccessType.NONE)"
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlAccessorType(jakarta.xml.bind.annotation.XmlAccessType.NONE)",
+            "-regex=.*Person"
         );
         testExecute(args, clazz -> {
             if (!clazz.getSimpleName().equals("Person")) return;
