@@ -54,7 +54,7 @@ class AbstractPluginTest {
         ).toArray(new String[0]);
         var count = plugin.parseArgument(new Options(), args, 0);
 
-        assertThat(count).isEqualTo(args.length - 1);
+        assertThat(count).isEqualTo(args.length);
         assertThat(plugin.isEnabled).isTrue();
         assertThat(plugin.intList).containsExactly(1, 2, 3);
         assertThat(plugin.intList2).containsExactly(4, 5, 6);
@@ -83,7 +83,7 @@ class AbstractPluginTest {
         ).toArray(new String[0]);
 
         var count = plugin.parseArgument(new Options(), args, 0);
-        assertThat(count).isEqualTo(args.length - 1);
+        assertThat(count).isEqualTo(args.length);
 
         // defaultValue 应该生效
         assertThat(plugin.name).isEqualTo("bob");

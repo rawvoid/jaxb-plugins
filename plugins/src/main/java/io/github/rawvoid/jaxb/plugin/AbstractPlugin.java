@@ -18,8 +18,6 @@ public abstract class AbstractPlugin extends Plugin {
     private final Map<Class<?>, TextParser<?>> textParsersByOptionType = new HashMap<>();
     private final Map<String, TextParser<?>> textParsersByOptionName = new HashMap<>();
 
-    private boolean argumentParsed = false;
-
     public AbstractPlugin() {
         initDefaultTextParsers();
     }
@@ -30,13 +28,14 @@ public abstract class AbstractPlugin extends Plugin {
         if (option == null) {
             throw new IllegalStateException("Plugin must be annotated with @Option: " + getClass().getName());
         }
-        return option.prefix() + option.name();
+        return option.name();
     }
 
     @Override
     public String getUsage() {
         LinkedHashMap<String, List<String>> usages = new LinkedHashMap<>();
-        usages.put(getOptionName(), getClass().getAnnotation(Option.class).description().lines().toList());
+        var option = getClass().getAnnotation(Option.class);
+        usages.put(option.prefix() + getOptionName(), option.description().lines().toList());
         collectOptionUsages(getClass(), " ".repeat(4), usages);
 
         var maxLength = usages.keySet().stream()
@@ -108,17 +107,12 @@ public abstract class AbstractPlugin extends Plugin {
 
     @Override
     public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
-        if (argumentParsed) return 0;
         var option = getClass().getAnnotation(Option.class);
-        if (option == null) {
-            throw new BadCommandLineException("Plugin must be annotated with @Option");
-        }
         try {
             var arg = args[i].trim();
-            if (arg.equals(getOptionName())) {
+            if (arg.equals(option.prefix() + option.name())) {
                 var count = parseArgument(this, args, i + 1);
-                argumentParsed = true;
-                return count;
+                return count + 1;
             }
         } catch (Exception e) {
             throw new BadCommandLineException("Error parsing plugin option %s: %s".formatted(option.name(), e.getMessage()), e);
