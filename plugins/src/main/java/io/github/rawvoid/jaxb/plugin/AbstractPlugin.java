@@ -5,10 +5,7 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.Plugin;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -65,7 +62,7 @@ public abstract class AbstractPlugin extends Plugin {
             if (fieldType.getClassLoader() != null) {
                 collectOptionUsages(fieldType, indent.repeat(2), usages);
             } else if (Collection.class.isAssignableFrom(fieldType)) {
-                var elementType = getElementType(optionField);
+                var elementType = getCollectionElementType(optionField);
                 if (elementType.getClassLoader() != null) {
                     collectOptionUsages(elementType, indent.repeat(2), usages);
                 }
@@ -110,7 +107,7 @@ public abstract class AbstractPlugin extends Plugin {
                     if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
                         setFieldValue(object, optionField, true, "true");
                     } else if (Collection.class.isAssignableFrom(fieldType)) {
-                        var elementType = getElementType(optionField);
+                        var elementType = getCollectionElementType(optionField);
                         Collection<Object> collection = createCollection(fieldType);
                         setFieldValue(object, optionField, collection, "[]");
 
@@ -145,7 +142,7 @@ public abstract class AbstractPlugin extends Plugin {
                         TextParser<?> parser = getParser(option, fieldType);
                         if (parser == null) {
                             if (Collection.class.isAssignableFrom(fieldType)) {
-                                var elementType = getElementType(optionField);
+                                var elementType = getCollectionElementType(optionField);
                                 parser = getParser(option, elementType);
                                 if (parser == null) {
                                     throw new BadCommandLineException("Text parser not found for type: %s".formatted(elementType.getName()));
@@ -263,6 +260,7 @@ public abstract class AbstractPlugin extends Plugin {
         registerTextParser(long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
         registerTextParser(Long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
         registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString().trim()));
+        registerTextParser(Object.class, (optionName, text) -> text.toString().trim());
     }
 
     private List<Field> getOptionFields(Class<?> clazz) {
@@ -278,23 +276,38 @@ public abstract class AbstractPlugin extends Plugin {
         return fields;
     }
 
-    public Class<?> getElementType(Field field) {
+    public Class<?> getCollectionElementType(Field field) {
         Class<?> fieldType = field.getType();
-        if (Collection.class.isAssignableFrom(fieldType)) {
-            Type genericType = field.getGenericType();
-            if (genericType instanceof ParameterizedType pt) {
-                Type[] actualTypeArgs = pt.getActualTypeArguments();
-                if (actualTypeArgs.length == 1) {
-                    Type actualType = actualTypeArgs[0];
-                    if (actualType instanceof Class<?>) {
-                        return (Class<?>) actualType;
-                    } else if (actualType instanceof ParameterizedType) {
-                        return (Class<?>) ((ParameterizedType) actualType).getRawType();
-                    }
-                }
-            }
-            throw new IllegalStateException("Can't get element type of " + field.getName());
+        if (!Collection.class.isAssignableFrom(fieldType)) {
+            throw new IllegalArgumentException("Field '%s' is not a Collection type.".formatted(field.getName()));
         }
-        throw new IllegalArgumentException("Unsupported type for field: " + field);
+        Type genericType = field.getGenericType();
+        if (!(genericType instanceof ParameterizedType parameterizedType)) {
+            return Object.class;
+        }
+        Type[] actualTypeArgs = parameterizedType.getActualTypeArguments();
+        if (actualTypeArgs.length == 0) {
+            return Object.class;
+        }
+
+        Type actualType = actualTypeArgs[0];
+        if (actualType instanceof Class<?> elementType) {
+            return elementType;
+        } else if (actualType instanceof WildcardType wt) {
+            var upperBounds = wt.getUpperBounds();
+            if (upperBounds.length > 0 && upperBounds[0] instanceof Class<?> elementType) {
+                return elementType;
+            }
+        } else if (actualType instanceof TypeVariable<?> tv) {
+            var bounds = tv.getBounds();
+            if (bounds.length > 0 && bounds[0] instanceof Class<?> elementType) {
+                return elementType;
+            }
+        } else if (actualType instanceof ParameterizedType pt && pt.getRawType() instanceof Class<?> elementType) {
+            return elementType;
+        } else if (actualType instanceof GenericArrayType) {
+            throw new IllegalArgumentException("Nested arrays are not supported. Field: '%s'".formatted(field.getName()));
+        }
+        return Object.class;
     }
 }
