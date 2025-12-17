@@ -7,6 +7,7 @@ import com.sun.tools.xjc.Plugin;
 import java.io.IOException;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 /**
@@ -231,32 +232,44 @@ public abstract class AbstractPlugin extends Plugin {
         var type = object.getClass();
         if (type.getClassLoader() == null) return;
         var optionFields = getOptionFields(type);
+        BiFunction<String, String, String> noParserMsg = "Text parser not found for option '%s' in type '%s'"::formatted;
+        BiFunction<String, String, String> noOptionMsg = "Option '%s' not found in type '%s'"::formatted;
         for (var optionField : optionFields) {
             optionField.setAccessible(true);
             var fieldType = optionField.getType();
             var value = optionField.get(object);
             var option = optionField.getAnnotation(Option.class);
             var required = option.required();
+            var defaultValueText = option.defaultValue();
 
             if (Collection.class.isAssignableFrom(fieldType)) {
-                if (required && (value == null || ((Collection<?>) value).isEmpty())) {
-                    throw new BadCommandLineException("Option %s is required in type: %s"
-                        .formatted(option.prefix() + option.name(), type.getName()));
+                if (value == null || ((Collection<?>) value).isEmpty()) {
+                    if (!defaultValueText.isEmpty()) {
+                        var collection = createCollection(fieldType);
+                        setFieldValue(object, optionField, collection, "[]");
+                        var elementType = getCollectionElementType(optionField);
+                        var parser = getParser(option, elementType);
+                        if (parser == null) {
+                            throw new BadCommandLineException(noParserMsg.apply(option.prefix() + option.name(), elementType.getName()));
+                        }
+                        var defaultValue = parser.parse(option.name(), defaultValueText);
+                        applyDefaultValueAndValidate(defaultValue);
+                        collection.add(defaultValue);
+                    } else if (required) {
+                        throw new BadCommandLineException(noOptionMsg.apply(option.prefix() + option.name(), type.getName()));
+                    }
                 }
             } else if (value == null) {
-                var defaultValueText = option.defaultValue();
                 if (!defaultValueText.isEmpty()) {
                     TextParser<?> parser = getParser(option, optionField.getType());
                     if (parser == null) {
-                        throw new BadCommandLineException("Text parser not found for option: %s in type: %s"
-                            .formatted(option.prefix() + option.name(), type.getName()));
+                        throw new BadCommandLineException(noParserMsg.apply(option.prefix() + option.name(), type.getName()));
                     }
                     var defaultValue = parser.parse(option.name(), defaultValueText);
                     applyDefaultValueAndValidate(defaultValue);
                     setFieldValue(object, optionField, defaultValue, defaultValueText);
                 } else if (required) {
-                    throw new BadCommandLineException("Option %s is required in type: %s"
-                        .formatted(option.prefix() + option.name(), type.getName()));
+                    throw new BadCommandLineException(noOptionMsg.apply(option.prefix() + option.name(), type.getName()));
                 }
             }
         }
@@ -397,6 +410,7 @@ public abstract class AbstractPlugin extends Plugin {
         registerTextParser(long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
         registerTextParser(Long.class, (optionName, text) -> Long.parseLong(text.toString().trim()));
         registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString().trim()));
-        registerTextParser(Object.class, (optionName, text) -> text.toString().trim());
+        registerTextParser(String.class, (optionName, text) -> text.toString());
+        registerTextParser(Object.class, (optionName, text) -> text.toString());
     }
 }
