@@ -391,6 +391,7 @@ public abstract class AbstractPlugin extends Plugin {
         if (type.equals(Byte.class)) return "byte";
         if (type.equals(Character.class)) return "char";
         if (type.equals(Boolean.class)) return "boolean";
+        if (type.equals(Pattern.class)) return "regex";
         return null;
     }
 
