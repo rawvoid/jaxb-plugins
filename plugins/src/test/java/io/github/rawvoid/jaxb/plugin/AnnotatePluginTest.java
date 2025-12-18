@@ -17,6 +17,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AnnotatePluginTest extends AbstractXJCMojoTestCase {
 
     @Test
+    void testUsage() throws Exception {
+        AnnotatePlugin plugin = new AnnotatePlugin();
+        var usage = plugin.getUsage();
+        assertThat(usage).isNotNull();
+    }
+
+    @Test
     void testAnnotatePlugin() throws Exception {
         var args = List.of(
             "-Xannotate",
