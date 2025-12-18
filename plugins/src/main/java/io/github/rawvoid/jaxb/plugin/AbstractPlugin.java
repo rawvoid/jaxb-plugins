@@ -228,7 +228,7 @@ public abstract class AbstractPlugin extends Plugin {
                         setFieldValue(object, optionField, true, "true");
                     } else if (Collection.class.isAssignableFrom(fieldType)) {
                         var elementType = getCollectionElementType(optionField);
-                        var collection = createCollection(fieldType);
+                        var collection = newCollectionInstance(fieldType);
                         setFieldValue(object, optionField, collection, "[]");
 
                         while (true) {
@@ -275,7 +275,7 @@ public abstract class AbstractPlugin extends Plugin {
                                 if (parser == null) {
                                     throw new BadCommandLineException("Text parser not found for type: %s".formatted(elementType.getName()));
                                 }
-                                var collection = createCollection(fieldType);
+                                var collection = newCollectionInstance(fieldType);
                                 setFieldValue(object, optionField, collection, "[]");
                                 var value = parser.parse(option.name(), textValue);
                                 collection.add(value);
@@ -330,7 +330,7 @@ public abstract class AbstractPlugin extends Plugin {
             if (Collection.class.isAssignableFrom(fieldType)) {
                 if (value == null || ((Collection<?>) value).isEmpty()) {
                     if (!defaultValueText.isEmpty()) {
-                        var collection = createCollection(fieldType);
+                        var collection = newCollectionInstance(fieldType);
                         setFieldValue(object, optionField, collection, "[]");
                         var elementType = getCollectionElementType(optionField);
                         var parser = getParser(option, elementType);
@@ -368,27 +368,33 @@ public abstract class AbstractPlugin extends Plugin {
         return textParsersByOptionName.getOrDefault(option.name(), textParsersByOptionType.get(fieldType));
     }
 
-    private Collection<Object> createCollection(Class<?> collectionType) {
+    private <T> T newInstance(Class<T> clazz) {
         try {
-            if (collectionType.isInterface()) {
-                if (collectionType.equals(List.class)) {
-                    return new ArrayList<>();
-                } else if (collectionType.equals(Set.class)) {
-                    return new HashSet<>();
-                } else if (collectionType.equals(Queue.class)) {
-                    return new ArrayDeque<>();
-                } else {
-                    throw new IllegalArgumentException("Unsupported collection type: " + collectionType.getName());
-                }
-            } else if (Modifier.isAbstract(collectionType.getModifiers())) {
-                throw new IllegalArgumentException("Unsupported abstract collection type: " + collectionType.getName());
-            } else {
-                @SuppressWarnings("unchecked")
-                var collection = (Collection<Object>) newInstance(collectionType);
-                return collection;
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Error creating collection of type " + collectionType.getName(), e);
+            var constructor = clazz.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (NoSuchMethodException e) {
+            throw new IllegalArgumentException("Class %s does not have a no-arg constructor".formatted(clazz.getName()), e);
+        } catch (InstantiationException e) {
+            throw new IllegalArgumentException("Cannot instantiate abstract class %s".formatted(clazz.getName()), e);
+        } catch (IllegalAccessException e) {
+            throw new IllegalArgumentException("Cannot access constructor of %s".formatted(clazz.getName()), e);
+        } catch (InvocationTargetException e) {
+            throw new RuntimeException("Constructor of %s threw an exception".formatted(clazz.getName()), e);
+        }
+    }
+
+    private Collection<Object> newCollectionInstance(Class<?> type) {
+        if (type.equals(List.class)) {
+            return new ArrayList<>();
+        } else if (type.equals(Set.class)) {
+            return new HashSet<>();
+        } else if (type.equals(Queue.class)) {
+            return new ArrayDeque<>();
+        } else {
+            @SuppressWarnings("unchecked")
+            var collection = (Collection<Object>) newInstance(type);
+            return collection;
         }
     }
 
@@ -398,16 +404,6 @@ public abstract class AbstractPlugin extends Plugin {
             field.set(object, value);
         } catch (IllegalAccessException e) {
             throw new RuntimeException("Error setting field %s with value %s".formatted(field.getName(), textValue), e);
-        }
-    }
-
-    private <T> T newInstance(Class<T> clazz) {
-        try {
-            var constructor = clazz.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            return constructor.newInstance();
-        } catch (Exception e) {
-            throw new RuntimeException("Error creating instance of " + clazz.getName(), e);
         }
     }
 
