@@ -33,8 +33,6 @@ public class AnnotatePlugin extends AbstractPlugin {
     public AnnotatePlugin() {
         registerTextParser(XAnnotation.class, (optionName, text) ->
             XAnnotationParser.INSTANCE.parse(text.toString()));
-        registerTextParser(Pattern.class, (optionName, text) ->
-            Pattern.compile(text.toString()));
     }
 
     @Override
