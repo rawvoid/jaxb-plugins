@@ -103,7 +103,7 @@ public abstract class AbstractXJCMojoTestCase {
     protected void compileGeneratedJavaFiles() throws Exception {
         var compiler = ToolProvider.getSystemJavaCompiler();
 
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
 
         var fm = compiler.getStandardFileManager(diagnostics, Locale.getDefault(), null);
 
@@ -114,9 +114,9 @@ public abstract class AbstractXJCMojoTestCase {
         var result = task.call();
 
         if (result == null || !result) {
-            StringBuilder errorReport = new StringBuilder("Java class compile failed\n");
+            var errorReport = new StringBuilder("Java class compile failed\n");
 
-            for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
+            for (var diagnostic : diagnostics.getDiagnostics()) {
                 if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
                     errorReport.append("Error on file: ")
                         .append(diagnostic.getSource().getName())

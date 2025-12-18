@@ -24,7 +24,7 @@ public abstract class AbstractPlugin extends Plugin {
 
     @Override
     public String getOptionName() {
-        Option option = getClass().getAnnotation(Option.class);
+        var option = getClass().getAnnotation(Option.class);
         if (option == null) {
             throw new IllegalStateException("Plugin must be annotated with @Option: " + getClass().getName());
         }
@@ -43,7 +43,7 @@ public abstract class AbstractPlugin extends Plugin {
             .mapToInt(String::length)
             .max()
             .orElse(0);
-        StringJoiner usage = new StringJoiner("\n");
+        var usage = new StringJoiner("\n");
         var prefix = "  ";
         var delimiter = "        :  ";
         usages.forEach(entry -> {
@@ -54,7 +54,7 @@ public abstract class AbstractPlugin extends Plugin {
             var description = it.next();
             usage.add(prefix + optionCmd + " ".repeat(padding) + delimiter + description);
 
-            int r = prefix.length() + optionCmd.length() + padding + delimiter.length();
+            var r = prefix.length() + optionCmd.length() + padding + delimiter.length();
             while (it.hasNext()) {
                 usage.add(" ".repeat(r) + it.next());
             }
@@ -141,7 +141,7 @@ public abstract class AbstractPlugin extends Plugin {
                         setFieldValue(object, optionField, true, "true");
                     } else if (Collection.class.isAssignableFrom(fieldType)) {
                         var elementType = getCollectionElementType(optionField);
-                        Collection<Object> collection = createCollection(fieldType);
+                        var collection = createCollection(fieldType);
                         setFieldValue(object, optionField, collection, "[]");
 
                         while (true) {
@@ -180,7 +180,7 @@ public abstract class AbstractPlugin extends Plugin {
                     if (matcher.matches()) {
                         matchedOptionField = optionField;
                         var textValue = matcher.group(1);
-                        TextParser<?> parser = getParser(option, fieldType);
+                        var parser = getParser(option, fieldType);
                         if (parser == null) {
                             if (Collection.class.isAssignableFrom(fieldType)) {
                                 var elementType = getCollectionElementType(optionField);
@@ -188,7 +188,7 @@ public abstract class AbstractPlugin extends Plugin {
                                 if (parser == null) {
                                     throw new BadCommandLineException("Text parser not found for type: %s".formatted(elementType.getName()));
                                 }
-                                Collection<Object> collection = createCollection(fieldType);
+                                var collection = createCollection(fieldType);
                                 setFieldValue(object, optionField, collection, "[]");
                                 var value = parser.parse(option.name(), textValue);
                                 collection.add(value);
@@ -248,26 +248,30 @@ public abstract class AbstractPlugin extends Plugin {
                         var elementType = getCollectionElementType(optionField);
                         var parser = getParser(option, elementType);
                         if (parser == null) {
-                            throw new BadCommandLineException(noParserMsg.apply(option.prefix() + option.name(), elementType.getName()));
+                            var message = noParserMsg.apply(option.prefix() + option.name(), elementType.getName());
+                            throw new BadCommandLineException(message);
                         }
                         var defaultValue = parser.parse(option.name(), defaultValueText);
                         applyDefaultValueAndValidate(defaultValue);
                         collection.add(defaultValue);
                     } else if (required) {
-                        throw new BadCommandLineException(noOptionMsg.apply(option.prefix() + option.name(), type.getName()));
+                        var message = noOptionMsg.apply(option.prefix() + option.name(), type.getName());
+                        throw new BadCommandLineException(message);
                     }
                 }
             } else if (value == null) {
                 if (!defaultValueText.isEmpty()) {
-                    TextParser<?> parser = getParser(option, optionField.getType());
+                    var parser = getParser(option, optionField.getType());
                     if (parser == null) {
-                        throw new BadCommandLineException(noParserMsg.apply(option.prefix() + option.name(), type.getName()));
+                        var message = noParserMsg.apply(option.prefix() + option.name(), type.getName());
+                        throw new BadCommandLineException(message);
                     }
                     var defaultValue = parser.parse(option.name(), defaultValueText);
                     applyDefaultValueAndValidate(defaultValue);
                     setFieldValue(object, optionField, defaultValue, defaultValueText);
                 } else if (required) {
-                    throw new BadCommandLineException(noOptionMsg.apply(option.prefix() + option.name(), type.getName()));
+                    var message = noOptionMsg.apply(option.prefix() + option.name(), type.getName());
+                    throw new BadCommandLineException(message);
                 }
             }
         }
@@ -342,20 +346,20 @@ public abstract class AbstractPlugin extends Plugin {
     }
 
     private Class<?> getCollectionElementType(Field field) {
-        Class<?> fieldType = field.getType();
+        var fieldType = field.getType();
         if (!Collection.class.isAssignableFrom(fieldType)) {
             throw new IllegalArgumentException("Field '%s' is not a Collection type.".formatted(field.getName()));
         }
-        Type genericType = field.getGenericType();
+        var genericType = field.getGenericType();
         if (!(genericType instanceof ParameterizedType parameterizedType)) {
             return Object.class;
         }
-        Type[] actualTypeArgs = parameterizedType.getActualTypeArguments();
+        var actualTypeArgs = parameterizedType.getActualTypeArguments();
         if (actualTypeArgs.length == 0) {
             return Object.class;
         }
 
-        Type actualType = actualTypeArgs[0];
+        var actualType = actualTypeArgs[0];
         if (actualType instanceof Class<?> elementType) {
             return elementType;
         } else if (actualType instanceof WildcardType wt) {

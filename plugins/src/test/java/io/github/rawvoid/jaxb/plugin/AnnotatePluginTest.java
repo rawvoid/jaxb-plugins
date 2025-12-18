@@ -18,7 +18,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void testUsage() throws Exception {
-        AnnotatePlugin plugin = new AnnotatePlugin();
+        var plugin = new AnnotatePlugin();
         var usage = plugin.getUsage();
         assertThat(usage).isNotNull();
     }
