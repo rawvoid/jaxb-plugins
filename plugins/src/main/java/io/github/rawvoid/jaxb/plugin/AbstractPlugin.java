@@ -23,7 +23,6 @@ import com.sun.tools.xjc.Plugin;
 import java.io.IOException;
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 /**
@@ -85,7 +84,7 @@ public abstract class AbstractPlugin extends Plugin {
     public String getOptionName() {
         var option = getClass().getAnnotation(Option.class);
         if (option == null) {
-            throw new IllegalStateException("Plugin must be annotated with @Option: " + getClass().getName());
+            throw new IllegalStateException("Plugin class '%s' must be annotated with @Option".formatted(getClass().getName()));
         }
         return option.name();
     }
@@ -139,19 +138,9 @@ public abstract class AbstractPlugin extends Plugin {
         var optionFields = getOptionFields(clazz);
         for (var optionField : optionFields) {
             var fieldType = optionField.getType();
-            var isCollection = Collection.class.isAssignableFrom(fieldType);
             var option = optionField.getAnnotation(Option.class);
-            var delimiter = option.delimiter();
-            var placeholder = option.placeholder();
-            if (placeholder.isEmpty()) {
-                placeholder = typePlaceholder(isCollection ? getCollectionElementType(optionField) : fieldType);
-            }
-            placeholder = placeholder == null ? "value" : placeholder;
-            var optionCmd = new StringBuilder(indent).append(option.prefix()).append(option.name());
-            if (!isCollection || (getOptionFields(getCollectionElementType(optionField)).isEmpty())) {
-                optionCmd.append(delimiter).append('<').append(placeholder).append('>');
-            }
-            usages.add(new AbstractMap.SimpleEntry<>(optionCmd.toString(), formatUsageDescription(option, optionField)));
+            var usage = formatUsage(optionField, fieldType, option);
+            usages.add(new AbstractMap.SimpleEntry<>(indent + usage, formatUsageDescription(option, optionField)));
 
             if (fieldType.getClassLoader() != null) {
                 collectOptionUsages(fieldType, indent.repeat(2), usages);
@@ -162,6 +151,21 @@ public abstract class AbstractPlugin extends Plugin {
                 }
             }
         }
+    }
+
+    private String formatUsage(Field optionField, Class<?> fieldType, Option option) {
+        var isCollection = Collection.class.isAssignableFrom(fieldType);
+        var delimiter = option.delimiter();
+        var placeholder = option.placeholder();
+        if (placeholder.isEmpty()) {
+            placeholder = typePlaceholder(isCollection ? getCollectionElementType(optionField) : fieldType);
+        }
+        placeholder = placeholder == null ? "value" : placeholder;
+        var optionCmd = new StringBuilder().append(option.prefix()).append(option.name());
+        if (!isCollection || (getOptionFields(getCollectionElementType(optionField)).isEmpty())) {
+            optionCmd.append(delimiter).append('<').append(placeholder).append('>');
+        }
+        return optionCmd.toString();
     }
 
     private List<String> formatUsageDescription(Option option, Field field) {
@@ -206,7 +210,8 @@ public abstract class AbstractPlugin extends Plugin {
                 return count + 1;
             }
         } catch (Exception e) {
-            throw new BadCommandLineException("Error parsing plugin option %s: %s".formatted(option.name(), e.getMessage()), e);
+            throw new BadCommandLineException("Failed to configure plugin '%s' due to: %s"
+                .formatted(option.prefix() + option.name(), e.getMessage()), e);
         }
         return 0;
     }
@@ -226,7 +231,7 @@ public abstract class AbstractPlugin extends Plugin {
                 if (arg.trim().equals(optionCmd)) {
                     matchedOptionField = optionField;
                     if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
-                        setFieldValue(object, optionField, true, "true");
+                        setFieldValue(object, optionField, true);
                     } else if (Collection.class.isAssignableFrom(fieldType)) {
                         j += parseCollectionArgument(object, optionField, option, null, null, args, j);
                     } else if (fieldType.getClassLoader() != null) {
@@ -234,10 +239,12 @@ public abstract class AbstractPlugin extends Plugin {
                         var x = parseArgument(value, args, j + 1);
                         if (x > 0) {
                             j += x;
-                            setFieldValue(object, optionField, value, "");
+                            setFieldValue(object, optionField, value);
                         }
                     } else {
-                        throw new BadCommandLineException("Option %s must have a value".formatted(optionCmd));
+                        var message = "Option '%s' requires a value but none was provided. Use format: %s"
+                            .formatted(optionCmd, formatUsage(optionField, fieldType, option));
+                        throw new BadCommandLineException(message);
                     }
                     break;
                 } else {
@@ -254,11 +261,11 @@ public abstract class AbstractPlugin extends Plugin {
                             if (Collection.class.isAssignableFrom(fieldType)) {
                                 j += parseCollectionArgument(object, optionField, option, textValue, pattern, args, j);
                             } else {
-                                throw new BadCommandLineException("Text parser not found for type: %s".formatted(fieldType.getName()));
+                                throw newExceptionForNoParser(option, fieldType);
                             }
                         } else {
                             var value = parser.parse(option.name(), textValue);
-                            setFieldValue(object, optionField, value, textValue);
+                            setFieldValue(object, optionField, value);
                         }
                         break;
                     }
@@ -296,9 +303,7 @@ public abstract class AbstractPlugin extends Plugin {
         } else {
             var parser = getParser(option, elementType);
             if (parser == null) {
-                var typeName = elementType.getName();
-                var message = "Text parser not found for type: %s".formatted(typeName);
-                throw new BadCommandLineException(message);
+                throw newExceptionForNoParser(option, elementType);
             }
             var value = parser.parse(option.name(), textValue);
             collection.add(value);
@@ -315,7 +320,7 @@ public abstract class AbstractPlugin extends Plugin {
                 }
             }
         }
-        setFieldValue(object, optionField, collection, "[]");
+        setFieldValue(object, optionField, collection);
         return j - i;
     }
 
@@ -323,8 +328,6 @@ public abstract class AbstractPlugin extends Plugin {
         var type = object.getClass();
         if (type.getClassLoader() == null) return;
         var optionFields = getOptionFields(type);
-        BiFunction<String, String, String> noParserMsg = "Text parser not found for option '%s' in type '%s'"::formatted;
-        BiFunction<String, String, String> noOptionMsg = "Option '%s' not found in type '%s'"::formatted;
         for (var optionField : optionFields) {
             optionField.setAccessible(true);
             var fieldType = optionField.getType();
@@ -337,37 +340,43 @@ public abstract class AbstractPlugin extends Plugin {
                 if (value == null || ((Collection<?>) value).isEmpty()) {
                     if (!defaultValueText.isEmpty()) {
                         var collection = newCollectionInstance(fieldType);
-                        setFieldValue(object, optionField, collection, "[]");
+                        setFieldValue(object, optionField, collection);
                         var elementType = getCollectionElementType(optionField);
                         var parser = getParser(option, elementType);
                         if (parser == null) {
-                            var message = noParserMsg.apply(option.prefix() + option.name(), elementType.getName());
-                            throw new BadCommandLineException(message);
+                            throw newExceptionForNoParser(option, elementType);
                         }
                         var defaultValue = parser.parse(option.name(), defaultValueText);
                         applyDefaultValueAndValidate(defaultValue);
                         collection.add(defaultValue);
                     } else if (required) {
-                        var message = noOptionMsg.apply(option.prefix() + option.name(), type.getName());
-                        throw new BadCommandLineException(message);
+                        throw newExceptionForNoValue(optionField);
                     }
                 }
             } else if (value == null) {
                 if (!defaultValueText.isEmpty()) {
                     var parser = getParser(option, optionField.getType());
                     if (parser == null) {
-                        var message = noParserMsg.apply(option.prefix() + option.name(), type.getName());
-                        throw new BadCommandLineException(message);
+                        throw newExceptionForNoParser(option, fieldType);
                     }
                     var defaultValue = parser.parse(option.name(), defaultValueText);
                     applyDefaultValueAndValidate(defaultValue);
-                    setFieldValue(object, optionField, defaultValue, defaultValueText);
+                    setFieldValue(object, optionField, defaultValue);
                 } else if (required) {
-                    var message = noOptionMsg.apply(option.prefix() + option.name(), type.getName());
-                    throw new BadCommandLineException(message);
+                    throw newExceptionForNoValue(optionField);
                 }
             }
         }
+    }
+
+    private BadCommandLineException newExceptionForNoParser(Option option, Class<?> fieldType) {
+        return new BadCommandLineException("No text parser registered for field type '%s' or plugin option '%s'"
+            .formatted(fieldType.getName(), option.prefix() + option.name()));
+    }
+
+    private BadCommandLineException newExceptionForNoValue(Field field) {
+        return new BadCommandLineException("Required field '%s' cannot be null in class %s"
+            .formatted(field.getName(), field.getDeclaringClass().getName()));
     }
 
     private TextParser<?> getParser(Option option, Class<?> fieldType) {
@@ -380,13 +389,13 @@ public abstract class AbstractPlugin extends Plugin {
             constructor.setAccessible(true);
             return constructor.newInstance();
         } catch (NoSuchMethodException e) {
-            throw new IllegalArgumentException("Class %s does not have a no-arg constructor".formatted(clazz.getName()), e);
+            throw new IllegalArgumentException("Class '%s' does not have a no-arg constructor".formatted(clazz.getName()), e);
         } catch (InstantiationException e) {
             throw new IllegalArgumentException("Cannot instantiate abstract class %s".formatted(clazz.getName()), e);
         } catch (IllegalAccessException e) {
-            throw new IllegalArgumentException("Cannot access constructor of %s".formatted(clazz.getName()), e);
+            throw new IllegalArgumentException("Cannot access no-arg constructor of class %s".formatted(clazz.getName()), e);
         } catch (InvocationTargetException e) {
-            throw new RuntimeException("Constructor of %s threw an exception".formatted(clazz.getName()), e);
+            throw new IllegalStateException("Constructor of class '%s' threw an exception during instantiation".formatted(clazz.getName()), e);
         }
     }
 
@@ -404,12 +413,13 @@ public abstract class AbstractPlugin extends Plugin {
         }
     }
 
-    private void setFieldValue(Object object, Field field, Object value, String textValue) {
+    private void setFieldValue(Object object, Field field, Object value) {
         try {
             field.setAccessible(true);
             field.set(object, value);
         } catch (IllegalAccessException e) {
-            throw new RuntimeException("Error setting field %s with value %s".formatted(field.getName(), textValue), e);
+            throw new IllegalStateException("Cannot set value '%s' to field '%s' in class '%s'"
+                .formatted(value.toString(), field.getName(), object.getClass().getName()), e);
         }
     }
 
@@ -484,7 +494,7 @@ public abstract class AbstractPlugin extends Plugin {
         } else if (actualType instanceof ParameterizedType pt && pt.getRawType() instanceof Class<?> elementType) {
             return elementType;
         } else if (actualType instanceof GenericArrayType) {
-            throw new IllegalArgumentException("Nested arrays are not supported. Field: '%s'".formatted(field.getName()));
+            throw new IllegalArgumentException("Nested arrays are not supported for field '%s'".formatted(field.getName()));
         }
         return Object.class;
     }
