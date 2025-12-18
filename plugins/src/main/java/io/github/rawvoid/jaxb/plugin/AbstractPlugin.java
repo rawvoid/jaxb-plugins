@@ -47,14 +47,14 @@ public abstract class AbstractPlugin extends Plugin {
         var prefix = "  ";
         var delimiter = "        :  ";
         usages.forEach(entry -> {
-            var optionHead = entry.getKey();
+            var optionCmd = entry.getKey();
             var descriptions = entry.getValue();
-            var padding = maxLength - optionHead.length();
+            var padding = maxLength - optionCmd.length();
             var it = descriptions.iterator();
             var description = it.next();
-            usage.add(prefix + optionHead + " ".repeat(padding) + delimiter + description);
+            usage.add(prefix + optionCmd + " ".repeat(padding) + delimiter + description);
 
-            int r = prefix.length() + optionHead.length() + padding + delimiter.length();
+            int r = prefix.length() + optionCmd.length() + padding + delimiter.length();
             while (it.hasNext()) {
                 usage.add(" ".repeat(r) + it.next());
             }
@@ -74,11 +74,11 @@ public abstract class AbstractPlugin extends Plugin {
                 placeholder = typePlaceholder(isCollection ? getCollectionElementType(optionField) : fieldType);
             }
             placeholder = placeholder == null ? "value" : placeholder;
-            var optionHead = new StringBuilder(indent).append(option.prefix()).append(option.name());
+            var optionCmd = new StringBuilder(indent).append(option.prefix()).append(option.name());
             if (!isCollection || (getOptionFields(getCollectionElementType(optionField)).isEmpty())) {
-                optionHead.append(delimiter).append('<').append(placeholder).append('>');
+                optionCmd.append(delimiter).append('<').append(placeholder).append('>');
             }
-            usages.add(new AbstractMap.SimpleEntry<>(optionHead.toString(), formatUsageDescription(option, optionField)));
+            usages.add(new AbstractMap.SimpleEntry<>(optionCmd.toString(), formatUsageDescription(option, optionField)));
 
             if (fieldType.getClassLoader() != null) {
                 collectOptionUsages(fieldType, indent.repeat(2), usages);
@@ -134,8 +134,8 @@ public abstract class AbstractPlugin extends Plugin {
             for (var optionField : optionFields) {
                 var fieldType = optionField.getType();
                 var option = optionField.getAnnotation(Option.class);
-                var optionFlag = option.prefix() + option.name();
-                if (arg.trim().equals(optionFlag)) {
+                var optionCmd = option.prefix() + option.name();
+                if (arg.trim().equals(optionCmd)) {
                     matchedOptionField = optionField;
                     if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
                         setFieldValue(object, optionField, true, "true");
@@ -151,7 +151,8 @@ public abstract class AbstractPlugin extends Plugin {
                                 applyDefaultValueAndValidate(elementValue);
                                 collection.add(elementValue);
                                 j += x;
-                                if (j + 1 < args.length && args[j + 1].trim().equals(optionFlag)) {
+                                var next = j + 1 < args.length ? args[j + 1].trim() : null;
+                                if (Objects.equals(next, optionCmd)) {
                                     j++;
                                 } else {
                                     break;
@@ -169,12 +170,12 @@ public abstract class AbstractPlugin extends Plugin {
                             setFieldValue(object, optionField, value, "");
                         }
                     } else {
-                        throw new BadCommandLineException("Option %s must have a value".formatted(optionFlag));
+                        throw new BadCommandLineException("Option %s must have a value".formatted(optionCmd));
                     }
                     break;
                 } else {
                     var delimiter = option.delimiter();
-                    var pattern = Pattern.compile("^" + Pattern.quote(optionFlag) + "\\s*" + Pattern.quote(delimiter) + "(.*)");
+                    var pattern = Pattern.compile("^" + Pattern.quote(optionCmd) + "\\s*" + Pattern.quote(delimiter) + "(.*)");
                     var matcher = pattern.matcher(arg);
                     if (matcher.matches()) {
                         matchedOptionField = optionField;
