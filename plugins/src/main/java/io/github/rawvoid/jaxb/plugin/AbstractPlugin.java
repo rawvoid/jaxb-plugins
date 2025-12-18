@@ -415,6 +415,6 @@ public abstract class AbstractPlugin extends Plugin {
         registerTextParser(Class.class, (optionName, text) -> Class.forName(text.toString().trim()));
         registerTextParser(String.class, (optionName, text) -> text.toString());
         registerTextParser(Pattern.class, (optionName, text) -> Pattern.compile(text.toString()));
-        registerTextParser(Object.class, (optionName, text) -> text.toString());
+        registerTextParser(Object.class, (optionName, text) -> text);
     }
 }
