@@ -264,11 +264,12 @@ public abstract class AbstractPlugin extends Plugin {
                     }
                 }
             }
-            if (matchedOptionField != null) {
+
+            if (matchedOptionField == null) {
+                break;
+            } else {
                 optionFields.remove(matchedOptionField);
                 count = j - i + 1;
-            } else {
-                break;
             }
         }
         return count;
@@ -283,21 +284,13 @@ public abstract class AbstractPlugin extends Plugin {
 
         var i = j;
         if (textValue == null) {
-            while (true) {
+            --j;
+            for (var s = optionCmd; optionCmd.equals(s) && ++j < args.length; s = args[j + 1].trim()) {
                 var elementValue = newInstance(elementType);
                 var x = parseArgument(elementValue, args, j + 1);
                 if (x > 0) {
-                    collection.add(elementValue);
                     j += x;
-
-                    var next = j + 1 < args.length ? args[j + 1].trim() : null;
-                    if (Objects.equals(next, optionCmd)) {
-                        j++;
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
+                    collection.add(elementValue);
                 }
             }
         } else {
