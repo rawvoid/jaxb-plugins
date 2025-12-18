@@ -202,6 +202,7 @@ public abstract class AbstractPlugin extends Plugin {
             var arg = args[i].trim();
             if (arg.equals(option.prefix() + option.name())) {
                 var count = parseArgument(this, args, i + 1);
+                applyDefaultValueAndValidate(this);
                 return count + 1;
             }
         } catch (Exception e) {
@@ -233,7 +234,6 @@ public abstract class AbstractPlugin extends Plugin {
                         var x = parseArgument(value, args, j + 1);
                         if (x > 0) {
                             j += x;
-                            applyDefaultValueAndValidate(value);
                             setFieldValue(object, optionField, value, "");
                         }
                     } else {
@@ -258,7 +258,6 @@ public abstract class AbstractPlugin extends Plugin {
                             }
                         } else {
                             var value = parser.parse(option.name(), textValue);
-                            applyDefaultValueAndValidate(value);
                             setFieldValue(object, optionField, value, textValue);
                         }
                         break;
@@ -272,7 +271,6 @@ public abstract class AbstractPlugin extends Plugin {
                 break;
             }
         }
-        applyDefaultValueAndValidate(object);
         return count;
     }
 
@@ -289,9 +287,9 @@ public abstract class AbstractPlugin extends Plugin {
                 var elementValue = newInstance(elementType);
                 var x = parseArgument(elementValue, args, j + 1);
                 if (x > 0) {
-                    applyDefaultValueAndValidate(elementValue);
                     collection.add(elementValue);
                     j += x;
+
                     var next = j + 1 < args.length ? args[j + 1].trim() : null;
                     if (Objects.equals(next, optionCmd)) {
                         j++;
@@ -318,7 +316,6 @@ public abstract class AbstractPlugin extends Plugin {
                     j++;
                     textValue = matcher.group(1);
                     value = parser.parse(option.name(), textValue);
-                    applyDefaultValueAndValidate(value);
                     collection.add(value);
                 } else {
                     break;
