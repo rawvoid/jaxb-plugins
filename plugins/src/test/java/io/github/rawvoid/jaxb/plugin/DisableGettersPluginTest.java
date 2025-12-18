@@ -13,6 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class DisableGettersPluginTest extends AbstractXJCMojoTestCase {
 
+    Option option = DisableGettersPlugin.class.getAnnotation(Option.class);
+
     @Test
     public void testDisablePlugin() throws Exception {
         testExecute(List.of(), clazz -> {
@@ -25,7 +27,8 @@ class DisableGettersPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     public void testPlugin() throws Exception {
-        testExecute(List.of("-" + DisableGettersPlugin.OPTION_NAME), clazz -> {
+        var optionCmd = option.prefix() + option.name();
+        testExecute(List.of(optionCmd), clazz -> {
             if (!clazz.getSimpleName().equals("Person")) {
                 return;
             }
