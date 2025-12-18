@@ -91,7 +91,6 @@ class AbstractPluginTest {
     void testDefaultValueAppliedAndUsageContainsDefaultAndRequired() throws BadCommandLineException, IOException {
         var plugin = new DefaultAndRequiredPlugin();
 
-        // 只传必须项，其他用 defaultValue 填充
         var args = List.of(
             "-Xdefault-required",
             "-config",
@@ -101,16 +100,13 @@ class AbstractPluginTest {
         var count = plugin.parseArgument(new Options(), args, 0);
         assertThat(count).isEqualTo(args.length);
 
-        // defaultValue 应该生效
         assertThat(plugin.name).isEqualTo("bob");
         assertThat(plugin.count).isEqualTo(3);
         assertThat(plugin.tags).containsExactly("alpha");
 
-        // required 复合对象 + 内部 required 字段应该生效
         assertThat(plugin.config).isNotNull();
         assertThat(plugin.config.className).isEqualTo(AbstractPluginTest.class);
 
-        // Usage 应该包含 required/default 的标记（你升级后的格式）
         var usage = plugin.getUsage();
         assertThat(usage).contains("-Xdefault-required");
         assertThat(usage).contains("[default=bob]");
@@ -123,7 +119,6 @@ class AbstractPluginTest {
     void testRequiredMissingShouldThrow() {
         var plugin = new DefaultAndRequiredPlugin();
 
-        // 缺少 config 的内部 required 字段：-class-name
         var args = List.of(
             "-Xdefault-required",
             "-config"
@@ -139,7 +134,6 @@ class AbstractPluginTest {
         @Option(name = "name", description = "Name", defaultValue = "bob")
         String name;
 
-        // 注意：用包装类型才能区分“没传”和“默认 0”
         @Option(name = "count", description = "Count", defaultValue = "3")
         Integer count;
 
