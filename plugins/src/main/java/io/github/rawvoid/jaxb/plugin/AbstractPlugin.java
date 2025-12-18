@@ -11,6 +11,35 @@ import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 /**
+ * Abstract base class for JAXB XJC plugins that provides annotation-based command line option parsing functionality.
+ *
+ * <p>This class extends XJC's Plugin class and implements a complete option parsing framework that allows plugin
+ * developers to define command line parameters by annotating fields with {@link Option} annotation. Key features include:</p>
+ *
+ * <ul>
+ *   <li>Automatic parsing of command line arguments and mapping to fields annotated with @Option</li>
+ *   <li>Support for various data types including primitives, wrapper types, strings, and regular expressions</li>
+ *   <li>Support for collection types (List, Set, Queue) with repeatable options</li>
+ *   <li>Support for nested objects and complex object structures</li>
+ *   <li>Advanced features such as default values, required validation, and custom delimiters</li>
+ *   <li>Automatic generation of formatted usage documentation</li>
+ *   <li>Extensible with custom text parsers</li>
+ * </ul>
+ *
+ * <p>Usage example:</p>
+ * <pre>
+ * {@code
+ * @Option(name = "myPlugin", description = "My custom plugin")
+ * public class MyPlugin extends AbstractPlugin {
+ *     @Option(name = "output", description = "Output directory")
+ *     private String outputDir;
+ *
+ *     @Option(name = "verbose", description = "Enable verbose mode")
+ *     private boolean verbose;
+ * }
+ * }
+ * </pre>
+ *
  * @author Rawvoid
  */
 public abstract class AbstractPlugin extends Plugin {
@@ -18,10 +47,24 @@ public abstract class AbstractPlugin extends Plugin {
     private final Map<Class<?>, TextParser<?>> textParsersByOptionType = new HashMap<>();
     private final Map<String, TextParser<?>> textParsersByOptionName = new HashMap<>();
 
+    /**
+     * Constructs a new AbstractPlugin and initializes default text parsers.
+     *
+     * <p>Automatically registers text parsers for all primitive types and common types.</p>
+     */
     public AbstractPlugin() {
         initDefaultTextParsers();
     }
 
+    /**
+     * Returns the plugin's option name.
+     *
+     * <p>Reads the option name from the class-level @Option annotation. Throws an exception if the
+     * plugin class is not annotated with @Option.</p>
+     *
+     * @return the plugin option name
+     * @throws IllegalStateException if the plugin class is not annotated with @Option
+     */
     @Override
     public String getOptionName() {
         var option = getClass().getAnnotation(Option.class);
@@ -31,6 +74,20 @@ public abstract class AbstractPlugin extends Plugin {
         return option.name();
     }
 
+    /**
+     * Generates the plugin's usage documentation.
+     *
+     * <p>Automatically scans all fields annotated with @Option and generates formatted usage documentation including:</p>
+     * <ul>
+     *   <li>Option name and placeholder</li>
+     *   <li>Option description</li>
+     *   <li>Whether the option is required</li>
+     *   <li>Default value if any</li>
+     *   <li>Whether the option is repeatable</li>
+     * </ul>
+     *
+     * @return the formatted usage documentation string
+     */
     @Override
     public String getUsage() {
         List<Map.Entry<String, List<String>>> usages = new ArrayList<>();
@@ -108,6 +165,20 @@ public abstract class AbstractPlugin extends Plugin {
         return parts.toString().lines().toList();
     }
 
+    /**
+     * Parses command line arguments.
+     *
+     * <p>This method is called by the XJC framework to parse the plugin's command line arguments.
+     * It recognizes the plugin's main option name and then delegates to internal argument parsing
+     * logic to handle all sub-options.</p>
+     *
+     * @param opt  the XJC options object
+     * @param args the command line arguments array
+     * @param i    the current argument index
+     * @return the number of arguments consumed
+     * @throws BadCommandLineException if argument parsing fails
+     * @throws IOException             if an I/O error occurs
+     */
     @Override
     public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
         var option = getClass().getAnnotation(Option.class);
@@ -324,10 +395,30 @@ public abstract class AbstractPlugin extends Plugin {
         }
     }
 
+    /**
+     * Registers a text parser for a specific type.
+     *
+     * <p>Allows plugins to register parsers for custom types, used to convert command line
+     * text arguments into objects of the specified type.</p>
+     *
+     * @param <T>    the target type
+     * @param clazz  the type to parse
+     * @param parser the text parser implementation
+     */
     public <T> void registerTextParser(Class<T> clazz, TextParser<T> parser) {
         textParsersByOptionType.put(clazz, parser);
     }
 
+    /**
+     * Registers a text parser for a specific option name.
+     *
+     * <p>Allows registration of a dedicated parser for a specific option name, which takes
+     * precedence over type-based parsers.</p>
+     *
+     * @param <T>        the target type
+     * @param optionName the option name
+     * @param parser     the text parser implementation
+     */
     public <T> void registerTextParser(String optionName, TextParser<T> parser) {
         textParsersByOptionName.put(optionName, parser);
     }

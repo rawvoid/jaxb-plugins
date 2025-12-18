@@ -8,7 +8,12 @@ import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
- * Option is an annotation that is used to mark plugin options.
+ * Annotation to mark plugin options.
+ * <p>
+ * This annotation is used to mark fields in plugin classes that represent configurable
+ * options. It provides metadata about the option, such as its name, prefix, delimiter,
+ * requirement, default value, placeholder, and description.
+ * </p>
  *
  * @author Rawvoid
  */
