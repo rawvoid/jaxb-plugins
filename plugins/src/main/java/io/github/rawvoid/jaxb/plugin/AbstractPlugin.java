@@ -33,19 +33,22 @@ public abstract class AbstractPlugin extends Plugin {
 
     @Override
     public String getUsage() {
-        LinkedHashMap<String, List<String>> usages = new LinkedHashMap<>();
+        List<Map.Entry<String, List<String>>> usages = new ArrayList<>();
         var option = getClass().getAnnotation(Option.class);
-        usages.put(option.prefix() + getOptionName(), option.description().lines().toList());
+        usages.add(new AbstractMap.SimpleEntry<>(option.prefix() + option.name(), option.description().lines().toList()));
         collectOptionUsages(getClass(), " ".repeat(4), usages);
 
-        var maxLength = usages.keySet().stream()
+        var maxLength = usages.stream()
+            .map(Map.Entry::getKey)
             .mapToInt(String::length)
             .max()
             .orElse(0);
         StringJoiner usage = new StringJoiner("\n");
         var prefix = "  ";
         var delimiter = "        :  ";
-        usages.forEach((optionHead, descriptions) -> {
+        usages.forEach(entry -> {
+            var optionHead = entry.getKey();
+            var descriptions = entry.getValue();
             var padding = maxLength - optionHead.length();
             var it = descriptions.iterator();
             var description = it.next();
@@ -59,7 +62,7 @@ public abstract class AbstractPlugin extends Plugin {
         return usage.toString();
     }
 
-    private void collectOptionUsages(Class<?> clazz, String indent, LinkedHashMap<String, List<String>> usages) {
+    private void collectOptionUsages(Class<?> clazz, String indent, List<Map.Entry<String, List<String>>> usages) {
         var optionFields = getOptionFields(clazz);
         for (var optionField : optionFields) {
             var fieldType = optionField.getType();
@@ -75,7 +78,7 @@ public abstract class AbstractPlugin extends Plugin {
             if (!isCollection || (getOptionFields(getCollectionElementType(optionField)).isEmpty())) {
                 optionHead.append(delimiter).append('<').append(placeholder).append('>');
             }
-            usages.put(optionHead.toString(), formatUsageDescription(option, optionField));
+            usages.add(new AbstractMap.SimpleEntry<>(optionHead.toString(), formatUsageDescription(option, optionField)));
 
             if (fieldType.getClassLoader() != null) {
                 collectOptionUsages(fieldType, indent.repeat(2), usages);
