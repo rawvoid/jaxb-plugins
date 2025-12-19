@@ -78,9 +78,110 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
         );
         testExecute(args, clazz -> {
             if (!clazz.getSimpleName().equals("Person")) return;
-            var generatedAnnotation = clazz.getDeclaredAnnotation(XmlAccessorType.class);
+            var generatedAnnotation = clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlAccessorType.class);
             assertThat(generatedAnnotation).isNotNull();
-            assertThat(generatedAnnotation.value()).isEqualTo(XmlAccessType.NONE);
+            assertThat(generatedAnnotation.value()).isEqualTo(jakarta.xml.bind.annotation.XmlAccessType.NONE);
+        });
+    }
+
+    @Test
+    void testMultipleAnnotations() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")",
+            "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(java.lang.Object.class)",
+            "-regex=.*Person"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
+            assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSeeAlso.class)).isNotNull();
+        });
+    }
+
+    @Test
+    void testMultiplePatterns() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")",
+            "-regex=.*Person",
+            "-regex=.*Order"
+        );
+        testExecute(args, clazz -> {
+            if (clazz.getSimpleName().equals("Person") || clazz.getSimpleName().equals("Order")) {
+                assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
+            }
+        });
+    }
+
+    @Test
+    void testMultipleConfigs() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")",
+            "-regex=.*Person",
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(java.lang.Object.class)",
+            "-regex=.*Person"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
+            assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSeeAlso.class)).isNotNull();
+        });
+    }
+
+    @Test
+    void testNonRepeatableReplacement() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"first\")",
+            "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"second\")",
+            "-regex=.*Person"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            var annotations = clazz.getDeclaredAnnotationsByType(jakarta.xml.bind.annotation.XmlRootElement.class);
+            assertThat(annotations).hasSize(1);
+            assertThat(annotations[0].name()).isEqualTo("second");
+        });
+    }
+
+    @Test
+    void testNoRegexMatchesAll() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-class",
+            "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
+        });
+    }
+
+    @Test
+    void testMultipleFieldPatterns() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-field",
+            "-anno=@jakarta.xml.bind.annotation.XmlSchemaType(name=\"test\")",
+            "-regex=.*name",
+            "-regex=.*age"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            try {
+                assertThat(clazz.getDeclaredField("name").getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNotNull();
+                assertThat(clazz.getDeclaredField("age").getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNotNull();
+                assertThat(clazz.getDeclaredField("active").getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNull();
+            } catch (NoSuchFieldException e) {
+                throw new RuntimeException(e);
+            }
         });
     }
 
