@@ -77,10 +77,12 @@ public class AnnotatePlugin extends AbstractPlugin {
 
     public void addAnnotation(JAnnotatable target, String targetName, List<Config> configs) {
         var matchedConfigs = configs.stream()
-            .filter(config -> config.regex == null || config.regex.matcher(targetName).matches())
+            .filter(config -> config.patterns == null || config.patterns.isEmpty() || config.patterns.stream()
+                .anyMatch(pattern -> pattern.matcher(targetName).matches()))
             .toList();
-        matchedConfigs.forEach(config -> {
-            var xAnnotation = config.annotation;
+        var xAnnotations = matchedConfigs.stream()
+            .flatMap(config -> config.xAnnotations.stream());
+        xAnnotations.forEach(xAnnotation -> {
             var annotationClass = xAnnotation.getAnnotationClass();
             var existingSameAnnotations = target.annotations().stream()
                 .filter(a -> a.getAnnotationClass().fullName().equals(annotationClass.getName()))
@@ -151,10 +153,10 @@ public class AnnotatePlugin extends AbstractPlugin {
     public static class Config {
 
         @Option(name = "anno", required = true, placeholder = "annotation", description = "The annotation to be added")
-        XAnnotation<?> annotation;
+        List<XAnnotation<?>> xAnnotations;
 
         @Option(name = "regex", description = "The regex pattern to match the target")
-        Pattern regex;
+        List<Pattern> patterns;
 
     }
 }
