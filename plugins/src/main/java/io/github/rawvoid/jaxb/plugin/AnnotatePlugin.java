@@ -38,13 +38,13 @@ import java.util.regex.Pattern;
 public class AnnotatePlugin extends AbstractPlugin {
 
     @Option(name = "add-to-class", description = "Add annotations to generated classes")
-    protected List<Config> classConfigs;
+    protected List<AddConfig> addToClassConfigs;
 
     @Option(name = "add-to-field", description = "Add annotations to generated fields")
-    protected List<Config> fieldConfigs;
+    protected List<AddConfig> addToFieldConfigs;
 
     @Option(name = "add-to-method", description = "Add annotations to generated methods")
-    protected List<Config> methodConfigs;
+    protected List<AddConfig> addToMethodConfigs;
 
     public AnnotatePlugin() {
         registerTextParser(XAnnotation.class, (optionName, text) ->
@@ -57,25 +57,25 @@ public class AnnotatePlugin extends AbstractPlugin {
             var jDefinedClass = classOutline.implClass;
             var className = jDefinedClass.fullName();
 
-            if (classConfigs != null && !classConfigs.isEmpty()) {
-                addAnnotation(jDefinedClass, className, classConfigs);
+            if (addToClassConfigs != null && !addToClassConfigs.isEmpty()) {
+                addAnnotation(jDefinedClass, className, addToClassConfigs);
             }
 
-            if (fieldConfigs != null && !fieldConfigs.isEmpty()) {
+            if (addToFieldConfigs != null && !addToFieldConfigs.isEmpty()) {
                 jDefinedClass.fields().values().forEach(field ->
-                    addAnnotation(field, className + "." + field.name(), fieldConfigs));
+                    addAnnotation(field, className + "." + field.name(), addToFieldConfigs));
             }
 
-            if (methodConfigs != null && !methodConfigs.isEmpty()) {
+            if (addToMethodConfigs != null && !addToMethodConfigs.isEmpty()) {
                 jDefinedClass.methods().forEach(method ->
-                    addAnnotation(method, className + "." + method.name(), methodConfigs));
+                    addAnnotation(method, className + "." + method.name(), addToMethodConfigs));
             }
         });
 
         return true;
     }
 
-    public void addAnnotation(JAnnotatable target, String targetName, List<Config> configs) {
+    public void addAnnotation(JAnnotatable target, String targetName, List<AddConfig> configs) {
         var matchedConfigs = configs.stream()
             .filter(config -> config.patterns == null || config.patterns.isEmpty() || config.patterns.stream()
                 .anyMatch(pattern -> pattern.matcher(targetName).matches()))
@@ -150,7 +150,7 @@ public class AnnotatePlugin extends AbstractPlugin {
         }
     }
 
-    public static class Config {
+    public static class AddConfig {
 
         @Option(name = "anno", required = true, placeholder = "annotation", description = "The annotation to be added")
         List<XAnnotation<?>> xAnnotations;
