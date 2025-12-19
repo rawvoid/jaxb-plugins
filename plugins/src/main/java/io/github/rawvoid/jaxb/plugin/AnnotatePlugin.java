@@ -24,6 +24,7 @@ import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
+import java.lang.annotation.Annotation;
 import java.lang.annotation.Repeatable;
 import java.util.Arrays;
 import java.util.List;
@@ -45,6 +46,15 @@ public class AnnotatePlugin extends AbstractPlugin {
 
     @Option(name = "add-to-method", description = "Add annotations to generated methods")
     protected List<AddConfig> addToMethodConfigs;
+
+    @Option(name = "remove-from-class", description = "Remove annotations from generated classes")
+    protected List<RemoveConfig> removeFromClassConfigs;
+
+    @Option(name = "remove-from-field", description = "Remove annotations from generated fields")
+    protected List<RemoveConfig> removeFromFieldConfigs;
+
+    @Option(name = "remove-from-method", description = "Remove annotations from generated methods")
+    protected List<RemoveConfig> removeFromMethodConfigs;
 
     public AnnotatePlugin() {
         registerTextParser(XAnnotation.class, (optionName, text) ->
@@ -69,6 +79,20 @@ public class AnnotatePlugin extends AbstractPlugin {
             if (addToMethodConfigs != null && !addToMethodConfigs.isEmpty()) {
                 jDefinedClass.methods().forEach(method ->
                     addAnnotation(method, className + "." + method.name(), addToMethodConfigs));
+            }
+
+            if (removeFromClassConfigs != null && !removeFromClassConfigs.isEmpty()) {
+                removeAnnotation(jDefinedClass, className, removeFromClassConfigs);
+            }
+
+            if (removeFromFieldConfigs != null && !removeFromFieldConfigs.isEmpty()) {
+                jDefinedClass.fields().values().forEach(field ->
+                    removeAnnotation(field, className + "." + field.name(), removeFromFieldConfigs));
+            }
+
+            if (removeFromMethodConfigs != null && !removeFromMethodConfigs.isEmpty()) {
+                jDefinedClass.methods().forEach(method ->
+                    removeAnnotation(method, className + "." + method.name(), removeFromMethodConfigs));
             }
         });
 
@@ -150,10 +174,34 @@ public class AnnotatePlugin extends AbstractPlugin {
         }
     }
 
+    public void removeAnnotation(JAnnotatable target, String targetName, List<RemoveConfig> configs) {
+        var matchedConfigs = configs.stream()
+            .filter(config -> config.patterns == null || config.patterns.isEmpty() || config.patterns.stream()
+                .anyMatch(pattern -> pattern.matcher(targetName).matches()))
+            .toList();
+
+        matchedConfigs.forEach(config -> config.annotations.forEach(annoClass -> {
+            var toRemove = target.annotations().stream()
+                .filter(a -> a.getAnnotationClass().fullName().equals(annoClass.getName()))
+                .toList();
+            toRemove.forEach(target::removeAnnotation);
+        }));
+    }
+
     public static class AddConfig {
 
         @Option(name = "anno", required = true, placeholder = "annotation", description = "The annotation to be added")
         List<XAnnotation<?>> xAnnotations;
+
+        @Option(name = "regex", description = "The regex pattern to match the target")
+        List<Pattern> patterns;
+
+    }
+
+    public static class RemoveConfig {
+
+        @Option(name = "anno", required = true, placeholder = "class", description = "The annotation class name to be removed")
+        List<Class<? extends Annotation>> annotations;
 
         @Option(name = "regex", description = "The regex pattern to match the target")
         List<Pattern> patterns;

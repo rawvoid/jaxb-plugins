@@ -186,6 +186,74 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void testRemoveClassAnnotation() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-remove-from-class",
+            "-anno=jakarta.xml.bind.annotation.XmlAccessorType",
+            "-regex=.*Person"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            var generatedAnnotation = clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlAccessorType.class);
+            assertThat(generatedAnnotation).isNull();
+        });
+    }
+
+    @Test
+    void testRemoveFieldAnnotation() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-field",
+            "-anno=@jakarta.xml.bind.annotation.XmlSchemaType(name=\"test\")",
+            "-regex=.*name",
+            "-remove-from-field",
+            "-anno=jakarta.xml.bind.annotation.XmlSchemaType",
+            "-regex=.*name"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            var nameField = clazz.getDeclaredField("name");
+            assertThat(nameField.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNull();
+        });
+    }
+
+    @Test
+    void testRemoveWithRegex() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-remove-from-class",
+            "-anno=jakarta.xml.bind.annotation.XmlAccessorType",
+            "-regex=.*Order"
+        );
+        testExecute(args, clazz -> {
+            if (clazz.getSimpleName().equals("Person")) {
+                assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlAccessorType.class)).isNotNull();
+            } else if (clazz.getSimpleName().equals("Order")) {
+                assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlAccessorType.class)).isNull();
+            }
+        });
+    }
+
+    @Test
+    void testRemoveMethodAnnotation() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-method",
+            "-anno=@java.lang.Deprecated",
+            "-regex=.*getName",
+            "-remove-from-method",
+            "-anno=java.lang.Deprecated",
+            "-regex=.*getName"
+        );
+        testExecute(args, clazz -> {
+            if (!clazz.getSimpleName().equals("Person")) return;
+            var getNameMethod = clazz.getDeclaredMethod("getName");
+            assertThat(getNameMethod.getDeclaredAnnotation(Deprecated.class)).isNull();
+        });
+    }
+
+    @Test
     void testXAnnotationParser() throws Exception {
         var source = """
             @javax.annotation.processing.Generated(value = "Xjc", date = "2025-01-01T00:00:00Z")
