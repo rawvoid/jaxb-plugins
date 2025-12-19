@@ -107,7 +107,7 @@ public abstract class AbstractPlugin extends Plugin {
     public String getUsage() {
         List<Map.Entry<String, List<String>>> usages = new ArrayList<>();
         var option = getClass().getAnnotation(Option.class);
-        usages.add(new AbstractMap.SimpleEntry<>(option.prefix() + option.name(), option.description().lines().toList()));
+        usages.add(new AbstractMap.SimpleEntry<>(getFullOptionName(option), option.description().lines().toList()));
         collectOptionUsages(getClass(), " ".repeat(4), usages);
 
         var maxLength = usages.stream()
@@ -119,14 +119,14 @@ public abstract class AbstractPlugin extends Plugin {
         var prefix = "  ";
         var delimiter = "        :  ";
         usages.forEach(entry -> {
-            var optionCmd = entry.getKey();
+            var optionUsage = entry.getKey();
             var descriptions = entry.getValue();
-            var padding = maxLength - optionCmd.length();
+            var padding = maxLength - optionUsage.length();
             var it = descriptions.iterator();
             var description = it.next();
-            usage.add(prefix + optionCmd + " ".repeat(padding) + delimiter + description);
+            usage.add(prefix + optionUsage + " ".repeat(padding) + delimiter + description);
 
-            var r = prefix.length() + optionCmd.length() + padding + delimiter.length();
+            var r = prefix.length() + optionUsage.length() + padding + delimiter.length();
             while (it.hasNext()) {
                 usage.add(" ".repeat(r) + it.next());
             }
@@ -185,6 +185,10 @@ public abstract class AbstractPlugin extends Plugin {
         return parts.toString().lines().toList();
     }
 
+    private String getFullOptionName(Option option) {
+        return option.prefix() + option.name();
+    }
+
     /**
      * Parses command line arguments.
      *
@@ -202,16 +206,17 @@ public abstract class AbstractPlugin extends Plugin {
     @Override
     public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
         var option = getClass().getAnnotation(Option.class);
+        var fullOptionName = getFullOptionName(option);
         try {
             var arg = args[i].trim();
-            if (arg.equals(option.prefix() + option.name())) {
+            if (arg.equals(fullOptionName)) {
                 var count = parseArgument(this, args, i + 1);
                 applyDefaultValueAndValidate(this);
                 return count + 1;
             }
         } catch (Exception e) {
             throw new BadCommandLineException("Failed to configure plugin '%s' due to: %s"
-                .formatted(option.prefix() + option.name(), e.getMessage()), e);
+                .formatted(fullOptionName, e.getMessage()), e);
         }
         return 0;
     }
@@ -227,8 +232,8 @@ public abstract class AbstractPlugin extends Plugin {
             for (var optionField : optionFields) {
                 var fieldType = optionField.getType();
                 var option = optionField.getAnnotation(Option.class);
-                var optionCmd = option.prefix() + option.name();
-                if (arg.trim().equals(optionCmd)) {
+                var fullOptionName = getFullOptionName(option);
+                if (arg.trim().equals(fullOptionName)) {
                     matchedOptionField = optionField;
                     if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
                         setFieldValue(object, optionField, true);
@@ -243,13 +248,13 @@ public abstract class AbstractPlugin extends Plugin {
                         }
                     } else {
                         var message = "Option '%s' requires a value but none was provided. Use format: %s"
-                            .formatted(optionCmd, formatUsage(optionField, fieldType, option));
+                            .formatted(fullOptionName, formatUsage(optionField, fieldType, option));
                         throw new BadCommandLineException(message);
                     }
                     break;
                 } else {
                     var delimiter = option.delimiter();
-                    var optionQt = Pattern.quote(optionCmd);
+                    var optionQt = Pattern.quote(fullOptionName);
                     var delimiterQt = Pattern.quote(delimiter);
                     var pattern = Pattern.compile("^" + optionQt + "\\s*" + delimiterQt + "(.*)");
                     var matcher = pattern.matcher(arg);
@@ -287,12 +292,12 @@ public abstract class AbstractPlugin extends Plugin {
         var elementType = getCollectionElementType(optionField);
         var fieldType = optionField.getType();
         var collection = newCollectionInstance(fieldType);
-        var optionCmd = option.prefix() + option.name();
+        var fullOptionName = getFullOptionName(option);
 
         var i = j;
         if (textValue == null) {
             --j;
-            for (var s = optionCmd; optionCmd.equals(s) && ++j < args.length; s = args[j + 1].trim()) {
+            for (var s = fullOptionName; fullOptionName.equals(s) && ++j < args.length; s = args[j + 1].trim()) {
                 var elementValue = newInstance(elementType);
                 var x = parseArgument(elementValue, args, j + 1);
                 if (x > 0) {
@@ -371,7 +376,7 @@ public abstract class AbstractPlugin extends Plugin {
 
     private BadCommandLineException newExceptionForNoParser(Option option, Class<?> fieldType) {
         return new BadCommandLineException("No text parser registered for field type '%s' or plugin option '%s'"
-            .formatted(fieldType.getName(), option.prefix() + option.name()));
+            .formatted(fieldType.getName(), getFullOptionName(option)));
     }
 
     private BadCommandLineException newExceptionForNoValue(Field field) {
