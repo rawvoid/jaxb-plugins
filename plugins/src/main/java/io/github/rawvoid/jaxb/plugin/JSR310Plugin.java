@@ -18,7 +18,10 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.*;
 import com.sun.tools.xjc.Options;
+import com.sun.tools.xjc.model.CAttributePropertyInfo;
+import com.sun.tools.xjc.model.CElementPropertyInfo;
 import com.sun.tools.xjc.model.CPropertyInfo;
+import com.sun.tools.xjc.model.CValuePropertyInfo;
 import com.sun.tools.xjc.outline.Outline;
 import jakarta.xml.bind.annotation.adapters.XmlAdapter;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
@@ -91,18 +94,26 @@ public class JSR310Plugin extends AbstractPlugin {
             var className = jDefinedClass.fullName();
             for (var fieldOutline : fieldOutlines) {
                 var propertyInfo = fieldOutline.getPropertyInfo();
-                var schemaType = propertyInfo.getSchemaType();
+                var schemaType = getSchemaType(propertyInfo);
                 var targetType = typeMapper.get(schemaType);
-                if (targetType == null && schemaType == null
-                    && "javax.xml.datatype.Duration".equals(fieldOutline.getRawType().fullName())) {
-                    targetType = Duration.class;
-                }
-
                 if (targetType == null) continue;
                 applyMapping(jDefinedClass, propertyInfo, targetType);
             }
         });
         return true;
+    }
+
+    public QName getSchemaType(CPropertyInfo propertyInfo) {
+        if (propertyInfo == null) return null;
+        return switch (propertyInfo) {
+            case CElementPropertyInfo elementPropertyInfo -> {
+                var types = elementPropertyInfo.getTypes();
+                yield types.size() == 1 ? types.getFirst().getTypeName() : null;
+            }
+            case CAttributePropertyInfo attributePropertyInfo -> attributePropertyInfo.getSchemaType();
+            case CValuePropertyInfo valuePropertyInfo -> valuePropertyInfo.getSchemaType();
+            default -> null;
+        };
     }
 
     public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType) {
