@@ -361,6 +361,10 @@ public abstract class AbstractPlugin extends Plugin {
                     } else if (required) {
                         throw newExceptionForNoValue(optionField);
                     }
+                } else {
+                    for (var item : collection) {
+                        applyDefaultValueAndValidate(item);
+                    }
                 }
             } else if (value == null) {
                 if (!defaultValueText.isEmpty()) {
