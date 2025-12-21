@@ -20,6 +20,7 @@ import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import jakarta.xml.bind.annotation.XmlSchema;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +36,7 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
             "-Xnamespace",
             "-mapping",
             "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-prefix=n1",
             "-package=pkg1",
             "-mapping",
             "-ns=https://www.github.com/rawvoid/xjc-plugins/jsr310",
@@ -42,8 +44,12 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
         );
         testExecute(args, c -> c.getSimpleName().equals("package-info"), (source, clazz) -> {
             var annotation = clazz.getAnnotation(XmlSchema.class);
-            if ("https://www.github.com/rawvoid/xjc-plugins".equals(annotation.namespace())) {
+            var namespace = "https://www.github.com/rawvoid/xjc-plugins";
+            if (namespace.equals(annotation.namespace())) {
                 assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+                Arrays.stream(annotation.xmlns())
+                    .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
+                    .forEach(xmlns -> assertThat(xmlns.prefix()).isEqualTo("n1"));
             } else if ("https://www.github.com/rawvoid/xjc-plugins/jsr310".equals(annotation.namespace())) {
                 assertThat(clazz.getPackageName()).isEqualTo("pkg2");
             }

@@ -16,9 +16,13 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.codemodel.JAnnotationArrayMember;
+import com.sun.codemodel.JAnnotationStringValue;
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import jakarta.xml.bind.annotation.XmlNs;
+import jakarta.xml.bind.annotation.XmlSchema;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -26,7 +30,10 @@ import org.xml.sax.SAXException;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.IOException;
 import java.io.StringReader;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -105,6 +112,37 @@ public class NamespacePlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+        outline.getAllPackageContexts().forEach(pkgOutline -> {
+            var jPackage = pkgOutline._package();
+            var xmlSchema = jPackage.annotations().stream()
+                .filter(a -> a.getAnnotationClass().fullName().equals(XmlSchema.class.getName()))
+                .findFirst()
+                .orElse(null);
+            if (xmlSchema == null) return;
+
+            var namespaceValue = (JAnnotationStringValue) xmlSchema.getAnnotationMembers().get("namespace");
+            if (namespaceValue == null) return;
+
+            var namespace = namespaceValue.toString();
+            var mapping = mappings.stream()
+                .filter(m -> Objects.equals(m.namespace, namespace) && m.prefix != null)
+                .findFirst()
+                .orElse(null);
+            if (mapping == null) return;
+
+            var xmlns = (JAnnotationArrayMember) xmlSchema.getAnnotationMembers().get("xmlns");
+            if (xmlns == null) {
+                xmlns = xmlSchema.paramArray("xmlns");
+                var anno = xmlns.annotate(XmlNs.class);
+                anno.param("prefix", mapping.prefix);
+                anno.param("namespaceURI", namespace);
+            } else {
+                xmlns.annotations().stream().filter(anno -> {
+                    var namespaceURIValue = (JAnnotationStringValue) anno.getAnnotationMembers().get("namespaceURI");
+                    return namespaceURIValue != null && Objects.equals(namespaceURIValue.toString(), namespace);
+                }).forEach(anno -> anno.param("prefix", mapping.prefix));
+            }
+        });
         return true;
     }
 
@@ -112,6 +150,9 @@ public class NamespacePlugin extends AbstractPlugin {
 
         @Option(name = "ns", required = true, description = "XML target namespace URI (e.g., http://example.com/my-schema)")
         String namespace;
+
+        @Option(name = "prefix", required = true, description = "XML target namespace prefix (e.g., myschema)")
+        String prefix;
 
         @Option(name = "package", required = true, description = "Target Java package name for this namespace (e.g., com.example.myschema)")
         String packageName;
