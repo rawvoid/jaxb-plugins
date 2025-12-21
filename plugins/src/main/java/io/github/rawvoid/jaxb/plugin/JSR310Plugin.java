@@ -130,6 +130,9 @@ public class JSR310Plugin extends AbstractPlugin {
         }
         field.type(newType);
 
+        field.annotations().stream()
+            .filter(anno -> anno.getAnnotationClass().fullName().equals(XmlJavaTypeAdapter.class.getName()))
+            .forEach(field::removeAnnotation);
         var adapterClass = generateAdapterClass(beanClass.owner(), targetType,
             propertyInfo.getSchemaType(), null);
         field.annotate(XmlJavaTypeAdapter.class).param("value", adapterClass);
