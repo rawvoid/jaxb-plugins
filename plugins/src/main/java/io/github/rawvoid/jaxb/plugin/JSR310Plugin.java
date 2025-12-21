@@ -253,7 +253,7 @@ public class JSR310Plugin extends AbstractPlugin {
                                       JVar str, JVar target) {
         var cm = adapterClass.owner();
         var ifConf = unmarshal.body()._if(JOp.cand(
-            str.invoke("length").gt(JExpr.lit(5)),
+            str.invoke("length").gt(JExpr.lit(3)),
             str.invoke("startsWith").arg("---")));
 
         var thenBlock = ifConf._then();
