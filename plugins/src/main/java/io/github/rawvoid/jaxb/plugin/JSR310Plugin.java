@@ -65,7 +65,7 @@ public class JSR310Plugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        var typeMapper = jsr310TypeMapper();
+        var typeMapping = xsdBuiltInTypeToJavaMapping();
         outline.getClasses().forEach(classOutline -> {
             var fieldOutlines = classOutline.getDeclaredFields();
             var jDefinedClass = classOutline.implClass;
@@ -80,7 +80,7 @@ public class JSR310Plugin extends AbstractPlugin {
                     targetType = config.targetClass;
                 }
                 if (targetType == null) {
-                    targetType = typeMapper.get(schemaType);
+                    targetType = typeMapping.get(schemaType);
                 }
                 if (targetType == null) continue;
 
@@ -315,21 +315,20 @@ public class JSR310Plugin extends AbstractPlugin {
             ._return(JExpr._null());
     }
 
-
-    public Map<QName, Class<?>> jsr310TypeMapper() {
-        // https://www.w3.org/TR/xmlschema-2/#built-in-datatypes
-        Map<QName, Class<?>> mapper = new HashMap<>();
+    public Map<QName, Class<?>> xsdBuiltInTypeToJavaMapping() {
+        // Reference: https://www.w3.org/TR/xmlschema-2/#built-in-datatypes
+        Map<QName, Class<?>> mapping = new HashMap<>();
         var namespaceURI = XMLConstants.W3C_XML_SCHEMA_NS_URI;
-        mapper.put(new QName(namespaceURI, "duration"), Duration.class); // PnYnMnDTnHnMnS → Duration
-        mapper.put(new QName(namespaceURI, "dateTime"), LocalDateTime.class); // YYYY-MM-DDThh:mm:ss → LocalDateTime (no timezone)
-        mapper.put(new QName(namespaceURI, "time"), LocalTime.class); // hh:mm:ss → LocalTime
-        mapper.put(new QName(namespaceURI, "date"), LocalDate.class); // YYYY-MM-DD → LocalDate
-        mapper.put(new QName(namespaceURI, "gYearMonth"), YearMonth.class); // YYYY-MM → YearMonth
-        mapper.put(new QName(namespaceURI, "gYear"), Year.class); // YYYY → Year
-        mapper.put(new QName(namespaceURI, "gMonthDay"), MonthDay.class); // --MM-DD → MonthDay
-        mapper.put(new QName(namespaceURI, "gDay"), Integer.class); // ---DD → Integer (day only); plugin auto-generates XmlAdapter for "---DD" format
-        mapper.put(new QName(namespaceURI, "gMonth"), Month.class); // --MM → Month (best available match)
-        return mapper;
+        mapping.put(new QName(namespaceURI, "duration"), Duration.class); // PnYnMnDTnHnMnS → Duration
+        mapping.put(new QName(namespaceURI, "dateTime"), LocalDateTime.class); // YYYY-MM-DDThh:mm:ss → LocalDateTime (no timezone)
+        mapping.put(new QName(namespaceURI, "time"), LocalTime.class); // hh:mm:ss → LocalTime
+        mapping.put(new QName(namespaceURI, "date"), LocalDate.class); // YYYY-MM-DD → LocalDate
+        mapping.put(new QName(namespaceURI, "gYearMonth"), YearMonth.class); // YYYY-MM → YearMonth
+        mapping.put(new QName(namespaceURI, "gYear"), Year.class); // YYYY → Year
+        mapping.put(new QName(namespaceURI, "gMonthDay"), MonthDay.class); // --MM-DD → MonthDay
+        mapping.put(new QName(namespaceURI, "gDay"), Integer.class); // ---DD → Integer (day only); plugin auto-generates XmlAdapter for "---DD" format
+        mapping.put(new QName(namespaceURI, "gMonth"), Month.class); // --MM → Month (best available match)
+        return mapping;
     }
 
     public static class Config {
