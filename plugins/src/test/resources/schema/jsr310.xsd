@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2025 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/jsr310"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/jsr310"
+           elementFormDefault="qualified">
+
+    <xs:complexType name="DateTimeTypes">
+        <xs:sequence>
+            <xs:element name="dateTime" type="xs:dateTime" maxOccurs="unbounded"/>
+            <xs:element name="date" type="xs:date"/>
+            <xs:element name="time" type="xs:time"/>
+            <xs:element name="gYearMonth" type="xs:gYearMonth"/>
+            <xs:element name="gYear" type="xs:gYear"/>
+            <xs:element name="gMonthDay" type="xs:gMonthDay"/>
+            <xs:element name="gDay" type="xs:gDay"/>
+            <xs:element name="duration" type="xs:duration"/>
+            <xs:element name="gMonth" type="xs:gMonth"/>
+            <!-- xs:dateTimeStamp is in XSD 1.1, XJC might not support it by default depending on version, but let's try -->
+            <!-- <xs:element name="dateTimeStamp" type="xs:dateTimeStamp"/> -->
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="dateTimeTypes" type="tns:DateTimeTypes"/>
+</xs:schema>
