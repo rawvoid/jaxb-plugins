@@ -121,11 +121,11 @@ public class JSR310Plugin extends AbstractPlugin {
         var fieldName = propertyInfo.getName(false);
         var field = beanClass.fields().get(fieldName);
         if (field == null) return;
-        var oldType = field.type();
+        var fieldType = field.type();
         var newType = beanClass.owner().ref(targetType);
-        if (oldType.isArray()) {
+        if (fieldType.isArray()) {
             newType = newType.array();
-        } else if (propertyInfo.isCollection() && oldType instanceof JClass jClass) {
+        } else if (propertyInfo.isCollection() && fieldType instanceof JClass jClass) {
             newType = jClass.erasure().narrow(newType);
         }
         field.type(newType);
