@@ -48,7 +48,7 @@ public class JSR310Plugin extends AbstractPlugin {
         description = "Package name for auto-generated XmlAdapter classes (default: io.github.rawvoid.jaxb.adapter)")
     String adapterPackage;
 
-    @Option(name = "mapping", description = "Define a type mapping rule (XSD type → Java class + adapter). Can be specified multiple times")
+    @Option(name = "mapping", description = "Define a type mapping rule (XSD type → Java class + adapter)")
     List<TypeMappingConfig> mappings;
 
     @Override
