@@ -38,19 +38,6 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * A JAXB XJC plugin that enables support for Java 8's JSR-310 date/time API (java.time package).
- * This plugin automatically maps XSD time-related types (e.g., xs:dateTime, xs:date, xs:time) to
- * corresponding JSR-310 types during code generation. It also generates or uses custom XmlAdapter
- * instances for serialization/deserialization, with configurable formats via DateTimeFormatter patterns.
- * <p>
- * Key features:
- * <ul>
- *   <li>Custom type mappings for XSD types or specific fields</li>
- *   <li>Automatic XmlAdapter generation based on format patterns</li>
- *   <li>Supports field-specific overrides without external binding files (.xjb)</li>
- * </ul>
- * <p>
- * For detailed configuration, refer to the plugin options below.
  *
  * @author Rawvoid
  */
