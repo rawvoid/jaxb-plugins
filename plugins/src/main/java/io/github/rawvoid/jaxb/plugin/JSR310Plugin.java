@@ -57,33 +57,11 @@ import java.util.regex.Pattern;
 @Option(name = "Xjsr310", description = "Enable JSR-310 date/time API support in generated JAXB classes")
 public class JSR310Plugin extends AbstractPlugin {
 
-    /**
-     * Default format patterns for generating XmlAdapters.
-     * <p>
-     * These patterns are used to create {@link jakarta.xml.bind.annotation.adapters.XmlAdapter}
-     * implementations for marshalling and unmarshalling specific date/time types. The patterns
-     * are applied automatically when no specific format is provided via {@code field-config}.
-     * <p>
-     * Users can customize these patterns globally via {@code type-config} or per-field via
-     * {@code field-config}.
-     */
     @Option(name = "adapter-package", defaultValue = "io.github.rawvoid.jaxb.adapter", description = "Package for generated XmlAdapters")
     String adapterPackage;
 
-    /**
-     * A list of global type configurations for mapping XSD time types to JSR-310 classes.
-     * Use this to override default mappings for specific XSD types across the entire schema.
-     */
-    @Option(name = "type-config", description = "Global type mappings from XSD types to JSR-310 classes")
-    List<TypeConfig> typeConfigs;
-
-    /**
-     * A list of field-specific configurations for overriding type mappings and adapters on
-     * individual generated fields (e.g., based on field name patterns). This allows fine-grained
-     * control without affecting global mappings.
-     */
-    @Option(name = "field-config", description = "Field-specific overrides for types, adapters, and formats")
-    List<FieldConfig> fieldConfigs;
+    @Option(name = "config", description = "Global configuration for type mappings and adapters")
+    List<Config> configs;
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
@@ -95,12 +73,34 @@ public class JSR310Plugin extends AbstractPlugin {
             for (var fieldOutline : fieldOutlines) {
                 var propertyInfo = fieldOutline.getPropertyInfo();
                 var schemaType = getSchemaType(propertyInfo);
-                var targetType = typeMapper.get(schemaType);
+
+                Class<?> targetType = null;
+                var config = findConfig(className, propertyInfo, schemaType);
+                if (config != null) {
+                    targetType = config.targetClass;
+                }
+                if (targetType == null) {
+                    targetType = typeMapper.get(schemaType);
+                }
                 if (targetType == null) continue;
-                applyMapping(jDefinedClass, propertyInfo, targetType);
+
+                applyMapping(jDefinedClass, propertyInfo, targetType, config);
             }
         });
         return true;
+    }
+
+    public Config findConfig(String beanClassName, CPropertyInfo propertyInfo, QName schemaType) {
+        var fieldFullName = beanClassName + "." + propertyInfo.getName(false);
+        return configs.stream()
+            .filter(config -> {
+                var type = config.xmlDatatype;
+                var patterns = config.regexPatterns;
+                return (patterns == null || patterns.stream().anyMatch(p -> p.matcher(fieldFullName).matches()))
+                    && (type == null || type.isBlank() || (schemaType != null && type.equals(schemaType.getLocalPart())));
+            })
+            .findFirst()
+            .orElse(null);
     }
 
     public QName getSchemaType(CPropertyInfo propertyInfo) {
@@ -116,7 +116,7 @@ public class JSR310Plugin extends AbstractPlugin {
         };
     }
 
-    public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType) {
+    public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType, Config config) {
         // Handle fields
         var fieldName = propertyInfo.getName(false);
         var field = beanClass.fields().get(fieldName);
@@ -133,9 +133,13 @@ public class JSR310Plugin extends AbstractPlugin {
         field.annotations().stream()
             .filter(anno -> anno.getAnnotationClass().fullName().equals(XmlJavaTypeAdapter.class.getName()))
             .forEach(field::removeAnnotation);
-        var adapterClass = generateAdapterClass(beanClass.owner(), targetType,
-            propertyInfo.getSchemaType(), null);
-        field.annotate(XmlJavaTypeAdapter.class).param("value", adapterClass);
+        if (config != null && config.xmlAdapterClass != null) {
+            field.annotate(XmlJavaTypeAdapter.class).param("value", config.xmlAdapterClass);
+        } else {
+            var adapterClass = generateAdapterClass(beanClass.owner(), targetType,
+                propertyInfo.getSchemaType(), config == null ? null : config.pattern);
+            field.annotate(XmlJavaTypeAdapter.class).param("value", adapterClass);
+        }
 
         // Handle getters and setters methods
         var publicName = propertyInfo.getName(true);
@@ -328,68 +332,22 @@ public class JSR310Plugin extends AbstractPlugin {
         return mapper;
     }
 
+    public static class Config {
 
-    /**
-     * Configuration for mapping a specific XSD type to a JSR-310 class globally.
-     * This is used in conjunction with the "type-config" option to define overrides
-     * for schema-wide time type handling.
-     */
-    public static class TypeConfig {
+        @Option(name = "xml-datatype", description = "XML datatype to map (e.g., dateTime, date)")
+        String xmlDatatype;
 
-        /**
-         * The XSD type name to match (e.g., "xs:dateTime", "xs:date"). Must be a fully qualified
-         * or simple type name from the schema namespace.
-         */
-        @Option(name = "xsd-type", description = "XSD type to map (e.g., xs:dateTime, xs:date)")
-        String xsdType;
+        @Option(name = "target-class", description = "JSR-310 class for matched fields (e.g., java.time.LocalDate)")
+        Class<?> targetClass;
 
-        /**
-         * The target JSR-310 class to use for the mapping (e.g., java.time.LocalDateTime.class).
-         * Must be a valid class from the java.time package.
-         */
-        @Option(name = "jsr310-class", description = "Target JSR-310 class (e.g., java.time.LocalDateTime)")
-        Class<?> jsr310Class;
-    }
-
-    /**
-     * Configuration for overriding mappings and adapters on specific generated fields.
-     * Fields are matched using regex patterns on their names. This supports per-field
-     * customization of types, formats, and adapters.
-     */
-    public static class FieldConfig {
-
-        /**
-         * An optional custom XmlAdapter class to apply to matched fields. If provided,
-         * the plugin will annotate the field with @XmlJavaTypeAdapter using this class
-         * instead of generating a new one. Must extend XmlAdapter&lt;T, String&gt; where
-         * T is a JSR-310 type.
-         */
-        @Option(name = "xml-adapter",
-            description = "Custom XmlAdapter class for serialization/deserialization")
-        Class<? extends XmlAdapter<?, String>> xmlAdapterClass;
-
-        /**
-         * The JSR-310 class to use for matched fields (e.g., java.time.LocalDate).
-         * Overrides both global type mappings and defaults.
-         */
-        @Option(name = "jsr310-class", description = "JSR-310 class for matched fields (e.g., java.time.LocalDate)")
-        Class<?> jsr310Class;
-
-        /**
-         * The DateTimeFormatter pattern for generating an XmlAdapter (e.g., "yyyy-MM-dd HH:mm:ss").
-         * If specified and no xml-adapter-class is provided, the plugin auto-generates an adapter
-         * using this pattern for marshal/unmarshal operations.
-         */
-        @Option(name = "pattern", placeholder = "pattern",
-            description = "DateTimeFormatter pattern for auto-generated XmlAdapter (e.g., yyyy-MM-dd)")
+        @Option(name = "pattern", placeholder = "pattern", description = "DateTimeFormatter pattern for auto-generated XmlAdapter (e.g., yyyy-MM-dd)")
         String pattern;
 
-        /**
-         * A list of regex patterns to match against generated field names (e.g., ".*Time$", "^createDate$").
-         * Fields matching any pattern will have this config applied. This is required for field-specific overrides.
-         */
-        @Option(name = "regex", required = true,
-            description = "Regex patterns to match field names")
-        List<Pattern> fieldPatterns;
+        @Option(name = "xml-adapter", description = "Custom XmlAdapter class for serialization/deserialization")
+        Class<? extends XmlAdapter<?, String>> xmlAdapterClass;
+
+        @Option(name = "regex", description = "Regex patterns to match field full names")
+        List<Pattern> regexPatterns;
+
     }
 }
