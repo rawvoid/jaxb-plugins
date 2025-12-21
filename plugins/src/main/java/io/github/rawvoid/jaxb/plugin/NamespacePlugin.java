@@ -151,7 +151,7 @@ public class NamespacePlugin extends AbstractPlugin {
         @Option(name = "ns", required = true, description = "XML target namespace URI (e.g., http://example.com/my-schema)")
         String namespace;
 
-        @Option(name = "prefix", required = true, description = "XML target namespace prefix (e.g., myschema)")
+        @Option(name = "prefix", description = "XML target namespace prefix (e.g., myschema)")
         String prefix;
 
         @Option(name = "package", required = true, description = "Target Java package name for this namespace (e.g., com.example.myschema)")
