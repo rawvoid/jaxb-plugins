@@ -78,6 +78,10 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             var field = clazz.getDeclaredField("date");
             var annotation = field.getAnnotation(jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter.class);
             assertThat(annotation).isNotNull();
+
+            var adapterClass = annotation.value();
+            var adapterSource = getJavaSource(adapterClass);
+            assertThat(adapterSource.contains("\"yyyy/MM/dd\"")).isTrue();
         });
     }
 }
