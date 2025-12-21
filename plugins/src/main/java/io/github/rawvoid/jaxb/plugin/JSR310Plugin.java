@@ -57,15 +57,16 @@ import java.util.regex.Pattern;
 @Option(name = "Xjsr310", description = "Enable JSR-310 date/time API support in generated JAXB classes")
 public class JSR310Plugin extends AbstractPlugin {
 
-    @Option(name = "adapter-package", defaultValue = "io.github.rawvoid.jaxb.adapter", description = "Package for generated XmlAdapters")
+    @Option(name = "adapter-package", defaultValue = "io.github.rawvoid.jaxb.adapter",
+        description = "Package name for auto-generated XmlAdapter classes (default: io.github.rawvoid.jaxb.adapter)")
     String adapterPackage;
 
-    @Option(name = "config", description = "Global configuration for type mappings and adapters")
-    List<Config> configs;
+    @Option(name = "mapping", description = "Define a type mapping rule (XSD type → Java class + adapter). Can be specified multiple times")
+    List<TypeMappingConfig> mappings;
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        var typeMapping = xsdBuiltInTypeToJavaMapping();
+        var defaultXsdTypeMapping = xsdBuiltInTypeToJavaMapping();
         outline.getClasses().forEach(classOutline -> {
             var fieldOutlines = classOutline.getDeclaredFields();
             var jDefinedClass = classOutline.implClass;
@@ -75,26 +76,26 @@ public class JSR310Plugin extends AbstractPlugin {
                 var schemaType = getSchemaType(propertyInfo);
 
                 Class<?> targetType = null;
-                var config = findConfig(className, propertyInfo, schemaType);
-                if (config != null) {
-                    targetType = config.targetClass;
+                var mapping = findTypeMappingConfig(className, propertyInfo, schemaType);
+                if (mapping != null) {
+                    targetType = mapping.targetClass;
                 }
                 if (targetType == null) {
-                    targetType = typeMapping.get(schemaType);
+                    targetType = defaultXsdTypeMapping.get(schemaType);
                 }
                 if (targetType == null) continue;
 
-                applyMapping(jDefinedClass, propertyInfo, targetType, config);
+                applyMapping(jDefinedClass, propertyInfo, targetType, mapping);
             }
         });
         return true;
     }
 
-    public Config findConfig(String beanClassName, CPropertyInfo propertyInfo, QName schemaType) {
+    public TypeMappingConfig findTypeMappingConfig(String beanClassName, CPropertyInfo propertyInfo, QName schemaType) {
         var fieldFullName = beanClassName + "." + propertyInfo.getName(false);
-        return configs.stream()
+        return mappings.stream()
             .filter(config -> {
-                var type = config.xmlDatatype;
+                var type = config.xsdType;
                 var patterns = config.regexPatterns;
                 return (patterns == null || patterns.stream().anyMatch(p -> p.matcher(fieldFullName).matches()))
                     && (type == null || type.isBlank() || (schemaType != null && type.equals(schemaType.getLocalPart())));
@@ -116,7 +117,7 @@ public class JSR310Plugin extends AbstractPlugin {
         };
     }
 
-    public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType, Config config) {
+    public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType, TypeMappingConfig mapping) {
         // Handle fields
         var fieldName = propertyInfo.getName(false);
         var field = beanClass.fields().get(fieldName);
@@ -133,11 +134,11 @@ public class JSR310Plugin extends AbstractPlugin {
         field.annotations().stream()
             .filter(anno -> anno.getAnnotationClass().fullName().equals(XmlJavaTypeAdapter.class.getName()))
             .forEach(field::removeAnnotation);
-        if (config != null && config.xmlAdapterClass != null) {
-            field.annotate(XmlJavaTypeAdapter.class).param("value", config.xmlAdapterClass);
+        if (mapping != null && mapping.adapterClass != null) {
+            field.annotate(XmlJavaTypeAdapter.class).param("value", mapping.adapterClass);
         } else {
             var adapterClass = generateAdapterClass(beanClass.owner(), targetType,
-                propertyInfo.getSchemaType(), config == null ? null : config.pattern);
+                propertyInfo.getSchemaType(), mapping == null ? null : mapping.pattern);
             field.annotate(XmlJavaTypeAdapter.class).param("value", adapterClass);
         }
 
@@ -331,21 +332,21 @@ public class JSR310Plugin extends AbstractPlugin {
         return mapping;
     }
 
-    public static class Config {
+    public static class TypeMappingConfig {
 
-        @Option(name = "xml-datatype", description = "XML datatype to map (e.g., dateTime, date)")
-        String xmlDatatype;
+        @Option(name = "xsd-type", description = "XSD built-in datatype name to map (e.g., dateTime, date, gDay)")
+        String xsdType;
 
-        @Option(name = "target-class", description = "JSR-310 class for matched fields (e.g., java.time.LocalDate)")
+        @Option(name = "target-class", description = "Target Java class to use (typically from java.time, e.g., java.time.LocalDateTime)")
         Class<?> targetClass;
 
         @Option(name = "pattern", placeholder = "pattern", description = "DateTimeFormatter pattern for auto-generated XmlAdapter (e.g., yyyy-MM-dd)")
         String pattern;
 
-        @Option(name = "xml-adapter", description = "Custom XmlAdapter class for serialization/deserialization")
-        Class<? extends XmlAdapter<?, String>> xmlAdapterClass;
+        @Option(name = "adapter", description = "Custom XmlAdapter class to use instead of auto-generated one")
+        Class<? extends XmlAdapter<?, String>> adapterClass;
 
-        @Option(name = "regex", description = "Regex patterns to match field full names")
+        @Option(name = "regex", description = "Regular expression to match field names (fully qualified). Can be specified multiple times.")
         List<Pattern> regexPatterns;
 
     }
