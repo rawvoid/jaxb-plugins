@@ -160,12 +160,12 @@ public class JSR310Plugin extends AbstractPlugin {
 
             var unmarshal = adapterClass.method(JMod.PUBLIC, targetClass, "unmarshal");
             var str = unmarshal.param(String.class, "v");
-            earlyReturnIfNull(unmarshal, str);
+            earlyReturnIfNull(unmarshal, JOp.cor(str.eq(JExpr._null()), str.invoke("isBlank")));
             unmarshal.annotate(Override.class);
 
             var marshal = adapterClass.method(JMod.PUBLIC, String.class, "marshal");
             var target = marshal.param(targetClass, "v");
-            earlyReturnIfNull(marshal, target);
+            earlyReturnIfNull(marshal, target.eq(JExpr._null()));
             marshal.annotate(Override.class);
 
             if (Duration.class.equals(targetClass) || Instant.class.equals(targetClass) || Period.class.equals(targetClass)) {
@@ -290,9 +290,9 @@ public class JSR310Plugin extends AbstractPlugin {
         marshal.body()._return(target.invoke("getValue"));
     }
 
-    private void earlyReturnIfNull(JMethod method, JVar var) {
+    private void earlyReturnIfNull(JMethod method, JExpression expr) {
         method.body()
-            ._if(var.eq(JExpr._null()))
+            ._if(expr)
             ._then()
             ._return(JExpr._null());
     }
