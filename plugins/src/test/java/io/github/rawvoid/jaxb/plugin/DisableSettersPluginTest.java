@@ -34,10 +34,7 @@ class DisableSettersPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testDisablePlugin() throws Exception {
         var args = List.<String>of();
-        testExecute(args, clazz -> {
-            if (!clazz.getSimpleName().equals("Person")) {
-                return;
-            }
+        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
             assertThat(hasSetter(clazz)).isTrue();
         });
     }
@@ -45,10 +42,7 @@ class DisableSettersPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testPlugin() throws Exception {
         var optionCmd = option.prefix() + option.name();
-        testExecute(List.of(optionCmd), clazz -> {
-            if (!clazz.getSimpleName().equals("Person")) {
-                return;
-            }
+        testExecute(List.of(optionCmd), clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
             assertThat(hasSetter(clazz)).isFalse();
         });
     }

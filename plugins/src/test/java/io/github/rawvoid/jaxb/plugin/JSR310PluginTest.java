@@ -32,8 +32,7 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xjsr310"
         );
-        testExecute(args, clazz -> {
-            if (!clazz.getSimpleName().equals("DateTimeTypes")) return;
+        testExecute(args, clazz -> clazz.getSimpleName().equals("DateTimeTypes"), (source, clazz) -> {
             var dateTimeField = clazz.getDeclaredField("dateTime");
             assertThat(dateTimeField.getType()).isEqualTo(List.class);
             assertThat(((ParameterizedType) dateTimeField.getGenericType()).getActualTypeArguments()[0]).isEqualTo(LocalDateTime.class);
@@ -59,9 +58,7 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             "-regex=.*time",
             "-target-class=java.time.ZonedDateTime"
         );
-        testExecute(args, clazz -> {
-            if (!clazz.getSimpleName().equals("DateTimeTypes")) return;
-
+        testExecute(args, clazz -> clazz.getSimpleName().equals("DateTimeTypes"), (source, clazz) -> {
             // Global override: xs:date -> OffsetDateTime
             assertThat(clazz.getDeclaredField("date").getType()).isEqualTo(java.time.OffsetDateTime.class);
             // Default: xs:time -> ZonedDateTime
@@ -77,9 +74,7 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             "-regex=.*date",
             "-pattern=yyyy/MM/dd"
         );
-        testExecute(args, clazz -> {
-            if (!clazz.getSimpleName().equals("DateTimeTypes")) return;
-
+        testExecute(args, clazz -> clazz.getSimpleName().equals("DateTimeTypes"), (source, clazz) -> {
             var field = clazz.getDeclaredField("date");
             var annotation = field.getAnnotation(jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter.class);
             assertThat(annotation).isNotNull();

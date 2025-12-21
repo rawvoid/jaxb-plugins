@@ -39,6 +39,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -66,15 +67,19 @@ public abstract class AbstractXJCMojoTestCase {
     }
 
     @SuppressWarnings("UnusedReturnValue")
-    public List<Class<?>> testExecute(List<String> args, Consumer<Class<?>> classConsumer) throws Exception {
+    public List<Class<?>> testExecute(List<String> args, Predicate<Class<?>> classFilter, Consumer consumer) throws Exception {
         var mojo = createMojo();
         configureMojo(mojo, args);
         mojo.execute();
         compileGeneratedJavaFiles();
         var classes = loadGeneratedClasses();
-        if (classConsumer != null) {
+        if (consumer != null) {
             for (var clazz : classes) {
-                classConsumer.accept(clazz);
+                if (classFilter != null && !classFilter.test(clazz)) continue;
+                var sourceFile = generatedDirectory.resolve(clazz.getName()
+                    .replace('.', '/') + ".java");
+                var source = String.join("\n", Files.readAllLines(sourceFile));
+                consumer.accept(source, clazz);
             }
         }
         return classes;
@@ -228,8 +233,8 @@ public abstract class AbstractXJCMojoTestCase {
         });
     }
 
-    public interface Consumer<T> {
-        void accept(T t) throws Exception;
+    public interface Consumer {
+        void accept(String source, Class<?> clazz) throws Exception;
     }
 
 }
