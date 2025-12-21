@@ -342,10 +342,14 @@ public abstract class AbstractPlugin extends Plugin {
             var defaultValueText = option.defaultValue();
 
             if (Collection.class.isAssignableFrom(fieldType)) {
-                if (value == null || ((Collection<?>) value).isEmpty()) {
+                @SuppressWarnings("unchecked")
+                var collection = (Collection<Object>) value;
+                if (collection == null) {
+                    collection = newCollectionInstance(fieldType);
+                    setFieldValue(object, optionField, collection);
+                }
+                if (collection.isEmpty()) {
                     if (!defaultValueText.isEmpty()) {
-                        var collection = newCollectionInstance(fieldType);
-                        setFieldValue(object, optionField, collection);
                         var elementType = getCollectionElementType(optionField);
                         var parser = getParser(option, elementType);
                         if (parser == null) {
