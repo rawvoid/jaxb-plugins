@@ -76,13 +76,17 @@ public abstract class AbstractXJCMojoTestCase {
         if (consumer != null) {
             for (var clazz : classes) {
                 if (classFilter != null && !classFilter.test(clazz)) continue;
-                var sourceFile = generatedDirectory.resolve(clazz.getName()
-                    .replace('.', '/') + ".java");
-                var source = String.join("\n", Files.readAllLines(sourceFile));
+                var source = getJavaSource(clazz);
                 consumer.accept(source, clazz);
             }
         }
         return classes;
+    }
+
+    public String getJavaSource(Class<?> clazz) throws IOException {
+        var sourceFile = generatedDirectory.resolve(clazz.getName()
+            .replace('.', '/') + ".java");
+        return String.join("\n", Files.readAllLines(sourceFile));
     }
 
 
