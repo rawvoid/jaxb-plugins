@@ -23,6 +23,7 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import jakarta.xml.bind.annotation.XmlNs;
 import jakarta.xml.bind.annotation.XmlSchema;
+import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -49,9 +50,27 @@ public class NamespacePlugin extends AbstractPlugin {
     public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
         var x = super.parseArgument(opt, args, i);
         if (x > 0) {
-            injectBindings(opt);
+            // 1. inject bindings
+            // injectBindings(opt);
+
+            // 2. use NameConverter
+            var nameConverter = createNameConverter();
+            opt.setNameConverter(nameConverter, this);
         }
         return x;
+    }
+
+    public NameConverter createNameConverter() throws BadCommandLineException {
+        var namespaceToPackage = mappings.stream()
+            .filter(m -> m.namespace != null && m.packageName != null
+                && !m.namespace.isBlank() && !m.packageName.isBlank())
+            .collect(Collectors.toMap(m -> m.namespace, m -> m.packageName));
+        return new NameConverter.Standard() {
+            @Override
+            public String toPackageName(String namespaceUri) {
+                return namespaceToPackage.getOrDefault(namespaceUri, super.toPackageName(namespaceUri));
+            }
+        };
     }
 
     public void injectBindings(Options options) {
