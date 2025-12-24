@@ -29,7 +29,6 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.List;
@@ -47,17 +46,13 @@ public class NamespacePlugin extends AbstractPlugin {
     List<NamespaceMappingConfig> mappings;
 
     @Override
-    public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
-        var x = super.parseArgument(opt, args, i);
-        if (x > 0) {
-            // 1. inject bindings
-            // injectBindings(opt);
+    protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+        // 1. inject bindings
+        // injectBindings(opt);
 
-            // 2. use NameConverter
-            var nameConverter = createNameConverter();
-            opt.setNameConverter(nameConverter, this);
-        }
-        return x;
+        // 2. use NameConverter
+        var nameConverter = createNameConverter();
+        opt.setNameConverter(nameConverter, this);
     }
 
     public NameConverter createNameConverter() throws BadCommandLineException {
