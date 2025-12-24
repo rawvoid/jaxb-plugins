@@ -210,15 +210,39 @@ public abstract class AbstractPlugin extends Plugin {
         try {
             var arg = args[i].trim();
             if (arg.equals(fullOptionName)) {
-                var count = parseArgument(this, args, i + 1);
+                var count = parseArgument(this, args, i + 1) + 1;
                 applyDefaultValueAndValidate(this);
-                return count + 1;
+                postParseArgument(opt, count);
+                return count;
             }
         } catch (Exception e) {
             throw new BadCommandLineException("Failed to configure plugin '%s' due to: %s"
                 .formatted(fullOptionName, e.getMessage()), e);
         }
         return 0;
+    }
+
+    /**
+     * Callback hook invoked after the plugin's command line arguments have been fully parsed and validated.
+     *
+     * <p>This method is called by the framework after:
+     * <ul>
+     *   <li>All command line arguments matching {@link Option} fields have been parsed and injected.</li>
+     *   <li>Default values have been applied to unconfigured fields.</li>
+     *   <li>Required field constraints have been checked.</li>
+     * </ul>
+     * </p>
+     *
+     * <p>This hook is ideal for performing cross-field validations (e.g., checking if two options are mutually
+     * exclusive) or initializing internal state that depends on multiple parsed values.</p>
+     *
+     * @param opt          the XJC global options object, providing access to the overall compilation context.
+     * @param consumedArgs the total number of arguments consumed by this plugin (including the main plugin activation option).
+     * @throws Exception if any post-parsing logic or supplementary validation fails. The thrown exception
+     *                   will be caught and wrapped into a {@code BadCommandLineException} by the framework.
+     */
+    protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+        // No-op by default
     }
 
     private int parseArgument(Object object, String[] args, int i) throws Exception {
