@@ -48,7 +48,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=@jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter(jakarta.xml.bind.annotation.adapters.CollapsedStringAdapter.class)",
             "-regex=.*name"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             var generatedAnnotation = clazz.getDeclaredAnnotation(XmlSeeAlso.class);
             assertThat(generatedAnnotation).isNotNull();
             assertThat(generatedAnnotation.value().length).isEqualTo(2);
@@ -73,7 +73,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=@jakarta.xml.bind.annotation.XmlAccessorType(jakarta.xml.bind.annotation.XmlAccessType.NONE)",
             "-regex=.*Person"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             var generatedAnnotation = clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlAccessorType.class);
             assertThat(generatedAnnotation).isNotNull();
             assertThat(generatedAnnotation.value()).isEqualTo(jakarta.xml.bind.annotation.XmlAccessType.NONE);
@@ -89,7 +89,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(java.lang.Object.class)",
             "-regex=.*Person"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
             assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSeeAlso.class)).isNotNull();
         });
@@ -104,7 +104,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-regex=.*Person",
             "-regex=.*Order"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person") || clazz.getSimpleName().equals("Order"), (source, clazz) -> {
+        testExecute(args, ".*(Person|Order)", (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
         });
     }
@@ -120,7 +120,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(java.lang.Object.class)",
             "-regex=.*Person"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
             assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSeeAlso.class)).isNotNull();
         });
@@ -135,7 +135,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"second\")",
             "-regex=.*Person"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             var annotations = clazz.getDeclaredAnnotationsByType(jakarta.xml.bind.annotation.XmlRootElement.class);
             assertThat(annotations).hasSize(1);
             assertThat(annotations[0].name()).isEqualTo("second");
@@ -149,7 +149,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class)).isNotNull();
         });
     }
@@ -163,7 +163,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-regex=.*name",
             "-regex=.*age"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             assertThat(clazz.getDeclaredField("name").getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNotNull();
             assertThat(clazz.getDeclaredField("age").getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNotNull();
             assertThat(clazz.getDeclaredField("active").getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNull();
@@ -178,7 +178,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=jakarta.xml.bind.annotation.XmlAccessorType",
             "-regex=.*Person"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             var generatedAnnotation = clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlAccessorType.class);
             assertThat(generatedAnnotation).isNull();
         });
@@ -195,7 +195,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=jakarta.xml.bind.annotation.XmlSchemaType",
             "-regex=.*name"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             var nameField = clazz.getDeclaredField("name");
             assertThat(nameField.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlSchemaType.class)).isNull();
         });
@@ -209,7 +209,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=jakarta.xml.bind.annotation.XmlAccessorType",
             "-regex=.*Order"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             if (clazz.getSimpleName().equals("Person")) {
                 assertThat(clazz.getDeclaredAnnotation(jakarta.xml.bind.annotation.XmlAccessorType.class)).isNotNull();
             } else if (clazz.getSimpleName().equals("Order")) {
@@ -229,7 +229,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-anno=java.lang.Deprecated",
             "-regex=.*getName"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(args, ".*Person", (source, clazz) -> {
             var getNameMethod = clazz.getDeclaredMethod("getName");
             assertThat(getNameMethod.getDeclaredAnnotation(Deprecated.class)).isNull();
         });

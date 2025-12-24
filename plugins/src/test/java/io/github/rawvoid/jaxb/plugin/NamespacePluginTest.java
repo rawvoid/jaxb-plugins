@@ -42,7 +42,7 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
             "-ns=https://www.github.com/rawvoid/xjc-plugins/jsr310",
             "-package=pkg2"
         );
-        testExecute(args, c -> c.getSimpleName().equals("package-info"), (source, clazz) -> {
+        testExecute(args, ".*package-info", (source, clazz) -> {
             var annotation = clazz.getAnnotation(XmlSchema.class);
             var namespace = "https://www.github.com/rawvoid/xjc-plugins";
             if (namespace.equals(annotation.namespace())) {

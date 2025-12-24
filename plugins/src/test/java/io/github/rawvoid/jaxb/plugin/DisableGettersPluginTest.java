@@ -33,7 +33,7 @@ class DisableGettersPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     public void testDisablePlugin() throws Exception {
-        testExecute(List.of(), clazz -> clazz.getSimpleName().equals("Person"), ((source, clazz) -> {
+        testExecute(List.of(), ".*Person", ((source, clazz) -> {
             assertThat(hasGetter(clazz)).isTrue();
         }));
     }
@@ -41,7 +41,7 @@ class DisableGettersPluginTest extends AbstractXJCMojoTestCase {
     @Test
     public void testPlugin() throws Exception {
         var optionCmd = option.prefix() + option.name();
-        testExecute(List.of(optionCmd), clazz -> clazz.getSimpleName().equals("Person"), (source, clazz) -> {
+        testExecute(List.of(optionCmd), ".*Person", (source, clazz) -> {
             assertThat(hasGetter(clazz)).isFalse();
         });
     }

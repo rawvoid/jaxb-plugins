@@ -20,6 +20,7 @@ import com.sun.tools.xjc.Options;
 import org.apache.maven.execution.DefaultMavenExecutionRequest;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.project.MavenProject;
+import org.intellij.lang.annotations.Language;
 import org.junit.jupiter.api.BeforeEach;
 import org.jvnet.jaxb.maven.AbstractXJCMojo;
 import org.jvnet.jaxb.maven.XJCMojo;
@@ -39,7 +40,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -67,15 +68,16 @@ public abstract class AbstractXJCMojoTestCase {
     }
 
     @SuppressWarnings("UnusedReturnValue")
-    public List<Class<?>> testExecute(List<String> args, Predicate<Class<?>> classFilter, Consumer consumer) throws Exception {
+    public List<Class<?>> testExecute(List<String> args, @Language("RegExp") String regex, Consumer consumer) throws Exception {
         var mojo = createMojo();
         configureMojo(mojo, args);
         mojo.execute();
         compileGeneratedJavaFiles();
         var classes = loadGeneratedClasses();
         if (consumer != null) {
+            var pattern = Pattern.compile(regex);
             for (var clazz : classes) {
-                if (classFilter != null && !classFilter.test(clazz)) continue;
+                if (!pattern.matcher(clazz.getName()).matches()) continue;
                 var source = getJavaSource(clazz);
                 consumer.accept(source, clazz);
             }

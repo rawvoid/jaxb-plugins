@@ -17,6 +17,7 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.ParameterizedType;
@@ -32,7 +33,7 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xjsr310"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("DateTimeTypes"), (source, clazz) -> {
+        testExecute(args, ".*DateTimeTypes", (source, clazz) -> {
             var dateTimeField = clazz.getDeclaredField("dateTime");
             assertThat(dateTimeField.getType()).isEqualTo(List.class);
             assertThat(((ParameterizedType) dateTimeField.getGenericType()).getActualTypeArguments()[0]).isEqualTo(LocalDateTime.class);
@@ -58,11 +59,11 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             "-regex=.*time",
             "-target-class=java.time.ZonedDateTime"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("DateTimeTypes"), (source, clazz) -> {
+        testExecute(args, ".*DateTimeTypes", (source, clazz) -> {
             // Global override: xs:date -> OffsetDateTime
-            assertThat(clazz.getDeclaredField("date").getType()).isEqualTo(java.time.OffsetDateTime.class);
+            assertThat(clazz.getDeclaredField("date").getType()).isEqualTo(OffsetDateTime.class);
             // Default: xs:time -> ZonedDateTime
-            assertThat(clazz.getDeclaredField("time").getType()).isEqualTo(java.time.ZonedDateTime.class);
+            assertThat(clazz.getDeclaredField("time").getType()).isEqualTo(ZonedDateTime.class);
         });
     }
 
@@ -74,9 +75,9 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             "-regex=.*date",
             "-pattern=yyyy/MM/dd"
         );
-        testExecute(args, clazz -> clazz.getSimpleName().equals("DateTimeTypes"), (source, clazz) -> {
+        testExecute(args, ".*DateTimeTypes", (source, clazz) -> {
             var field = clazz.getDeclaredField("date");
-            var annotation = field.getAnnotation(jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter.class);
+            var annotation = field.getAnnotation(XmlJavaTypeAdapter.class);
             assertThat(annotation).isNotNull();
 
             var adapterClass = annotation.value();
