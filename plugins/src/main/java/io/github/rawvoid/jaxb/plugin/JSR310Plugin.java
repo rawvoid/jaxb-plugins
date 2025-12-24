@@ -84,7 +84,7 @@ public class JSR310Plugin extends AbstractPlugin {
             .filter(config -> {
                 var type = config.xsdType;
                 var patterns = config.regexPatterns;
-                return (patterns == null || patterns.stream().anyMatch(p -> p.matcher(fieldFullName).matches()))
+                return (patterns == null || patterns.isEmpty() || patterns.stream().anyMatch(p -> p.matcher(fieldFullName).matches()))
                     && (type == null || type.isBlank() || (schemaType != null && type.equals(schemaType.getLocalPart())));
             })
             .findFirst()
