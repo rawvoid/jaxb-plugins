@@ -71,7 +71,7 @@ public class NameConvertPluginTest extends AbstractXJCMojoTestCase {
             "-token=https://www.github.com/rawvoid/xjc-plugins",
             "-name=io.github.rawvoid.custom"
         );
-        testExecute(args, "io.github.rawvoid.custom.Person", (source, clazz) -> {
+        testExecute(args, "io\\.github\\.rawvoid\\.custom\\.Person", (source, clazz) -> {
             assertThat(clazz.getPackageName()).isEqualTo("io.github.rawvoid.custom");
         });
     }
