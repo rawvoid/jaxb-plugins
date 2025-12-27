@@ -21,12 +21,14 @@ import com.sun.tools.xjc.outline.Outline;
 import org.xml.sax.ErrorHandler;
 
 /**
- * Plugin to disable generation of setter methods for fields.
+ * JAXB plugin to remove generated setter methods for fields.
+ * This plugin provides the {@code -Xremove-setter} option to exclude
+ * setter methods from the generated JAXB classes.
  *
  * @author Rawvoid
  */
-@Option(name = "Xdisable-setters", description = "Disable generation of setter methods for fields")
-public class DisableSettersPlugin extends AbstractPlugin {
+@Option(name = "Xremove-setter", description = "Remove generated setter methods for fields")
+public class RemoveSetterPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {

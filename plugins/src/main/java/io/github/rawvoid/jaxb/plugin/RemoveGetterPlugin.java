@@ -21,12 +21,14 @@ import com.sun.tools.xjc.outline.Outline;
 import org.xml.sax.ErrorHandler;
 
 /**
- * Plugin to disable generation of getter methods for fields.
+ * JAXB plugin to remove generated getter methods for fields.
+ * This plugin provides the {@code -Xremove-getter} option to exclude
+ * getter methods from the generated JAXB classes.
  *
  * @author Rawvoid
  */
-@Option(name = "Xdisable-getters", description = "Disable generation of getter methods for fields")
-public class DisableGettersPlugin extends AbstractPlugin {
+@Option(name = "Xremove-getter", description = "Remove generated getter methods for fields")
+public class RemoveGetterPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {

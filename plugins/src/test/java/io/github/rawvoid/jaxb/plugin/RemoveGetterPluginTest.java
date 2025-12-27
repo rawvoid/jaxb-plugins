@@ -27,9 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * @author Rawvoid
  */
-class DisableGettersPluginTest extends AbstractXJCMojoTestCase {
+class RemoveGetterPluginTest extends AbstractXJCMojoTestCase {
 
-    Option option = DisableGettersPlugin.class.getAnnotation(Option.class);
+    Option option = RemoveGetterPlugin.class.getAnnotation(Option.class);
 
     @Test
     public void testDisablePlugin() throws Exception {
