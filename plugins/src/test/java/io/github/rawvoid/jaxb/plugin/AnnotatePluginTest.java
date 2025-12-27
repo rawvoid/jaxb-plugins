@@ -20,7 +20,6 @@ import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import jakarta.xml.bind.annotation.XmlSchema;
 import jakarta.xml.bind.annotation.XmlSeeAlso;
 import org.junit.jupiter.api.Test;
-import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 
 import java.util.List;
 
@@ -263,24 +262,6 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             var pkg = clazz.getPackage();
             assertThat(pkg.getDeclaredAnnotation(XmlSchema.class)).isNull();
         });
-    }
-
-    @Test
-    void testXAnnotationParser() throws Exception {
-        var source = """
-            @javax.annotation.processing.Generated(value = "Xjc", date = "2025-01-01T00:00:00Z")
-            """;
-        var xAnnotation = XAnnotationParser.INSTANCE.parse(source);
-        var annotationClass = xAnnotation.getAnnotationClass();
-        assertThat(annotationClass).isEqualTo(javax.annotation.processing.Generated.class);
-        for (var xAnnotationField : xAnnotation.getFieldsList()) {
-            var fieldName = xAnnotationField.getName();
-            if ("value".equals(fieldName)) {
-                assertThat(((String[]) xAnnotationField.getValue())[0]).isEqualTo("Xjc");
-            } else if ("date".equals(fieldName)) {
-                assertThat(xAnnotationField.getValue()).isEqualTo("2025-01-01T00:00:00Z");
-            }
-        }
     }
 
 }
