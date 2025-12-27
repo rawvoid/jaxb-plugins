@@ -16,10 +16,7 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.JAnnotatable;
-import com.sun.codemodel.JAnnotationUse;
-import com.sun.codemodel.JDefinedClass;
-import com.sun.codemodel.JFieldVar;
+import com.sun.codemodel.*;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.CClassInfo;
 import com.sun.tools.xjc.outline.Outline;
@@ -88,6 +85,25 @@ public class ElementWrapperPlugin extends AbstractPlugin {
                                 method.params().getFirst().type(newType);
                             }
                         }
+
+                        // Remove the original class from the parent container
+                        var parentContainer = typeClass.parentContainer();
+                        if (parentContainer instanceof JDefinedClass clazz) {
+                            var iterator = clazz.classes();
+                            while (iterator.hasNext() && typeClass.equals(iterator.next())) {
+                                iterator.remove();
+                            }
+                        } else if (parentContainer instanceof JPackage pkg) {
+                            var iterator = pkg.classes();
+                            while (iterator.hasNext() && typeClass.equals(iterator.next())) {
+                                iterator.remove();
+                            }
+                        }
+
+                        // Remove the original class from the ObjectFactory
+                        var pkg = typeClass._package();
+                        var objectFactoryClass = pkg._getClass("ObjectFactory");
+                        objectFactoryClass.methods().removeIf(method -> method.type().equals(typeClass));
                     }
                 }
             });
