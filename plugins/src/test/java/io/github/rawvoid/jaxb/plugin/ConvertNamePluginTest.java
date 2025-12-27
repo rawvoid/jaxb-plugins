@@ -23,12 +23,12 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class NameConvertPluginTest extends AbstractXJCMojoTestCase {
+public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void testClassNameConvert() throws Exception {
         var args = List.of(
-            "-Xname-convert",
+            "-Xconvert-name",
             "-class-name",
             "-token=Person",
             "-name=CustomPerson"
@@ -41,7 +41,7 @@ public class NameConvertPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testPropertyNameConvert() throws Exception {
         var args = List.of(
-            "-Xname-convert",
+            "-Xconvert-name",
             "-property-name",
             "-token=name",
             "-name=fullName"
@@ -66,7 +66,7 @@ public class NameConvertPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testPackageNameConvert() throws Exception {
         var args = List.of(
-            "-Xname-convert",
+            "-Xconvert-name",
             "-package-name",
             "-token=https://www.github.com/rawvoid/xjc-plugins",
             "-name=io.github.rawvoid.custom"
@@ -79,7 +79,7 @@ public class NameConvertPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testRegexConvert() throws Exception {
         var args = List.of(
-            "-Xname-convert",
+            "-Xconvert-name",
             "-class-name",
             "-regex=Per(.*)",
             "-name=Human$1"

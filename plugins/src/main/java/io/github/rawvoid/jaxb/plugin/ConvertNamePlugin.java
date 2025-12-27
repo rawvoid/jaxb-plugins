@@ -36,8 +36,8 @@ import java.util.regex.Pattern;
  *
  * @author Rawvoid
  */
-@Option(name = "Xname-convert", description = "Enable name conversion plugin")
-public class NameConvertPlugin extends AbstractPlugin {
+@Option(name = "Xconvert-name", description = "Enable name conversion plugin")
+public class ConvertNamePlugin extends AbstractPlugin {
 
     /**
      * Custom {@link NameConverter} implementation class.
@@ -50,75 +50,75 @@ public class NameConvertPlugin extends AbstractPlugin {
      * List of class name conversion configurations.
      */
     @Option(name = "class-name", description = "Configure class name conversion rules")
-    List<NameMapping> classNameConfigs;
+    List<NameMapping> classNameMappings;
 
     /**
      * List of variable name conversion configurations.
      */
     @Option(name = "variable-name", description = "Configure variable name conversion rules")
-    List<NameMapping> variableNameConfigs;
+    List<NameMapping> variableNameMappings;
 
     /**
      * List of interface name conversion configurations.
      */
     @Option(name = "interface-name", description = "Configure interface name conversion rules")
-    List<NameMapping> interfaceNameConfigs;
+    List<NameMapping> interfaceNameMappings;
 
     /**
      * List of property name conversion configurations.
      */
     @Option(name = "property-name", description = "Configure property name (including Getter/Setter method names) conversion rules")
-    List<NameMapping> propertyNameConfigs;
+    List<NameMapping> propertyNameMappings;
 
     /**
      * List of constant name conversion configurations.
      */
     @Option(name = "constant-name", description = "Configure constant name conversion rules")
-    List<NameMapping> constantNameConfigs;
+    List<NameMapping> constantNameMappings;
 
     /**
      * List of package name conversion configurations.
      */
     @Option(name = "package-name", description = "Configure package name conversion rules")
-    List<NameMapping> packageNameConfigs;
+    List<NameMapping> packageNameMappings;
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
         NameConverter nameConverter = new NameConverter.Standard() {
             @Override
             public String toClassName(String s) {
-                return convertName(s, super.toClassName(s), classNameConfigs);
+                return convertName(s, super.toClassName(s), classNameMappings);
             }
 
             @Override
             public String toVariableName(String s) {
-                return convertName(s, super.toVariableName(s), variableNameConfigs);
+                return convertName(s, super.toVariableName(s), variableNameMappings);
             }
 
             @Override
             public String toInterfaceName(String token) {
-                return convertName(token, super.toInterfaceName(token), interfaceNameConfigs);
+                return convertName(token, super.toInterfaceName(token), interfaceNameMappings);
             }
 
             @Override
             public String toPropertyName(String s) {
-                return convertName(s, super.toPropertyName(s), propertyNameConfigs);
+                return convertName(s, super.toPropertyName(s), propertyNameMappings);
             }
 
             @Override
             public String toConstantName(String token) {
-                return convertName(token, super.toConstantName(token), constantNameConfigs);
+                return convertName(token, super.toConstantName(token), constantNameMappings);
             }
 
             @Override
             public String toPackageName(String nsUri) {
-                return convertName(nsUri, super.toPackageName(nsUri), packageNameConfigs);
+                return convertName(nsUri, super.toPackageName(nsUri), packageNameMappings);
             }
 
-            public String convertName(String token, String internalName, List<NameMapping> configs) {
-                if (configs == null || configs.isEmpty()) return internalName;
+            public String convertName(String token, String internalName, List<NameMapping> mappings) {
+                if (mappings == null || mappings.isEmpty()) return internalName;
 
-                for (var config : configs) {
+                for (var config : mappings) {
                     if (Objects.equals(config.token, token)) {
                         return config.name;
                     } else if (config.regex != null) {
