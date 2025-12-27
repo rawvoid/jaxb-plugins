@@ -18,12 +18,10 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.JAnnotationArrayMember;
 import com.sun.codemodel.JAnnotationStringValue;
-import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import jakarta.xml.bind.annotation.XmlNs;
 import jakarta.xml.bind.annotation.XmlSchema;
-import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -47,25 +45,7 @@ public class NamespacePlugin extends AbstractPlugin {
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
-        // 1. inject bindings
-        // injectBindings(opt);
-
-        // 2. use NameConverter
-        var nameConverter = createNameConverter();
-        opt.setNameConverter(nameConverter, this);
-    }
-
-    public NameConverter createNameConverter() throws BadCommandLineException {
-        var namespaceToPackage = mappings.stream()
-            .filter(m -> m.namespace != null && m.packageName != null
-                && !m.namespace.isBlank() && !m.packageName.isBlank())
-            .collect(Collectors.toMap(m -> m.namespace, m -> m.packageName));
-        return new NameConverter.Standard() {
-            @Override
-            public String toPackageName(String namespaceUri) {
-                return namespaceToPackage.getOrDefault(namespaceUri, super.toPackageName(namespaceUri));
-            }
-        };
+        injectBindings(opt);
     }
 
     public void injectBindings(Options options) {
