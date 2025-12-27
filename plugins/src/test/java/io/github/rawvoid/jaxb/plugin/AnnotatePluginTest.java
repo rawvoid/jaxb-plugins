@@ -17,6 +17,7 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import jakarta.xml.bind.annotation.XmlSchema;
 import jakarta.xml.bind.annotation.XmlSeeAlso;
 import org.junit.jupiter.api.Test;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
@@ -232,6 +233,35 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
         testExecute(args, ".*Person", (source, clazz) -> {
             var getNameMethod = clazz.getDeclaredMethod("getName");
             assertThat(getNameMethod.getDeclaredAnnotation(Deprecated.class)).isNull();
+        });
+    }
+
+    @Test
+    void testAddPackageAnnotation() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-package",
+            "-anno=@java.lang.Deprecated",
+            "-regex=com.github.rawvoid.xjc_plugins"
+        );
+        testExecute(args, "com\\.github\\.rawvoid\\.xjc_plugins\\.Person", (source, clazz) -> {
+            var pkg = clazz.getPackage();
+            assertThat(pkg.getDeclaredAnnotation(Deprecated.class)).isNotNull();
+            assertThat(pkg.getDeclaredAnnotation(XmlSchema.class)).isNotNull();
+        });
+    }
+
+    @Test
+    void testRemovePackageAnnotation() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-remove-from-package",
+            "-anno=jakarta.xml.bind.annotation.XmlSchema",
+            "-regex=com.github.rawvoid.xjc_plugins"
+        );
+        testExecute(args, "com\\.github\\.rawvoid\\.xjc_plugins\\.Person", (source, clazz) -> {
+            var pkg = clazz.getPackage();
+            assertThat(pkg.getDeclaredAnnotation(XmlSchema.class)).isNull();
         });
     }
 

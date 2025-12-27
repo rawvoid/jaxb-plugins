@@ -47,6 +47,9 @@ public class AnnotatePlugin extends AbstractPlugin {
     @Option(name = "add-to-method", description = "Add annotations to generated methods")
     protected List<AddConfig> addToMethodConfigs;
 
+    @Option(name = "add-to-package", description = "Add annotations to generated packages")
+    protected List<AddConfig> addToPackageConfigs;
+
     @Option(name = "remove-from-class", description = "Remove annotations from generated classes")
     protected List<RemoveConfig> removeFromClassConfigs;
 
@@ -55,6 +58,9 @@ public class AnnotatePlugin extends AbstractPlugin {
 
     @Option(name = "remove-from-method", description = "Remove annotations from generated methods")
     protected List<RemoveConfig> removeFromMethodConfigs;
+
+    @Option(name = "remove-from-package", description = "Remove annotations from generated packages")
+    protected List<RemoveConfig> removeFromPackageConfigs;
 
     public AnnotatePlugin() {
         registerTextParser(XAnnotation.class, (optionName, text) ->
@@ -95,6 +101,22 @@ public class AnnotatePlugin extends AbstractPlugin {
                     removeAnnotation(method, className + "." + method.name(), removeFromMethodConfigs));
             }
         });
+
+        if (addToPackageConfigs != null && !addToPackageConfigs.isEmpty()) {
+            outline.getAllPackageContexts().forEach(packageContext -> {
+                var jPackage = packageContext._package();
+                var packageName = jPackage.name();
+                addAnnotation(jPackage, packageName, addToPackageConfigs);
+            });
+        }
+
+        if (removeFromPackageConfigs != null && !removeFromPackageConfigs.isEmpty()) {
+            outline.getAllPackageContexts().forEach(packageContext -> {
+                var jPackage = packageContext._package();
+                var packageName = jPackage.name();
+                removeAnnotation(jPackage, packageName, removeFromPackageConfigs);
+            });
+        }
 
         return true;
     }
