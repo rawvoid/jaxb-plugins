@@ -20,6 +20,8 @@ import com.sun.codemodel.*;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.CClassInfo;
 import com.sun.tools.xjc.outline.Outline;
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlRootElement;
@@ -27,6 +29,7 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.lang.annotation.Annotation;
+import java.util.StringJoiner;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -109,7 +112,47 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             });
         });
 
+        if (opt.debugMode) {
+            fixJAXBDebugClass(outline);
+        }
+
         return true;
+    }
+
+    public void fixJAXBDebugClass(Outline outline) {
+        var model = outline.getModel();
+        var codeModel = outline.getCodeModel();
+        var rootPackage = codeModel.rootPackage();
+        var jaxbDebugClass = rootPackage._getClass("JAXBDebug");
+        if (jaxbDebugClass == null) return;
+
+        jaxbDebugClass.methods().removeIf(method -> method.name().equals("createContext"));
+
+        var createContextMethod = jaxbDebugClass.method(JMod.PUBLIC | JMod.STATIC, JAXBContext.class, "createContext");
+        var $classLoader = createContextMethod.param(ClassLoader.class, "classLoader");
+        createContextMethod._throws(JAXBException.class);
+        var invoke = codeModel.ref(JAXBContext.class).staticInvoke("newInstance");
+        createContextMethod.body()._return(invoke);
+
+        var packageContexts = outline.getAllPackageContexts();
+        switch (model.strategy) {
+            case INTF_AND_IMPL -> {
+                var joiner = new StringJoiner(":");
+                for (var packageOutline : packageContexts) {
+                    joiner.add(packageOutline._package().name());
+                }
+                invoke.arg(joiner.toString()).arg($classLoader);
+            }
+            case BEAN_ONLY -> {
+                for (var packageContext : packageContexts) {
+                    var jPackage = packageContext._package();
+                    jPackage.classes().forEachRemaining(classInfo -> {
+                        invoke.arg(JExpr.dotclass(classInfo));
+                    });
+                }
+            }
+            default -> throw new IllegalStateException();
+        }
     }
 
     public String getXmlElementName(JFieldVar field) {
