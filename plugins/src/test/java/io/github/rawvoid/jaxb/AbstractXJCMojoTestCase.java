@@ -123,7 +123,7 @@ public abstract class AbstractXJCMojoTestCase {
         mojo.setGeneratePackage(getGeneratePackage());
         mojo.setArgs(args);
         mojo.setVerbose(true);
-        mojo.setDebug(false);
+        mojo.setDebug(true);
         mojo.setWriteCode(isWriteCode());
     }
 
