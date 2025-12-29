@@ -29,6 +29,7 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.lang.annotation.Annotation;
+import java.util.Map;
 import java.util.StringJoiner;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -41,82 +42,88 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        var model = outline.getModel();
-        var wrapperClassInfoMap = model.beans().values().stream()
-            .filter(bean -> {
-                var properties = bean.getProperties();
-                if (properties.isEmpty()) return false;
-                var firstProperty = properties.getFirst();
-                return properties.size() == 1 && firstProperty.isCollection() && firstProperty.ref().size() == 1;
-            })
-            .collect(Collectors.toMap(CClassInfo::getName, Function.identity()));
+        var wrapperClasses = findWrapperClasses(outline);
 
-        outline.getClasses().forEach(classOutline -> {
+        for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
             var fields = implClass.fields();
-            fields.values().forEach(field -> {
-                var type = field.type();
+
+            for (var jFieldVar : fields.values()) {
+                var type = jFieldVar.type();
                 var typeName = type.fullName();
 
-                if (wrapperClassInfoMap.containsKey(typeName)) {
-                    if (type instanceof JDefinedClass typeClass) {
-                        var innerField = typeClass.fields().values().iterator().next();
-                        var wrapperName = getXmlElementName(field);
-                        var elementName = getXmlElementName(innerField);
+                var wrapperClass = wrapperClasses.get(typeName);
+                if (wrapperClass == null) continue;
 
-                        var xmlElementAnno = getAnnotation(field, XmlElement.class);
-                        if (xmlElementAnno == null) {
-                            xmlElementAnno = field.annotate(XmlElement.class);
-                        }
-                        xmlElementAnno.param("name", elementName);
-                        var xmlElementWrapper = field.annotate(XmlElementWrapper.class);
-                        xmlElementWrapper.param("name", wrapperName);
+                var typeClass = (JDefinedClass) type;
+                var innerField = typeClass.fields().values().iterator().next();
+                var wrapperName = getXmlElementName(jFieldVar);
+                var elementName = getXmlElementName(innerField);
 
-                        var newType = innerField.type();
-                        field.type(newType);
+                var xmlElementAnno = getAnnotation(jFieldVar, XmlElement.class);
+                if (xmlElementAnno == null) {
+                    xmlElementAnno = jFieldVar.annotate(XmlElement.class);
+                }
+                xmlElementAnno.param("name", elementName);
+                var xmlElementWrapper = jFieldVar.annotate(XmlElementWrapper.class);
+                xmlElementWrapper.param("name", wrapperName);
 
-                        // Update getter and setter
-                        var fieldName = field.name();
-                        var capName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
-                        var getterName = "get" + capName;
-                        var setterName = "set" + capName;
+                var newType = innerField.type();
+                jFieldVar.type(newType);
 
-                        for (var method : implClass.methods()) {
-                            if (method.name().equals(getterName) && method.params().isEmpty()) {
-                                method.type(newType);
-                            } else if (method.name().equals(setterName) && method.params().size() == 1) {
-                                method.params().getFirst().type(newType);
-                            }
-                        }
+                // Update getter and setter methods
+                var fieldName = jFieldVar.name();
+                var capName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+                var getterName = "get" + capName;
+                var setterName = "set" + capName;
 
-                        // Remove the original class from the parent container
-                        var parentContainer = typeClass.parentContainer();
-                        if (parentContainer instanceof JDefinedClass clazz) {
-                            var iterator = clazz.classes();
-                            while (iterator.hasNext() && typeClass.equals(iterator.next())) {
-                                iterator.remove();
-                            }
-                        } else if (parentContainer instanceof JPackage pkg) {
-                            var iterator = pkg.classes();
-                            while (iterator.hasNext() && typeClass.equals(iterator.next())) {
-                                iterator.remove();
-                            }
-                        }
-
-                        // Remove the original class from the ObjectFactory
-                        var pkg = typeClass._package();
-                        var objectFactoryClass = pkg._getClass("ObjectFactory");
-                        objectFactoryClass.methods().removeIf(method -> method.type().equals(typeClass));
+                for (var method : implClass.methods()) {
+                    if (method.name().equals(getterName) && method.params().isEmpty()) {
+                        method.type(newType);
+                    } else if (method.name().equals(setterName) && method.params().size() == 1) {
+                        method.params().getFirst().type(newType);
                     }
                 }
-            });
-        });
+
+                removeWrapperClass(typeClass);
+            }
+        }
 
         if (opt.debugMode) {
             fixJAXBDebugClass(outline);
         }
 
         return true;
+    }
+
+    public void removeWrapperClass(JDefinedClass wrapperClass) {
+        // Remove the wrapper class from the parent container
+        var parentContainer = wrapperClass.parentContainer();
+        var classes = switch (parentContainer) {
+            case JDefinedClass clazz -> clazz.classes();
+            case JPackage jPackage -> jPackage.classes();
+            default -> throw new IllegalArgumentException("Unknown parent container type: " + parentContainer);
+        };
+        while (classes.hasNext() && wrapperClass.equals(classes.next())) {
+            classes.remove();
+        }
+
+        // Remove the wrapper class from the ObjectFactory
+        var jPackage = wrapperClass._package();
+        var objectFactoryClass = jPackage._getClass("ObjectFactory");
+        objectFactoryClass.methods().removeIf(method -> method.type().equals(wrapperClass));
+    }
+
+    public Map<String, CClassInfo> findWrapperClasses(Outline outline) {
+        var model = outline.getModel();
+        return model.beans().values().stream()
+            .filter(bean -> {
+                var properties = bean.getProperties();
+                if (properties == null || properties.size() != 1) return false;
+                var propertyInfo = properties.getFirst();
+                return propertyInfo.isCollection() && propertyInfo.ref().size() == 1;
+            })
+            .collect(Collectors.toMap(CClassInfo::getName, Function.identity()));
     }
 
     public void fixJAXBDebugClass(Outline outline) {
