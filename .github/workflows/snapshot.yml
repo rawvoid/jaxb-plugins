@@ -9,7 +9,8 @@ jobs:
     name: Build and Deploy Snapshot
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -34,11 +35,13 @@ jobs:
         id: check-snapshot
         run: |
           VERSION=${{ steps.version.outputs.version }}
+          BRANCH_NAME=${GITHUB_REF_NAME}
+
           if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
-            echo "✅ Valid snapshot version detected."
+            echo "✅ Valid snapshot version ($VERSION) detected on branch: $BRANCH_NAME"
             echo "is_snapshot=true" >> $GITHUB_OUTPUT
           else
-            echo "::warning::Non-SNAPSHOT version detected ($VERSION) on main branch. Skipping snapshot deployment."
+            echo "::warning::Non-SNAPSHOT version ($VERSION) detected on branch [$BRANCH_NAME]. Skipping snapshot deployment."
             echo "is_snapshot=false" >> $GITHUB_OUTPUT
           fi
 
@@ -55,5 +58,5 @@ jobs:
         if: steps.check-snapshot.outputs.is_snapshot == 'false'
         run: |
           echo "### ⏭️ Snapshot Deployment Skipped" >> $GITHUB_STEP_SUMMARY
-          echo "The current version **${{ steps.version.outputs.version }}** is a Release version." >> $GITHUB_STEP_SUMMARY
+          echo "The current version **${{ steps.version.outputs.version }}** on branch **${GITHUB_REF_NAME}** is a Release version." >> $GITHUB_STEP_SUMMARY
           echo "To publish a release, please create a git tag instead." >> $GITHUB_STEP_SUMMARY
