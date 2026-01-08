@@ -7,6 +7,7 @@ on:
       - '[0-9]*.[0-9]*.[0-9]*-alpha.[0-9]*'
       - '[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*'
       - '[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*'
+  workflow_dispatch:
 
 jobs:
   release:
@@ -43,10 +44,9 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Format Verification"
-          SEMVER_STABLE='^[0-9]+\.[0-9]+\.[0-9]+$'
-          SEMVER_PRERELEASE='^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)(\.[0-9]+)?$'
+          SEMVER_REGEX='^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$'
 
-          if [[ ! "$TAG_NAME" =~ $SEMVER_STABLE && ! "$TAG_NAME" =~ $SEMVER_PRERELEASE ]]; then
+          if [[ ! "$TAG_NAME" =~ $SEMVER_REGEX ]]; then
             echo "::error::Invalid tag format: $TAG_NAME"
             exit 1
           fi
@@ -71,7 +71,7 @@ jobs:
 
       - name: Execute Maven Deploy
         run: |
-          echo "🚀 Starting deployment of version ${{ steps.validate.outputs.pom_version }}..."
+          echo "🚀 Starting deployment of version ${{ github.ref_name }}..."
           mvn clean deploy
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -80,18 +80,18 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.validate.outputs.tag_name }}
-          name: Release ${{ steps.validate.outputs.tag_name }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           draft: false
-          prerelease: ${{ contains(steps.validate.outputs.tag_name, 'alpha') || contains(steps.validate.outputs.tag_name, 'beta') || contains(steps.validate.outputs.tag_name, 'rc') }}
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           generate_release_notes: true
           files: |
-            plugins/target/jaxb-plugins-${{ steps.validate.outputs.pom_version }}.jar
+            plugins/target/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release Summary
         run: |
           echo "### ✅ Release Deployment Completed" >> $GITHUB_STEP_SUMMARY
-          echo "Version: **${{ steps.validate.outputs.pom_version }}**" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: **${{ steps.validate.outputs.tag_name }}**" >> $GITHUB_STEP_SUMMARY
+          echo "Version: **${{ github.ref_name }}**" >> $GITHUB_STEP_SUMMARY
+          echo "Tag: **${{ github.ref_name }}**" >> $GITHUB_STEP_SUMMARY
