@@ -1,4 +1,4 @@
-name: 'CI: Deployment to Maven Central (Snapshot)'
+name: 'CI: Publish to Sonatype Snapshot'
 
 on:
   push:
@@ -59,4 +59,4 @@ jobs:
         run: |
           echo "### ⏭️ Snapshot Deployment Skipped" >> $GITHUB_STEP_SUMMARY
           echo "The current version **${{ steps.version.outputs.version }}** on branch **${GITHUB_REF_NAME}** is a Release version." >> $GITHUB_STEP_SUMMARY
-          echo "To publish a release, please create a git tag instead." >> $GITHUB_STEP_SUMMARY
+          echo "Only **-SNAPSHOT** versions are deployed from this workflow; create a release tag to publish a non-snapshot." >> $GITHUB_STEP_SUMMARY
