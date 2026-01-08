@@ -12,6 +12,8 @@ jobs:
   release:
     name: Validate and Publish Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -74,6 +76,19 @@ jobs:
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.validate.outputs.tag_name }}
+          name: Release ${{ steps.validate.outputs.tag_name }}
+          draft: false
+          prerelease: ${{ contains(steps.validate.outputs.tag_name, 'alpha') || contains(steps.validate.outputs.tag_name, 'beta') || contains(steps.validate.outputs.tag_name, 'rc') }}
+          generate_release_notes: true
+          files: |
+            plugins/target/jaxb-plugins-${{ steps.validate.outputs.pom_version }}.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release Summary
         run: |
