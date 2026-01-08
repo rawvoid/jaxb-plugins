@@ -1,0 +1,27 @@
+changelog:
+  exclude:
+    authors:
+      - github-actions[bot]
+  categories:
+    - title: "🚀 New Features"
+      labels:
+        - feature
+        - feat
+    - title: "🐛 Bug Fixes"
+      labels:
+        - fix
+        - bug
+    - title: "🧰 Maintenance"
+      labels:
+        - chore
+        - refactor
+        - build
+        - ci
+    - title: "📝 Documentation"
+      labels:
+        - docs
+        - documentation
+    - title: "🧪 Testing"
+      labels:
+        - test
+        - testing
