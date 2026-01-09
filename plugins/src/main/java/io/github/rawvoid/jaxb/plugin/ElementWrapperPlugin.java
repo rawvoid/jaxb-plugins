@@ -40,6 +40,9 @@ import java.util.stream.Collectors;
 @Option(name = "Xelement-wrapper")
 public class ElementWrapperPlugin extends AbstractPlugin {
 
+    @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
+    Boolean removeWrapperClass;
+
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
         var wrapperClasses = findWrapperClasses(outline);
@@ -85,7 +88,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
                     }
                 }
 
-                removeWrapperClass(typeClass);
+                if (removeWrapperClass) {
+                    removeWrapperClass(typeClass);
+                }
             }
         }
 
