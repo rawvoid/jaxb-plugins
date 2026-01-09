@@ -35,6 +35,14 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
+ * JAXB plugin that simplifies element wrappers in the generated code.
+ * <p>
+ * This plugin identifies wrapper classes (classes with a single collection property)
+ * and flattens them by moving the {@link jakarta.xml.bind.annotation.XmlElementWrapper}
+ * and {@link jakarta.xml.bind.annotation.XmlElement} annotations to the field
+ * that uses the wrapper class, then optionally removing the wrapper class itself.
+ * </p>
+ *
  * @author Rawvoid
  */
 @Option(name = "Xelement-wrapper")
