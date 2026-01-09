@@ -39,28 +39,28 @@ import java.util.regex.Pattern;
 public class AnnotatePlugin extends AbstractPlugin {
 
     @Option(name = "add-to-class", description = "Add annotations to generated classes")
-    protected List<AddConfig> addToClassConfigs;
+    List<AddConfig> addToClassConfigs;
 
     @Option(name = "add-to-field", description = "Add annotations to generated fields")
-    protected List<AddConfig> addToFieldConfigs;
+    List<AddConfig> addToFieldConfigs;
 
     @Option(name = "add-to-method", description = "Add annotations to generated methods")
-    protected List<AddConfig> addToMethodConfigs;
+    List<AddConfig> addToMethodConfigs;
 
     @Option(name = "add-to-package", description = "Add annotations to generated packages")
-    protected List<AddConfig> addToPackageConfigs;
+    List<AddConfig> addToPackageConfigs;
 
     @Option(name = "remove-from-class", description = "Remove annotations from generated classes")
-    protected List<RemoveConfig> removeFromClassConfigs;
+    List<RemoveConfig> removeFromClassConfigs;
 
     @Option(name = "remove-from-field", description = "Remove annotations from generated fields")
-    protected List<RemoveConfig> removeFromFieldConfigs;
+    List<RemoveConfig> removeFromFieldConfigs;
 
     @Option(name = "remove-from-method", description = "Remove annotations from generated methods")
-    protected List<RemoveConfig> removeFromMethodConfigs;
+    List<RemoveConfig> removeFromMethodConfigs;
 
     @Option(name = "remove-from-package", description = "Remove annotations from generated packages")
-    protected List<RemoveConfig> removeFromPackageConfigs;
+    List<RemoveConfig> removeFromPackageConfigs;
 
     public AnnotatePlugin() {
         registerTextParser(XAnnotation.class, (optionName, text) ->
@@ -121,6 +121,13 @@ public class AnnotatePlugin extends AbstractPlugin {
         return true;
     }
 
+    /**
+     * Adds annotations to the specified target if the target name matches any of the patterns in the configuration.
+     *
+     * @param target     the target to add annotations to
+     * @param targetName the name of the target
+     * @param configs    the list of configuration objects
+     */
     public void addAnnotation(JAnnotatable target, String targetName, List<AddConfig> configs) {
         var matchedConfigs = configs.stream()
             .filter(config -> config.patterns == null || config.patterns.isEmpty() || config.patterns.stream()
@@ -145,6 +152,13 @@ public class AnnotatePlugin extends AbstractPlugin {
         });
     }
 
+    /**
+     * Fills the parameter of the annotation use with the given name and value.
+     *
+     * @param annotationUse the annotation use to fill the parameter for
+     * @param paramName     the name of the parameter to fill
+     * @param paramValue    the value of the parameter to fill
+     */
     protected void fillAnnotationParam(JAnnotationUse annotationUse, String paramName, Object paramValue) {
         switch (paramValue) {
             case String strValue -> annotationUse.param(paramName, strValue);
@@ -176,6 +190,12 @@ public class AnnotatePlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Fills the parameter of the annotation array member with the given value.
+     *
+     * @param array the annotation array member to fill the parameter for
+     * @param value the value of the parameter to fill
+     */
     public void fillArrayParam(JAnnotationArrayMember array, Object value) {
         switch (value) {
             case String strValue -> array.param(strValue);
@@ -196,6 +216,13 @@ public class AnnotatePlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Removes annotations from the specified target if the target name matches any of the patterns in the configuration.
+     *
+     * @param target     the target to remove annotations from
+     * @param targetName the name of the target
+     * @param configs    the list of configuration objects
+     */
     public void removeAnnotation(JAnnotatable target, String targetName, List<RemoveConfig> configs) {
         var matchedConfigs = configs.stream()
             .filter(config -> config.patterns == null || config.patterns.isEmpty() || config.patterns.stream()
@@ -210,6 +237,9 @@ public class AnnotatePlugin extends AbstractPlugin {
         }));
     }
 
+    /**
+     * Configuration class for adding annotations.
+     */
     public static class AddConfig {
 
         @Option(name = "anno", required = true, placeholder = "annotation", description = "The annotation to be added")
@@ -220,6 +250,9 @@ public class AnnotatePlugin extends AbstractPlugin {
 
     }
 
+    /**
+     * Configuration class for removing annotations.
+     */
     public static class RemoveConfig {
 
         @Option(name = "anno", required = true, placeholder = "class", description = "The annotation class name to be removed")

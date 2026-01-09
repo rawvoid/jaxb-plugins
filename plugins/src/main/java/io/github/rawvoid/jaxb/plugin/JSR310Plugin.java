@@ -39,6 +39,12 @@ import java.util.regex.Pattern;
 
 /**
  *
+ * JAXB plugin that enables JSR-310 date/time API support in generated JAXB classes.
+ * <p>
+ * This plugin allows users to use the JSR-310 date/time API (java.time package) in their JAXB classes.
+ * It modifies the generated JAXB classes to use the appropriate adapter classes for marshalling and unmarshalling.
+ * </p>
+ *
  * @author Rawvoid
  */
 @Option(name = "Xjsr310", description = "Enable JSR-310 date/time API support in generated JAXB classes")
@@ -78,6 +84,14 @@ public class JSR310Plugin extends AbstractPlugin {
         return true;
     }
 
+    /**
+     * Finds the type mapping configuration that matches the given bean class name, property info, and schema type.
+     *
+     * @param beanClassName the name of the bean class
+     * @param propertyInfo  the property info of the property to map
+     * @param schemaType    the schema type of the property
+     * @return the type mapping configuration that matches the given criteria, or null if no match is found
+     */
     public TypeMappingConfig findTypeMappingConfig(String beanClassName, CPropertyInfo propertyInfo, QName schemaType) {
         var fieldFullName = beanClassName + "." + propertyInfo.getName(false);
         return mappings.stream()
@@ -91,6 +105,12 @@ public class JSR310Plugin extends AbstractPlugin {
             .orElse(null);
     }
 
+    /**
+     * Determines the schema type of the given property info.
+     *
+     * @param propertyInfo the property info to determine the schema type for
+     * @return the schema type of the property, or null if the property info is null or the schema type cannot be determined
+     */
     public QName getSchemaType(CPropertyInfo propertyInfo) {
         if (propertyInfo == null) return null;
         return switch (propertyInfo) {
@@ -104,6 +124,14 @@ public class JSR310Plugin extends AbstractPlugin {
         };
     }
 
+    /**
+     * Applies the specified type mapping to the given property in the bean class.
+     *
+     * @param beanClass    the bean class to apply the mapping to
+     * @param propertyInfo the property info of the property to apply the mapping to
+     * @param targetType   the target Java class to map the property to
+     * @param mapping      the type mapping configuration to apply
+     */
     public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType, TypeMappingConfig mapping) {
         // Handle fields
         var fieldName = propertyInfo.getName(false);
@@ -303,6 +331,11 @@ public class JSR310Plugin extends AbstractPlugin {
             ._return(JExpr._null());
     }
 
+    /**
+     * Returns a map that maps XSD built-in datatypes to their corresponding Java classes.
+     *
+     * @return a map that maps XSD built-in datatypes to their corresponding Java classes
+     */
     public Map<QName, Class<?>> xsdBuiltInTypeToJavaMapping() {
         // Reference: https://www.w3.org/TR/xmlschema-2/#built-in-datatypes
         Map<QName, Class<?>> mapping = new HashMap<>();
@@ -319,6 +352,9 @@ public class JSR310Plugin extends AbstractPlugin {
         return mapping;
     }
 
+    /**
+     * Configuration class for mapping XSD built-in datatypes to Java classes.
+     */
     public static class TypeMappingConfig {
 
         @Option(name = "xsd-type", description = "XSD built-in datatype name to map (e.g., dateTime, date, gDay)")

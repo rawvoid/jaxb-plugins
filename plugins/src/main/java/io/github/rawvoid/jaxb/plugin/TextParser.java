@@ -36,6 +36,8 @@ public interface TextParser<T> {
      * @param optionName the name of the plugin option, must not be null
      * @param text       the input text to be parsed, must not be null
      * @return the parsed object of type T
+     * @throws Exception if the input text cannot be parsed into the desired type,
+     *                   such as if the text is not valid for the specified type
      */
     T parse(String optionName, CharSequence text) throws Exception;
 

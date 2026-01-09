@@ -109,6 +109,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return true;
     }
 
+    /**
+     * Removes the wrapper class from the parent container and ObjectFactory.
+     *
+     * @param wrapperClass The wrapper class to remove.
+     */
     public void removeWrapperClass(JDefinedClass wrapperClass) {
         // Remove the wrapper class from the parent container
         var parentContainer = wrapperClass.parentContainer();
@@ -127,6 +132,12 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         objectFactoryClass.methods().removeIf(method -> method.type().equals(wrapperClass));
     }
 
+    /**
+     * Finds wrapper classes in the JAXB outline.
+     *
+     * @param outline The JAXB outline to search.
+     * @return A map of wrapper class names to their {@link CClassInfo} instances.
+     */
     public Map<String, CClassInfo> findWrapperClasses(Outline outline) {
         var model = outline.getModel();
         return model.beans().values().stream()
@@ -139,6 +150,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             .collect(Collectors.toMap(CClassInfo::getName, Function.identity()));
     }
 
+    /**
+     * Fixes the JAXBDebug class in the JAXB outline.
+     *
+     * @param outline The JAXB outline to fix.
+     */
     public void fixJAXBDebugClass(Outline outline) {
         var model = outline.getModel();
         var codeModel = outline.getCodeModel();
@@ -175,6 +191,12 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Gets the XML element name for a field.
+     *
+     * @param field The field to get the XML element name for.
+     * @return The XML element name.
+     */
     public String getXmlElementName(JFieldVar field) {
         var xmlElementAnno = getAnnotation(field, XmlElement.class);
         if (xmlElementAnno == null) {
@@ -190,7 +212,15 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return name.toString();
     }
 
-    public JAnnotationUse getAnnotation(JAnnotatable annotatable, Class<? extends Annotation> clazz) {
+    /**
+     * Gets the annotation of the specified type for the given annotatable element.
+     *
+     * @param annotatable The annotatable element to get the annotation for.
+     * @param clazz       The class of the annotation to get.
+     * @param <T>         The type of the annotation.
+     * @return The annotation of the specified type, or null if not found.
+     */
+    public <T extends Annotation> JAnnotationUse getAnnotation(JAnnotatable annotatable, Class<T> clazz) {
         return annotatable.annotations().stream()
             .filter(anno -> anno.getAnnotationClass().fullName().equals(clazz.getName()))
             .findFirst()

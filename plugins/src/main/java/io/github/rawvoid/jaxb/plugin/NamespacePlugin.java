@@ -35,6 +35,13 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
+ * JAXB plugin that customizes Java package names for XML namespaces.
+ * <p>
+ * This plugin allows users to define a mapping between XML namespaces and Java packages.
+ * It modifies the generated JAXB classes to use the specified package names for the
+ * corresponding XML namespaces.
+ * </p>
+ *
  * @author Rawvoid
  */
 @Option(name = "Xnamespace", description = "Customize Java package names for XML namespaces")
@@ -48,6 +55,11 @@ public class NamespacePlugin extends AbstractPlugin {
         injectBindings(opt);
     }
 
+    /**
+     * Injects custom bindings into the JAXB options.
+     *
+     * @param options The JAXB options to inject bindings into.
+     */
     public void injectBindings(Options options) {
         var schemaLocations = collectSchemaLocation(options);
         var bindings = generateBindings(schemaLocations);
@@ -58,6 +70,12 @@ public class NamespacePlugin extends AbstractPlugin {
         options.addBindFile(inputSource);
     }
 
+    /**
+     * Generates custom bindings for the JAXB options.
+     *
+     * @param schemaLocations A map of schema locations to XML namespaces.
+     * @return The generated bindings as a string, or {@code null} if no bindings are needed.
+     */
     public String generateBindings(Map<String, String> schemaLocations) {
         var header = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -86,6 +104,12 @@ public class NamespacePlugin extends AbstractPlugin {
         return header + body + footer;
     }
 
+    /**
+     * Resolves the target namespace from the given XML schema input source.
+     *
+     * @param inputSource The XML schema input source.
+     * @return The resolved target namespace, or {@code null} if not found.
+     */
     public String resolveTargetNamespace(InputSource inputSource) {
         try {
             var doc = DocumentBuilderFactory.newInstance()
@@ -97,6 +121,12 @@ public class NamespacePlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Collects the schema locations and their corresponding XML namespaces from the JAXB options.
+     *
+     * @param options The JAXB options to collect schema locations from.
+     * @return A map of schema locations to XML namespaces.
+     */
     public Map<String, String> collectSchemaLocation(Options options) {
         var grammars = options.getGrammars();
         return Arrays.stream(grammars)
@@ -104,6 +134,15 @@ public class NamespacePlugin extends AbstractPlugin {
             .collect(Collectors.toMap(InputSource::getSystemId, this::resolveTargetNamespace));
     }
 
+    /**
+     * Applies the custom namespace mappings to the JAXB outline.
+     *
+     * @param outline      The JAXB outline to apply mappings to.
+     * @param opt          The JAXB options.
+     * @param errorHandler The error handler.
+     * @return {@code true} if the mappings were applied successfully, {@code false} otherwise.
+     * @throws SAXException If a SAX error occurs.
+     */
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
         outline.getAllPackageContexts().forEach(pkgOutline -> {
@@ -140,6 +179,9 @@ public class NamespacePlugin extends AbstractPlugin {
         return true;
     }
 
+    /**
+     * Naming mapping rule configuration.
+     */
     public static class NamespaceMappingConfig {
 
         @Option(name = "ns", required = true, description = "XML target namespace URI (e.g., http://example.com/my-schema)")
