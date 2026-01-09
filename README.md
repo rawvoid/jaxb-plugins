@@ -155,18 +155,20 @@ Simplify your generated code by automatically flattening wrapper classes. Moves 
 
 ---
 
-### 🌍 **NamespacePlugin** `-Xnamespace`
-*The namespace navigator!*
+### 🌍 ~~**NamespacePlugin** `-Xnamespace`~~
+~~*The namespace navigator!*~~
 
-Take control of XML namespace to Java package mappings. Define custom mappings and automatically generate JAXB binding files.
+~~**This plugin is deprecated and may be removed in future versions.**~~
 
-**🔥 Use Cases:**
-- Map namespaces to meaningful package names
-- Avoid default package naming conflicts
-- Support multiple schema versions
-- Clean up package structure
+~~Take control of XML namespace to Java package mappings. Define custom mappings and automatically generate JAXB binding files.~~
 
-**⚡ Quick Start:**
+~~**🔥 Use Cases:**~~
+~~- Map namespaces to meaningful package names~~
+~~- Avoid default package naming conflicts~~
+~~- Support multiple schema versions~~
+~~- Clean up package structure~~
+
+~~**⚡ Quick Start:**~~
 ```bash
 -Xnamespace \
   -mapping \
@@ -175,7 +177,7 @@ Take control of XML namespace to Java package mappings. Define custom mappings a
   -prefix=ex
 ```
 
-**📝 Command Structure:**
+~~**📝 Command Structure:**~~
 ```bash
 -Xnamespace \
   -mapping \
