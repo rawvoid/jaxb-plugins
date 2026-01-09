@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * @author Rawvoid
  */
+@Deprecated
 class NamespacePluginTest extends AbstractXJCMojoTestCase {
 
     @Test

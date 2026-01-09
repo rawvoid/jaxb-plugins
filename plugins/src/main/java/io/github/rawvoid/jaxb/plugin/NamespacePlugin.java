@@ -42,9 +42,15 @@ import java.util.stream.Collectors;
  * corresponding XML namespaces.
  * </p>
  *
+ * {@code @Deprecated} This plugin is deprecated and may be removed in future versions.
+ *
  * @author Rawvoid
  */
-@Option(name = "Xnamespace", description = "Customize Java package names for XML namespaces")
+@Deprecated
+@Option(name = "Xnamespace", description = """
+    Customize Java package names for XML namespaces.
+    This plugin is deprecated and may be removed in future versions.
+    """)
 public class NamespacePlugin extends AbstractPlugin {
 
     @Option(name = "mapping", description = "Namespace to package mapping rule")
