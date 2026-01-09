@@ -1,0 +1,131 @@
+name: 'Publish'
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*-alpha.[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*'
+
+jobs:
+  snapshot:
+    if: github.event_name == 'push' && github.ref_type == 'branch'
+    name: Publish to Sonatype Snapshots
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up java
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'zulu'
+          cache: maven
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+
+      - name: Set up environment variables
+        run: |
+          PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "PROJECT_VERSION=$PROJECT_VERSION" >> $GITHUB_ENV
+          echo "📦 Current Project Version: $PROJECT_VERSION"
+
+      - name: Run maven deploy
+        if: endsWith(env.PROJECT_VERSION, '-SNAPSHOT')
+        run: |
+          echo "🚀 Starting deployment of snapshot version $PROJECT_VERSION..."
+          mvn -B clean deploy -Dgpg.skip
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
+  release:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    name: Publish to Apache Maven Central
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up java
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'maven'
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Set up environment variables
+        run: |
+          PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "PROJECT_VERSION=$PROJECT_VERSION" >> $GITHUB_ENV
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+
+          echo "📦 Current Project Version: $PROJECT_VERSION"
+          echo "📦 Tag name: $TAG_NAME"
+
+      - name: Check version compliance
+        run: |
+          echo "🔍 Validating project version format against semantic versioning..."
+
+          SEMVER_REGEX='^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$'
+
+          if [[ ! "$PROJECT_VERSION" =~ $SEMVER_REGEX ]]; then
+            echo "::error::❌Invalid project version format: $PROJECT_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Project version ($PROJECT_VERSION) format is ok."
+
+          if [[ "$PROJECT_VERSION" != "$TAG_NAME" ]]; then
+            echo "::error::❌Version Mismatch: Project version ($PROJECT_VERSION) does not match Tag name ($TAG_NAME)"
+            exit 1
+          fi
+
+          echo "✅ Project version ($PROJECT_VERSION) matches Tag name ($TAG_NAME)"
+
+          if [[ "$PROJECT_VERSION" == *"-SNAPSHOT" ]]; then
+            echo "::error::❌Release version cannot contain -SNAPSHOT"
+            exit 1
+          fi
+
+          echo "✅ Release version ($PROJECT_VERSION) is valid."
+
+      - name: Run maven deploy
+        run: |
+          echo "🚀 Starting deployment of version $PROJECT_VERSION..."
+          mvn -B clean deploy
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
+      - name: Create github release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: ${{ contains(env.TAG_NAME, 'alpha') || contains(env.TAG_NAME, 'beta') || contains(env.TAG_NAME, 'rc') }}
+          generate_release_notes: true
+          files: |
+            plugins/target/*.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "### ✅ Release Deployment Completed" >> $GITHUB_STEP_SUMMARY
+          echo "Version: **$PROJECT_VERSION**" >> $GITHUB_STEP_SUMMARY
