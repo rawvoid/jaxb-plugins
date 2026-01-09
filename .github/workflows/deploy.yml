@@ -12,7 +12,7 @@ on:
 
 jobs:
   snapshot:
-    if: github.event_name == 'push' && github.ref_type == 'branch'
+    if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
     name: Publish to Sonatype Snapshots
     runs-on: ubuntu-latest
     steps:
@@ -36,7 +36,7 @@ jobs:
           echo "📦 Current Project Version: $PROJECT_VERSION"
 
       - name: Run maven deploy
-        if: endsWith(env.PROJECT_VERSION, '-SNAPSHOT')
+        if: ${{ endsWith(env.PROJECT_VERSION, '-SNAPSHOT') }}
         run: |
           echo "🚀 Starting deployment of snapshot version $PROJECT_VERSION..."
           mvn -B clean deploy -Dgpg.skip
@@ -45,7 +45,7 @@ jobs:
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
 
   release:
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
     name: Publish to Apache Maven Central
     runs-on: ubuntu-latest
     permissions:
