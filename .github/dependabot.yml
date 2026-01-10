@@ -3,11 +3,13 @@ updates:
   - package-ecosystem: "maven"
     directory: "/"
     schedule:
+      interval: "cron"
       cronjob: "0 10 * * *"
       timezone: "Etc/GMT-8"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
+      interval: "cron"
       cronjob: "0 10 * * *"
       timezone: "Etc/GMT-8"
