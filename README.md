@@ -224,6 +224,58 @@ Remove unnecessary setter methods from generated classes when you only need gett
 
 ---
 
+### 🏷️ **NsPrefixPlugin** `-Xns-prefix`
+*The namespace prefix master!*
+
+Take control of XML namespace prefixes in generated @XmlSchema annotations. Define custom mappings between XML namespaces and their prefixes, and automatically update package-info.java files.
+
+**🔥 Use Cases:**
+- Set consistent XML namespace prefixes across generated code
+- Customize prefixes for specific packages using regex patterns
+- Manage multiple namespaces in complex XML schemas
+- Replace default JAXB-generated prefixes with meaningful ones
+
+**⚡ Quick Start:**
+```bash
+-Xns-prefix \
+  -config \
+  -xmlns \
+  -ns=http://example.com \
+  -prefix=ex
+```
+
+**📝 Command Structure:**
+```bash
+-Xns-prefix \
+  -config \
+    -package=package.regex.pattern \
+    -xmlns \
+    -ns=namespaceURI \
+    -prefix=xmlPrefix \
+    -xmlns \
+    -ns=anotherNamespace \
+    -prefix=anotherPrefix \
+  -config \
+    -package=another.package.regex \
+    -xmlns \
+    -ns=namespaceURI \
+    -prefix=prefix
+```
+
+**🎯 Advanced Examples:**
+```bash
+# Apply to all packages
+-Xns-prefix -config -xmlns -ns=http://example.com -prefix=ex
+
+# Package-specific configuration
+-Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex
+
+# Multiple namespaces for a package
+-Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex -xmlns -ns=http://test.com -prefix=tst
+```
+
+---
+
 ## 🚀 Getting Started
 
 ### 📦 Installation
@@ -257,6 +309,7 @@ Add this to your Maven `pom.xml`:
             <arg>-Xjsr310</arg>
             <arg>-Xannotate</arg>
             <arg>-Xconvert-name</arg>
+            <arg>-Xns-prefix</arg>
         </args>
     </configuration>
 </plugin>
@@ -270,6 +323,7 @@ xjc -d src -p com.example \
     -Xjsr310 \
     -Xannotate \
     -Xconvert-name \
+    -Xns-prefix \
     schema.xsd
 ```
 
