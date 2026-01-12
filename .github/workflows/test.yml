@@ -1,0 +1,29 @@
+name: 'Test'
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+      - 'develop'
+  push:
+    branches:
+      - 'main'
+      - 'develop'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up java
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'zulu'
+          cache: maven
+
+      - name: Run tests
+        run: mvn -B clean test
