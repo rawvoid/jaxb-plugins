@@ -13,6 +13,7 @@ on:
 
 jobs:
   qodana:
+    name: Run Qodana
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,7 +24,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: 'Qodana Scan'
+      - name: Qodana scan
         uses: JetBrains/qodana-action@v2025.3
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
