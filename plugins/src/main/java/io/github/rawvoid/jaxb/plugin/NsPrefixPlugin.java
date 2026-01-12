@@ -70,11 +70,9 @@ public class NsPrefixPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        if (configs == null || configs.isEmpty()) {
-            return true;
+        if (configs != null && !configs.isEmpty()) {
+            outline.getAllPackageContexts().forEach(this::processPackage);
         }
-
-        outline.getAllPackageContexts().forEach(this::processPackage);
         return true;
     }
 
