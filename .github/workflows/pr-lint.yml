@@ -1,0 +1,65 @@
+name: "Lint PR"
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened, edited ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check-conventions:
+    name: Lint PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lint PR Title
+        uses: amannn/action-semantic-pull-request@v6
+        id: lint_title
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            chore
+            docs
+            perf
+            refactor
+            test
+            build
+            ci
+            style
+            revert
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: "The subject must start with a lowercase letter."
+
+      - name: Comment on Title Errors
+        if: always() && steps.lint_title.outputs.error_message != null
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-title-lint-error
+          message: |
+            ### ❌ PR Title Needs formatting
+
+            Thank you for your contribution! We follow [Conventional Commits](https://www.conventionalcommits.org/).
+
+            **Current Error:**
+            > ${{ steps.lint_title.outputs.error_message }}
+
+            **Example of valid title:**
+            `feat: add new login button`
+
+            *Please update the PR title*
+
+      - name: Dismiss Previous Comments
+        if: success()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-title-lint-error
+          delete: true
