@@ -19,6 +19,7 @@ package io.github.rawvoid.jaxb.plugin;
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,5 +90,27 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
             // Replace with "Human$1" results in "Humanson"
             assertThat(clazz.getSimpleName()).isEqualTo("Humanson");
         });
+    }
+
+    @Test
+    void testMixRegexTokenConvert() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-class-name",
+            "-regex=Per(.*)",
+            "-name=Human$1",
+            "-class-name",
+            "-token=RootType",
+            "-name=Root"
+        );
+        List<String> list = new ArrayList<>();
+        testExecute(args, ".*(Humanson|Root)", (source, clazz) -> {
+            list.add(clazz.getSimpleName());
+        });
+
+        assertThat(list).containsExactlyInAnyOrder(
+            "Humanson",
+            "Root"
+        );
     }
 }
