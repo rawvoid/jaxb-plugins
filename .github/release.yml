@@ -1,27 +1,36 @@
 changelog:
-  exclude:
-    authors:
-      - github-actions[bot]
   categories:
     - title: "🚀 New Features"
       labels:
         - feature
-        - feat
     - title: "🐛 Bug Fixes"
       labels:
-        - fix
         - bug
-    - title: "🧰 Maintenance"
+    - title: "⚡ Performance Improvements"
       labels:
-        - chore
+        - perf
+    - title: "🧰 Maintenance & Refactoring"
+      labels:
         - refactor
+        - chore
         - build
         - ci
+    - title: "⚠️ Reverts"
+      labels:
+        - revert
+    - title: "📦 Dependency Updates"
+      labels:
+        - dependencies
     - title: "📝 Documentation"
       labels:
         - docs
-        - documentation
-    - title: "🧪 Testing"
+    - title: "🎨 Style & UI"
+      labels:
+        - style
+    - title: "🧪 Tests"
       labels:
         - test
-        - testing
+
+  exclude:
+    labels:
+      - skip-changelog
