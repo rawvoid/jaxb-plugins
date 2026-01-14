@@ -121,7 +121,7 @@ public class ConvertNamePlugin extends AbstractPlugin {
                 for (var config : mappings) {
                     if (Objects.equals(config.token, token)) {
                         return config.name;
-                    } else if (config.regex != null) {
+                    } else if (config.regex != null && config.regex.matcher(internalName).matches()) {
                         return internalName.replaceAll(config.regex.pattern(), config.name);
                     }
                 }
