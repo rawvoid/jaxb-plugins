@@ -96,7 +96,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
                     }
                 }
 
-                if (removeWrapperClass) {
+                if (Boolean.TRUE.equals(removeWrapperClass)) {
                     removeWrapperClass(typeClass);
                 }
             }
@@ -115,6 +115,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * @param wrapperClass The wrapper class to remove.
      */
     public void removeWrapperClass(JDefinedClass wrapperClass) {
+        if (wrapperClass.classes().hasNext()) {
+            return;
+        }
         // Remove the wrapper class from the parent container
         var parentContainer = wrapperClass.parentContainer();
         var classes = switch (parentContainer) {
