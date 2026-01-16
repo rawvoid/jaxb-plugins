@@ -137,6 +137,10 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     /**
      * Finds wrapper classes in the JAXB outline.
+     * <p>
+     * A wrapper class must declare exactly one collection property and must not
+     * inherit any additional properties from its base classes.
+     * </p>
      *
      * @param outline The JAXB outline to search.
      * @return A map of wrapper class names to their {@link CClassInfo} instances.
@@ -147,6 +151,12 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             .filter(bean -> {
                 var properties = bean.getProperties();
                 if (properties == null || properties.size() != 1) return false;
+                var baseClass = bean.getBaseClass();
+                while (baseClass != null) {
+                    var baseProperties = baseClass.getProperties();
+                    if (baseProperties != null && !baseProperties.isEmpty()) return false;
+                    baseClass = baseClass.getBaseClass();
+                }
                 var propertyInfo = properties.getFirst();
                 return propertyInfo.isCollection() && propertyInfo.ref().size() == 1;
             })
