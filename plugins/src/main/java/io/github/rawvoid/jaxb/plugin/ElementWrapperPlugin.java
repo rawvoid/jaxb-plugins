@@ -19,17 +19,19 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.codemodel.*;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.CClassInfo;
+import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
-import jakarta.xml.bind.annotation.XmlElement;
-import jakarta.xml.bind.annotation.XmlElementWrapper;
-import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.*;
+import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
+import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapters;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.lang.annotation.Annotation;
 import java.util.Map;
+import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -53,53 +55,22 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        var wrapperClasses = findWrapperClasses(outline);
+        var elementWrapperClasses = findElementWrapperClasses(outline);
 
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
             var fields = implClass.fields();
 
-            for (var jFieldVar : fields.values()) {
-                var type = jFieldVar.type();
-                var typeName = type.fullName();
+            fields.values().stream().filter(field -> {
+                if (!elementWrapperClasses.containsKey(field.type().fullName())) return false;
 
-                var wrapperClass = wrapperClasses.get(typeName);
-                if (wrapperClass == null) continue;
+                // Skip if the field has a @XmlJavaTypeAdapter or @XmlJavaTypeAdapters annotation
+                var hasTypeAdapter = getAnnotation(field, XmlJavaTypeAdapter.class) != null
+                    || getAnnotation(field, XmlJavaTypeAdapters.class) != null;
+                if (hasTypeAdapter) return false;
 
-                var typeClass = (JDefinedClass) type;
-                var innerField = typeClass.fields().values().iterator().next();
-                var wrapperName = getXmlElementName(jFieldVar);
-                var elementName = getXmlElementName(innerField);
-
-                var xmlElementAnno = getAnnotation(jFieldVar, XmlElement.class);
-                if (xmlElementAnno == null) {
-                    xmlElementAnno = jFieldVar.annotate(XmlElement.class);
-                }
-                xmlElementAnno.param("name", elementName);
-                var xmlElementWrapper = jFieldVar.annotate(XmlElementWrapper.class);
-                xmlElementWrapper.param("name", wrapperName);
-
-                var newType = innerField.type();
-                jFieldVar.type(newType);
-
-                // Update getter and setter methods
-                var fieldName = jFieldVar.name();
-                var capName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
-                var getterName = "get" + capName;
-                var setterName = "set" + capName;
-
-                for (var method : implClass.methods()) {
-                    if (method.name().equals(getterName) && method.params().isEmpty()) {
-                        method.type(newType);
-                    } else if (method.name().equals(setterName) && method.params().size() == 1) {
-                        method.params().getFirst().type(newType);
-                    }
-                }
-
-                if (Boolean.TRUE.equals(removeWrapperClass)) {
-                    removeWrapperClass(typeClass);
-                }
-            }
+                return getAnnotation(field, XmlElementWrapper.class) == null;
+            }).forEach(field -> handleWrapperField(field, implClass));
         }
 
         if (opt.debugMode) {
@@ -107,6 +78,157 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
 
         return true;
+    }
+
+    private void handleWrapperField(JFieldVar outerField, JDefinedClass outerClass) {
+        var type = outerField.type();
+
+        var innerClass = (JDefinedClass) type;
+        var innerField = innerClass.fields().values().iterator().next();
+
+        var outerXmlElement = getAnnotation(outerField, XmlElement.class);
+        // If @XmlElement specifies a type attribute, it cannot be converted to / wrapped with @XmlElementWrapper
+        if (outerXmlElement != null && outerXmlElement.getAnnotationMembers().get("type") != null) return;
+
+        migrateAnnotation(outerField, innerField, outerClass, innerClass);
+        addXmlElementWrapper(outerField, outerXmlElement);
+
+        var newType = innerField.type();
+        outerField.type(newType);
+
+        // Update getter and setter methods
+        var fieldName = outerField.name();
+        var capName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+        var getterName = "get" + capName;
+        var setterName = "set" + capName;
+
+        for (var method : outerClass.methods()) {
+            if (method.name().equals(getterName) && method.params().isEmpty()) {
+                method.type(newType);
+            } else if (method.name().equals(setterName) && method.params().size() == 1) {
+                method.params().getFirst().type(newType);
+            }
+        }
+
+        if (Boolean.TRUE.equals(removeWrapperClass)) {
+            removeWrapperClass(innerClass);
+        }
+    }
+
+    private void addXmlElementWrapper(JFieldVar outerField, JAnnotationUse outerXmlElement) {
+        var xmlElementWrapper = outerField.annotate(XmlElementWrapper.class);
+        if (outerXmlElement == null) return;
+
+        outerField.removeAnnotation(outerXmlElement);
+        outerXmlElement.getAnnotationMembers().forEach((key, value) -> {
+            switch (key) {
+                case "name" -> xmlElementWrapper.param("name", value);
+                case "nillable" -> xmlElementWrapper.param("nillable", value);
+                case "required" -> xmlElementWrapper.param("required", value);
+                case "namespace" -> xmlElementWrapper.param("namespace", value);
+                default -> {
+                    // Ignore other members
+                }
+            }
+        });
+    }
+
+    private void migrateAnnotation(JFieldVar outerField, JFieldVar innerField, JDefinedClass outerClass, JDefinedClass innerClass) {
+        JAnnotationUse targetAnnotation;
+        if ((targetAnnotation = getAnnotation(innerField, XmlElement.class)) != null
+            || (targetAnnotation = getAnnotation(innerField, XmlElementRef.class)) != null) {
+            var newAnnotation = outerField.annotate(targetAnnotation.getAnnotationClass());
+            copyAnnotationMembers(targetAnnotation, newAnnotation);
+
+            setXmlElementName(newAnnotation, outerField, innerField);
+        } else if ((targetAnnotation = getAnnotation(innerField, XmlElements.class)) != null
+            || (targetAnnotation = getAnnotation(innerField, XmlElementRefs.class)) != null) {
+            var newArrayAnnotation = outerField.annotate(targetAnnotation.getAnnotationClass());
+            copyAnnotationMembers(targetAnnotation, newArrayAnnotation);
+
+            var value = (JAnnotationArrayMember) targetAnnotation.getAnnotationMembers().get("value");
+
+            // override the value array
+            var newValues = newArrayAnnotation.paramArray("value");
+            value.annotations().forEach(anno -> {
+                var newAnno = newValues.annotate(anno.getAnnotationClass());
+                copyAnnotationMembers(anno, newAnno);
+
+                setXmlElementName(newAnno, outerField, innerField);
+            });
+        } else if (!outerField.name().equals(innerField.name())) {
+            var newXmlElement = outerField.annotate(XmlElement.class);
+
+            setXmlElementName(newXmlElement, outerField, innerField);
+        }
+
+        var targetAnnotationName = targetAnnotation == null ? null : targetAnnotation.getAnnotationClass().fullName();
+        if (Objects.equals(targetAnnotationName, XmlElementRef.class.getName()) || Objects.equals(targetAnnotationName, XmlElementRefs.class.getName())) {
+            mergeSeeAlsoClass(outerClass, innerClass);
+        }
+
+        copyAnnotation(outerField, innerField, XmlJavaTypeAdapter.class);
+        copyAnnotation(outerField, innerField, XmlJavaTypeAdapters.class);
+    }
+
+    private void copyAnnotation(JFieldVar outerField, JFieldVar innerField, Class<? extends Annotation> annotationClass) {
+        var targetAnnotation = getAnnotation(innerField, annotationClass);
+        if (targetAnnotation == null) return;
+
+        var newAnnotation = outerField.annotate(targetAnnotation.getAnnotationClass());
+        copyAnnotationMembers(targetAnnotation, newAnnotation);
+    }
+
+    private void mergeSeeAlsoClass(JDefinedClass outerClass, JDefinedClass innerClass) {
+        var innerClassSeeAlso = getAnnotation(innerClass, XmlSeeAlso.class);
+        if (innerClassSeeAlso == null) return;
+
+        var innerSeeAlsoTypes = (JAnnotationArrayMember) innerClassSeeAlso.getAnnotationMembers().get("value");
+
+        var innerSeeAlsoTypesList = innerSeeAlsoTypes.annotations2().stream()
+            .map(i -> (JAnnotationClassValue) i)
+            .map(i -> i.type().fullName())
+            .toList();
+        var outerClassSeeAlso = getAnnotation(outerClass, XmlSeeAlso.class);
+        if (outerClassSeeAlso == null) {
+            outerClassSeeAlso = outerClass.annotate(XmlSeeAlso.class);
+            outerClassSeeAlso.paramArray("value");
+        }
+        var outerSeeAlsoTypes = (JAnnotationArrayMember) outerClassSeeAlso.getAnnotationMembers().get("value");
+        var outerSeeAlsoTypesList = outerSeeAlsoTypes.annotations2().stream()
+            .map(i -> (JAnnotationClassValue) i)
+            .map(i -> i.type().fullName())
+            .toList();
+
+        for (var className : innerSeeAlsoTypesList) {
+            if (!outerSeeAlsoTypesList.contains(className)) {
+                outerSeeAlsoTypes.param(outerClass.owner().ref(className));
+            }
+        }
+    }
+
+    private void setXmlElementName(JAnnotationUse targetAnnotation, JFieldVar outerField, JFieldVar innerField) {
+        var name = getAnnotationNameValue(targetAnnotation);
+        if (name == null && !outerField.name().equals(innerField.name())) {
+            targetAnnotation.param("name", innerField.name());
+        }
+    }
+
+    private void copyAnnotationMembers(JAnnotationUse source, JAnnotationUse target) {
+        for (var member : source.getAnnotationMembers().entrySet()) {
+            target.param(member.getKey(), member.getValue());
+        }
+    }
+
+    private String getAnnotationNameValue(JAnnotationUse annotation) {
+        if (annotation == null) {
+            return null;
+        }
+        var value = annotation.getAnnotationMembers().get("name");
+        if (value == null) {
+            return null;
+        }
+        return value.toString();
     }
 
     /**
@@ -145,22 +267,60 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * @param outline The JAXB outline to search.
      * @return A map of wrapper class names to their {@link CClassInfo} instances.
      */
-    public Map<String, CClassInfo> findWrapperClasses(Outline outline) {
-        var model = outline.getModel();
-        return model.beans().values().stream()
-            .filter(bean -> {
-                var properties = bean.getProperties();
-                if (properties == null || properties.size() != 1) return false;
-                var baseClass = bean.getBaseClass();
-                while (baseClass != null) {
-                    var baseProperties = baseClass.getProperties();
-                    if (baseProperties != null && !baseProperties.isEmpty()) return false;
-                    baseClass = baseClass.getBaseClass();
-                }
-                var propertyInfo = properties.getFirst();
-                return propertyInfo.isCollection() && propertyInfo.ref().size() == 1;
-            })
-            .collect(Collectors.toMap(CClassInfo::getName, Function.identity()));
+    public Map<String, ClassOutline> findElementWrapperClasses(Outline outline) {
+        return outline.getClasses().stream()
+            .filter(this::checkClassStructure)
+            .filter(this::checkFieldAnnotation)
+            .collect(Collectors.toMap(i -> i.implClass.fullName(), Function.identity()));
+    }
+
+    /**
+     * 1. The class must declare exactly one collection property.
+     * 2. The class must not inherit any additional properties from its base classes.
+     *
+     * @param classOutline The class to check.
+     * @return {@code true} if the class is a wrapper class, {@code false} otherwise.
+     */
+    private boolean checkClassStructure(ClassOutline classOutline) {
+        var classInfo = classOutline.target;
+        var properties = classInfo.getProperties();
+        if (properties == null || properties.size() != 1) return false;
+        var baseClass = classInfo.getBaseClass();
+        while (baseClass != null) {
+            var baseProperties = baseClass.getProperties();
+            if (baseProperties != null && !baseProperties.isEmpty()) return false;
+            baseClass = baseClass.getBaseClass();
+        }
+        var propertyInfo = properties.getFirst();
+        if (!(propertyInfo.isCollection() && propertyInfo.ref().size() == 1)) return false;
+
+        return classOutline.implClass.fields().size() == 1;
+    }
+
+    private boolean checkFieldAnnotation(ClassOutline classOutline) {
+        var implClass = classOutline.implClass;
+        var fields = implClass.fields();
+        return fields.values().stream().noneMatch(this::hasConflictingAnnotation);
+    }
+
+    private boolean isConflictingJaxbAnnotation(String className) {
+        return className.equals(XmlElementWrapper.class.getName())
+            || className.equals(XmlAttribute.class.getName())
+            || className.equals(XmlAnyAttribute.class.getName())
+            || className.equals(XmlValue.class.getName())
+            || className.equals(XmlList.class.getName())
+            || className.equals(XmlTransient.class.getName());
+    }
+
+    private boolean hasConflictingAnnotation(JFieldVar field) {
+        var classNamePrefix = XmlElementWrapper.class.getPackageName() + ".";
+        return field.annotations().stream().anyMatch(anno -> {
+            var className = anno.getAnnotationClass().fullName();
+            if (!className.startsWith(classNamePrefix)) {
+                return false;
+            }
+            return isConflictingJaxbAnnotation(className);
+        });
     }
 
     /**
@@ -178,7 +338,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         jaxbDebugClass.methods().removeIf(method -> method.name().equals("createContext"));
 
         var createContextMethod = jaxbDebugClass.method(JMod.PUBLIC | JMod.STATIC, JAXBContext.class, "createContext");
-        var $classLoader = createContextMethod.param(ClassLoader.class, "classLoader");
+        var classLoader = createContextMethod.param(ClassLoader.class, "classLoader");
         createContextMethod._throws(JAXBException.class);
         var invoke = codeModel.ref(JAXBContext.class).staticInvoke("newInstance");
         createContextMethod.body()._return(invoke);
@@ -190,7 +350,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
                 for (var packageOutline : packageContexts) {
                     joiner.add(packageOutline._package().name());
                 }
-                invoke.arg(joiner.toString()).arg($classLoader);
+                invoke.arg(joiner.toString()).arg(classLoader);
             }
             case BEAN_ONLY -> {
                 for (var packageContext : packageContexts) {
@@ -202,27 +362,6 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             }
             default -> throw new IllegalStateException();
         }
-    }
-
-    /**
-     * Gets the XML element name for a field.
-     *
-     * @param field The field to get the XML element name for.
-     * @return The XML element name.
-     */
-    public String getXmlElementName(JFieldVar field) {
-        var xmlElementAnno = getAnnotation(field, XmlElement.class);
-        if (xmlElementAnno == null) {
-            xmlElementAnno = getAnnotation(field, XmlRootElement.class);
-        }
-        if (xmlElementAnno == null) {
-            return field.name();
-        }
-        var name = xmlElementAnno.getAnnotationMembers().get("name");
-        if (name == null) {
-            return field.name();
-        }
-        return name.toString();
     }
 
     /**
