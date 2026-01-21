@@ -37,7 +37,9 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
             var xmlElementAnno = itemsField.getAnnotation(XmlElement.class);
             var xmlElementWrapper = itemsField.getAnnotation(XmlElementWrapper.class);
             assertThat(xmlElementAnno).isNotNull();
+            assertThat(xmlElementAnno.name()).isEqualTo("item");
             assertThat(xmlElementWrapper).isNotNull();
+            assertThat(xmlElementWrapper.name()).isEqualTo("##default");
         });
     }
 }
