@@ -255,9 +255,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         var outerClassSeeAlso = getAnnotation(outerClass, XmlSeeAlso.class);
         if (outerClassSeeAlso == null) {
             outerClassSeeAlso = outerClass.annotate(XmlSeeAlso.class);
-            outerClassSeeAlso.paramArray("value");
         }
         var outerSeeAlsoTypes = (JAnnotationArrayMember) outerClassSeeAlso.getAnnotationMembers().get("value");
+        if (outerSeeAlsoTypes == null) {
+            outerSeeAlsoTypes = outerClassSeeAlso.paramArray("value");
+        }
         var outerSeeAlsoTypesList = outerSeeAlsoTypes.annotations2().stream()
             .map(i -> (JAnnotationClassValue) i)
             .map(i -> i.type().fullName())
