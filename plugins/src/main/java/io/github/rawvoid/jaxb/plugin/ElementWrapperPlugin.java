@@ -30,9 +30,7 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.lang.annotation.Annotation;
-import java.util.Map;
-import java.util.Objects;
-import java.util.StringJoiner;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -56,7 +54,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
         var elementWrapperClasses = findElementWrapperClasses(outline);
-
+        var allClasses = outline.getClasses().stream()
+            .map(i -> i.implClass)
+            .toList();
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
             var fields = implClass.fields();
@@ -71,6 +71,20 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
                 return getAnnotation(field, XmlElementWrapper.class) == null;
             }).forEach(field -> handleWrapperField(field, implClass));
+        }
+
+        if (Boolean.TRUE.equals(removeWrapperClass)) {
+            var removedClasses = new ArrayList<JDefinedClass>();
+            var notRemovedClasses = new ArrayList<JDefinedClass>();
+            elementWrapperClasses.values().stream().map(ClassOutline::getImplClass).forEach(wrapperClass -> {
+                var removed = removeWrapperClass(wrapperClass, allClasses);
+                if (removed) {
+                    removedClasses.add(wrapperClass);
+                } else {
+                    notRemovedClasses.add(wrapperClass);
+                }
+            });
+
         }
 
         if (opt.debugMode) {
@@ -108,10 +122,6 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             } else if (method.name().equals(setterName) && method.params().size() == 1) {
                 method.params().getFirst().type(newType);
             }
-        }
-
-        if (Boolean.TRUE.equals(removeWrapperClass)) {
-            removeWrapperClass(innerClass);
         }
     }
 
@@ -231,12 +241,55 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return value.toString();
     }
 
+    private boolean removeWrapperClass(JDefinedClass wrapperClass, List<JDefinedClass> allClasses) {
+        var wrapperClassName = wrapperClass.fullName();
+        var existsReference = allClasses.stream().anyMatch(jDefinedClass -> {
+            if (jDefinedClass.fullName().equals(wrapperClassName)) {
+                return false;
+            }
+            var superClass = jDefinedClass.superClass();
+            if (superClass != null && superClass.fullName().equals(wrapperClassName)) {
+                return true;
+            }
+
+            var hasReference = jDefinedClass.fields().values().stream().anyMatch(field -> {
+                var typeName = field.type().fullName();
+                return typeName.contains(wrapperClassName);
+            });
+
+            if (hasReference) {
+                return true;
+            }
+
+            hasReference = jDefinedClass.methods().stream().anyMatch(method -> {
+                var returnTypeName = method.type().fullName();
+                if (returnTypeName.contains(wrapperClassName)) {
+                    return true;
+                }
+
+                var paramTypeNames = method.params().stream()
+                    .map(JVar::type)
+                    .map(JType::fullName)
+                    .toList();
+
+                return paramTypeNames.stream().anyMatch(typeName -> typeName.contains(wrapperClassName));
+            });
+
+            return hasReference;
+        });
+        if (!existsReference) {
+            removeWrapperClass(wrapperClass);
+        }
+
+        return !existsReference;
+    }
+
     /**
      * Removes the wrapper class from the parent container and ObjectFactory.
      *
      * @param wrapperClass The wrapper class to remove.
      */
-    public void removeWrapperClass(JDefinedClass wrapperClass) {
+    private void removeWrapperClass(JDefinedClass wrapperClass) {
         if (wrapperClass.classes().hasNext()) {
             return;
         }
