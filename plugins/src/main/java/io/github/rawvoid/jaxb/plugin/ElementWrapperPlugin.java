@@ -61,7 +61,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         var elementWrapperClasses = findElementWrapperClasses(outline);
         var allClasses = outline.getClasses().stream()
             .map(i -> i.implClass)
-            .toList();
+            .collect(Collectors.toSet());
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
             var fields = implClass.fields();
@@ -95,11 +95,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
             var message = String.join("\n    ", removedClasses.stream()
                 .map(JDefinedClass::fullName).toList());
-            log.info("Removed wrapper class: {}", message);
+            log.info("Removed wrapper classes: {}", message);
 
             message = String.join("\n    ", notRemovedClasses.stream()
                 .map(JDefinedClass::fullName).toList());
-            log.info("Skipped removing wrapper class: {}", message);
+            log.info("Skipped removing wrapper classes: {}", message);
 
         }
 
@@ -311,47 +311,115 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * If any reference remains, the wrapper class is preserved.
      * </p>
      */
-    private boolean removeWrapperClass(JDefinedClass wrapperClass, List<JDefinedClass> allClasses) {
+    private boolean removeWrapperClass(JDefinedClass wrapperClass, Set<JDefinedClass> allClasses) {
+        // Wrapper classes with inner classes are not removable.
+        if (wrapperClass.classes().hasNext()) {
+            return false;
+        }
+        allClasses.removeIf(definedClass -> definedClass.equals(wrapperClass));
         var wrapperClassName = wrapperClass.fullName();
-        var existsReference = allClasses.stream().anyMatch(jDefinedClass -> {
-            if (jDefinedClass.fullName().equals(wrapperClassName)) {
-                return false;
-            }
-            var superClass = jDefinedClass.superClass();
-            if (superClass != null && superClass.fullName().equals(wrapperClassName)) {
-                return true;
-            }
-
-            var hasReference = jDefinedClass.fields().values().stream().anyMatch(field -> {
-                var typeName = field.type().fullName();
-                return typeName.contains(wrapperClassName);
-            });
-
-            if (hasReference) {
-                return true;
-            }
-
-            hasReference = jDefinedClass.methods().stream().anyMatch(method -> {
-                var returnTypeName = method.type().fullName();
-                if (returnTypeName.contains(wrapperClassName)) {
-                    return true;
-                }
-
-                var paramTypeNames = method.params().stream()
-                    .map(JVar::type)
-                    .map(JType::fullName)
-                    .toList();
-
-                return paramTypeNames.stream().anyMatch(typeName -> typeName.contains(wrapperClassName));
-            });
-
-            return hasReference;
-        });
+        var existsReference = allClasses.stream()
+            .anyMatch(definedClass -> hasReference(definedClass, wrapperClassName));
         if (!existsReference) {
-            removeWrapperClass(wrapperClass);
+            return removeWrapperClass(wrapperClass);
         }
 
-        return !existsReference;
+        return false;
+    }
+
+    /**
+     * Returns true if the definedClass references the classFullName.
+     *
+     * @param definedClass  the class to check for references
+     * @param classFullName the full name of the class to check for references
+     * @return true if the definedClass references the classFullName
+     */
+    private boolean hasReference(JDefinedClass definedClass, String classFullName) {
+        var superClass = definedClass.superClass();
+        var isRefBySuperClass = superClass != null && ClassNameDetector.detect(superClass.fullName(), classFullName);
+
+        return isRefBySuperClass
+            || isRefByAnnotation(definedClass, classFullName)
+            || definedClass.fields().values().stream()
+            .anyMatch(field -> isRefInField(field, classFullName))
+
+            || definedClass.methods().stream()
+            .anyMatch(method -> isRefInMethod(method, classFullName));
+    }
+
+    /**
+     * Returns true if the field type or annotation references the classFullName.
+     */
+    private boolean isRefInField(JFieldVar fieldVar, String classFullName) {
+        var typeName = fieldVar.type().fullName();
+        var isRefByType = ClassNameDetector.detect(typeName, classFullName);
+
+        return isRefByType || isRefByAnnotation(fieldVar, classFullName);
+    }
+
+    /**
+     * Returns true if the method return type or annotation references the classFullName.
+     */
+    private boolean isRefInMethod(JMethod method, String classFullName) {
+        var returnTypeName = method.type().fullName();
+        var isRefByReturn = ClassNameDetector.detect(returnTypeName, classFullName);
+
+        return isRefByReturn || isRefByAnnotation(method, classFullName)
+            || method.params().stream()
+            .anyMatch(param -> isRefInMethodParam(param, classFullName));
+    }
+
+    /**
+     * Returns true if the method parameter type or annotation references the classFullName.
+     */
+    private boolean isRefInMethodParam(JVar param, String classFullName) {
+        var typeName = param.type().fullName();
+        var isRefByType = ClassNameDetector.detect(typeName, classFullName);
+
+        return isRefByType || isRefByAnnotation(param, classFullName);
+    }
+
+    /**
+     * Returns true if the annotatable contains a reference to the classFullName.
+     */
+    private boolean isRefByAnnotation(JAnnotatable annotatable, String classFullName) {
+        if (annotatable == null) {
+            return false;
+        }
+        return annotatable.annotations().stream()
+            .anyMatch(annotation -> isRefInAnnotation(annotation, classFullName));
+    }
+
+    /**
+     * Returns true if the annotation contains a reference to the classFullName.
+     */
+    private boolean isRefInAnnotation(JAnnotationUse annotation, String classFullName) {
+        if (annotation == null) {
+            return false;
+        }
+        return annotation.getAnnotationMembers().values().stream().anyMatch(value -> switch (value) {
+            case JAnnotationClassValue classValue ->
+                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
+            case JAnnotationArrayMember arrayMember -> isRefInAnnotationArrayMember(arrayMember, classFullName);
+            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
+            default -> false;
+        });
+    }
+
+    /**
+     * Returns true if the annotation array member contains a reference to the classFullName.
+     */
+    private boolean isRefInAnnotationArrayMember(JAnnotationArrayMember arrayMember, String classFullName) {
+        if (arrayMember == null) {
+            return false;
+        }
+        return arrayMember.annotations2().stream().anyMatch(value -> switch (value) {
+            case JAnnotationClassValue classValue ->
+                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
+            case JAnnotationArrayMember subArrayMember -> isRefInAnnotationArrayMember(subArrayMember, classFullName);
+            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
+            default -> false;
+        });
     }
 
     /**
@@ -359,10 +427,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      *
      * @param wrapperClass The wrapper class to remove.
      */
-    private void removeWrapperClass(JDefinedClass wrapperClass) {
-        if (wrapperClass.classes().hasNext()) {
-            return;
-        }
+    private boolean removeWrapperClass(JDefinedClass wrapperClass) {
         // Remove the wrapper class from the parent container
         var parentContainer = wrapperClass.parentContainer();
         var classes = switch (parentContainer) {
@@ -370,14 +435,21 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             case JPackage jPackage -> jPackage.classes();
             default -> throw new IllegalArgumentException("Unknown parent container type: " + parentContainer);
         };
-        while (classes.hasNext() && wrapperClass.equals(classes.next())) {
-            classes.remove();
+        while (classes.hasNext()) {
+            if (wrapperClass.equals(classes.next())) {
+                classes.remove();
+                break;
+            }
         }
 
         // Remove the wrapper class from the ObjectFactory
         var jPackage = wrapperClass._package();
         var objectFactoryClass = jPackage._getClass("ObjectFactory");
-        objectFactoryClass.methods().removeIf(method -> method.type().equals(wrapperClass));
+
+        objectFactoryClass.methods().removeIf(method ->
+            ClassNameDetector.detect(method.type().fullName(), wrapperClass.fullName()));
+
+        return true;
     }
 
     /**
