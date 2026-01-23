@@ -286,7 +286,7 @@ Add this to your Maven `pom.xml`:
 <dependency>
     <groupId>io.github.rawvoid</groupId>
     <artifactId>jaxb-plugins</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 
@@ -302,7 +302,7 @@ Add this to your Maven `pom.xml`:
             <plugin>
                 <groupId>io.github.rawvoid</groupId>
                 <artifactId>jaxb-plugins</artifactId>
-                <version>1.2.0</version>
+                <version>1.3.0</version>
             </plugin>
         </plugins>
         <args>
