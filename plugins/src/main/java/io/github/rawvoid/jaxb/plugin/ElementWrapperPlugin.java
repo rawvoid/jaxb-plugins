@@ -22,6 +22,7 @@ import com.sun.tools.xjc.model.CClassInfo;
 import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.annotation.*;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
@@ -466,61 +467,76 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      */
     private Map<String, ClassOutline> findElementWrapperClasses(Outline outline) {
         return outline.getClasses().stream()
-            .filter(this::checkClassStructure)
-            .filter(this::checkFieldAnnotation)
+            .filter(this::isWrapperClass)
             .collect(Collectors.toMap(i -> i.implClass.fullName(), Function.identity()));
     }
 
     /**
-     * Checks whether a class matches the wrapper-class structure definition.
+     * Checks if a class is a wrapper class that can be flattened by the plugin.
      * <p>
-     * Rules:
+     * A wrapper class is defined as:
      * <ul>
-     *     <li>The class declares exactly one collection property.</li>
-     *     <li>No additional properties are inherited from base classes.</li>
-     *     <li>The generated implementation has exactly one field.</li>
+     *     <li>Not an abstract class</li>
+     *     <li>Not an interface</li>
+     *     <li>Has no superclass</li>
+     *     <li>Contains exactly one non-static field</li>
+     *     <li>The field type is a collection</li>
+     *     <li>The field type is not JAXBElement</li>
+     *     <li>The field has no conflicting JAXB annotations</li>
      * </ul>
      * </p>
      *
-     * @param classOutline The class to check.
-     * @return {@code true} if the class is a wrapper class, {@code false} otherwise.
+     * @param classOutline The class outline to check
+     * @return {@code true} if the class is a wrapper class, {@code false} otherwise
      */
-    private boolean checkClassStructure(ClassOutline classOutline) {
-        var classInfo = classOutline.target;
-        var properties = classInfo.getProperties();
-        if (properties == null || properties.size() != 1) return false;
-        var baseClass = classInfo.getBaseClass();
-        while (baseClass != null) {
-            var baseProperties = baseClass.getProperties();
-            if (baseProperties != null && !baseProperties.isEmpty()) return false;
-            baseClass = baseClass.getBaseClass();
-        }
-        var propertyInfo = properties.getFirst();
-        if (!(propertyInfo.isCollection() && propertyInfo.ref().size() == 1)) return false;
-
-        return classOutline.implClass.fields().size() == 1;
-    }
-
-    /**
-     * Ensures the wrapper candidate field does not carry JAXB annotations that
-     * would make wrapper flattening unsafe.
-     */
-    private boolean checkFieldAnnotation(ClassOutline classOutline) {
+    private boolean isWrapperClass(ClassOutline classOutline) {
         var implClass = classOutline.implClass;
+        // Check if the class is abstract, an interface, or has a superclass, it cannot be a wrapper class.
+        if (implClass.isAbstract() || implClass.isInterface() || implClass.superClass() != null) {
+            return false;
+        }
+
         var fields = implClass.fields();
-        return fields.values().stream().noneMatch(this::hasConflictingAnnotation);
+        if (fields.size() != 1) {
+            return false;
+        }
+
+        // Get the single field
+        var field = fields.values().iterator().next();
+        if (isStatic(field.mods())) {
+            return false;
+        }
+        var fieldTypeName = field.type().fullName();
+
+        return isCollection(fieldTypeName)
+            && !ClassNameDetector.detect(fieldTypeName, JAXBElement.class.getName())
+            && !hasConflictingAnnotation(field);
     }
 
     /**
-     * Returns true for JAXB annotations that conflict with wrapper flattening.
+     * Returns true if the modifiers contain the static modifier.
      */
-    private boolean isConflictingJaxbAnnotation(String className) {
-        return className.equals(XmlElementWrapper.class.getName())
-            || className.equals(XmlAttribute.class.getName())
-            || className.equals(XmlAnyAttribute.class.getName())
-            || className.equals(XmlValue.class.getName())
-            || className.equals(XmlList.class.getName())
-            || className.equals(XmlTransient.class.getName());
+    private boolean isStatic(JMods mods) {
+        return (mods.getValue() & JMod.STATIC) != 0;
+    }
+
+    /**
+     * Returns true if the full type name is a collection type.
+     */
+    private boolean isCollection(String fullTypeName) {
+        if (fullTypeName == null) {
+            return false;
+        }
+        var idx = fullTypeName.indexOf('<');
+        if (idx > 0) {
+            fullTypeName = fullTypeName.substring(0, idx);
+        }
+        try {
+            var clazz = Class.forName(fullTypeName);
+            return Collection.class.isAssignableFrom(clazz);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -535,6 +551,18 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             }
             return isConflictingJaxbAnnotation(className);
         });
+    }
+
+    /**
+     * Returns true for JAXB annotations that conflict with wrapper flattening.
+     */
+    private boolean isConflictingJaxbAnnotation(String className) {
+        return className.equals(XmlElementWrapper.class.getName())
+            || className.equals(XmlAttribute.class.getName())
+            || className.equals(XmlAnyAttribute.class.getName())
+            || className.equals(XmlValue.class.getName())
+            || className.equals(XmlList.class.getName())
+            || className.equals(XmlTransient.class.getName());
     }
 
     /**
