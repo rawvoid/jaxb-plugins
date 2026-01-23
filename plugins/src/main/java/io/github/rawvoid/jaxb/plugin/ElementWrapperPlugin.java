@@ -26,6 +26,8 @@ import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.annotation.*;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
@@ -47,6 +49,8 @@ import java.util.stream.Collectors;
  */
 @Option(name = "Xelement-wrapper")
 public class ElementWrapperPlugin extends AbstractPlugin {
+
+    private static final Logger log = LoggerFactory.getLogger(ElementWrapperPlugin.class);
 
     @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
     Boolean removeWrapperClass;
@@ -84,6 +88,14 @@ public class ElementWrapperPlugin extends AbstractPlugin {
                     notRemovedClasses.add(wrapperClass);
                 }
             });
+
+            var message = String.join("\n    ", removedClasses.stream()
+                .map(JDefinedClass::fullName).toList());
+            log.info("Removed wrapper class: {}", message);
+
+            message = String.join("\n    ", notRemovedClasses.stream()
+                .map(JDefinedClass::fullName).toList());
+            log.info("Skipped removing wrapper class: {}", message);
 
         }
 
