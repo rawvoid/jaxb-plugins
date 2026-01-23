@@ -57,6 +57,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+        // Identify candidate wrapper classes once and reuse across the run.
         var elementWrapperClasses = findElementWrapperClasses(outline);
         var allClasses = outline.getClasses().stream()
             .map(i -> i.implClass)
@@ -66,13 +67,16 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             var fields = implClass.fields();
 
             fields.values().stream().filter(field -> {
+                // Only handle fields whose type is a recognized wrapper class.
                 if (!elementWrapperClasses.containsKey(field.type().fullName())) return false;
 
                 // Skip if the field has a @XmlJavaTypeAdapter or @XmlJavaTypeAdapters annotation
+                // because the adapter expects the wrapper type and changing it would break behavior.
                 var hasTypeAdapter = getAnnotation(field, XmlJavaTypeAdapter.class) != null
                     || getAnnotation(field, XmlJavaTypeAdapters.class) != null;
                 if (hasTypeAdapter) return false;
 
+                // Skip if wrapper annotation already exists to avoid duplicate annotations.
                 return getAnnotation(field, XmlElementWrapper.class) == null;
             }).forEach(field -> handleWrapperField(field, implClass));
         }
@@ -106,6 +110,15 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return true;
     }
 
+    /**
+     * Flattens a wrapper field by migrating element annotations and retyping the field.
+     * <p>
+     * The wrapper class is expected to contain exactly one collection field. This method
+     * moves the element-related annotations from the inner field to the outer field,
+     * adds the {@link XmlElementWrapper} annotation, and updates accessor signatures
+     * to the inner collection type.
+     * </p>
+     */
     private void handleWrapperField(JFieldVar outerField, JDefinedClass outerClass) {
         var type = outerField.type();
 
@@ -137,6 +150,14 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Adds {@link XmlElementWrapper} to the outer field and reuses compatible members from
+     * the existing {@link XmlElement} annotation.
+     * <p>
+     * Only a subset of members are compatible with {@link XmlElementWrapper}; other members
+     * (e.g., type) are intentionally ignored.
+     * </p>
+     */
     private void addXmlElementWrapper(JFieldVar outerField, JAnnotationUse outerXmlElement) {
         var xmlElementWrapper = outerField.annotate(XmlElementWrapper.class);
         if (outerXmlElement == null) return;
@@ -155,6 +176,19 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         });
     }
 
+    /**
+     * Migrates element annotations from the inner field to the outer field.
+     * <p>
+     * Rules:
+     * <ul>
+     *     <li>Prefer {@link XmlElement}/{@link XmlElementRef} when present.</li>
+     *     <li>Otherwise copy array variants {@link XmlElements}/{@link XmlElementRefs}.</li>
+     *     <li>If no relevant annotation exists and the names differ, synthesize {@link XmlElement}.</li>
+     * </ul>
+     * If an element-ref style is used, merge {@link XmlSeeAlso} information from the wrapper
+     * class into the owning class to keep polymorphic bindings intact.
+     * </p>
+     */
     private void migrateAnnotation(JFieldVar outerField, JFieldVar innerField, JDefinedClass outerClass, JDefinedClass innerClass) {
         JAnnotationUse targetAnnotation;
         if ((targetAnnotation = getAnnotation(innerField, XmlElement.class)) != null
@@ -193,6 +227,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         copyAnnotation(outerField, innerField, XmlJavaTypeAdapters.class);
     }
 
+    /**
+     * Copies a single annotation (if present) from the inner field to the outer field.
+     */
     private void copyAnnotation(JFieldVar outerField, JFieldVar innerField, Class<? extends Annotation> annotationClass) {
         var targetAnnotation = getAnnotation(innerField, annotationClass);
         if (targetAnnotation == null) return;
@@ -201,6 +238,10 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         copyAnnotationMembers(targetAnnotation, newAnnotation);
     }
 
+    /**
+     * Merges {@link XmlSeeAlso} class references from the wrapper class into the
+     * owning class to preserve polymorphic element references after flattening.
+     */
     private void mergeSeeAlsoClass(JDefinedClass outerClass, JDefinedClass innerClass) {
         var innerClassSeeAlso = getAnnotation(innerClass, XmlSeeAlso.class);
         if (innerClassSeeAlso == null) return;
@@ -229,6 +270,10 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Ensures the element name stays consistent when the wrapper field name differs
+     * from the inner collection field name.
+     */
     private void setXmlElementName(JAnnotationUse targetAnnotation, JFieldVar outerField, JFieldVar innerField) {
         var name = getAnnotationNameValue(targetAnnotation);
         if (name == null && !outerField.name().equals(innerField.name())) {
@@ -236,12 +281,18 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Copies all annotation members from source to target.
+     */
     private void copyAnnotationMembers(JAnnotationUse source, JAnnotationUse target) {
         for (var member : source.getAnnotationMembers().entrySet()) {
             target.param(member.getKey(), member.getValue());
         }
     }
 
+    /**
+     * Returns the explicit "name" member of an annotation if present.
+     */
     private String getAnnotationNameValue(JAnnotationUse annotation) {
         if (annotation == null) {
             return null;
@@ -253,6 +304,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return value.toString();
     }
 
+    /**
+     * Removes the wrapper class when it is not referenced by any other generated class.
+     * <p>
+     * References include: super types, field types, return types, and parameter types.
+     * If any reference remains, the wrapper class is preserved.
+     * </p>
+     */
     private boolean removeWrapperClass(JDefinedClass wrapperClass, List<JDefinedClass> allClasses) {
         var wrapperClassName = wrapperClass.fullName();
         var existsReference = allClasses.stream().anyMatch(jDefinedClass -> {
@@ -332,7 +390,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * @param outline The JAXB outline to search.
      * @return A map of wrapper class names to their {@link CClassInfo} instances.
      */
-    public Map<String, ClassOutline> findElementWrapperClasses(Outline outline) {
+    private Map<String, ClassOutline> findElementWrapperClasses(Outline outline) {
         return outline.getClasses().stream()
             .filter(this::checkClassStructure)
             .filter(this::checkFieldAnnotation)
@@ -340,8 +398,15 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * 1. The class must declare exactly one collection property.
-     * 2. The class must not inherit any additional properties from its base classes.
+     * Checks whether a class matches the wrapper-class structure definition.
+     * <p>
+     * Rules:
+     * <ul>
+     *     <li>The class declares exactly one collection property.</li>
+     *     <li>No additional properties are inherited from base classes.</li>
+     *     <li>The generated implementation has exactly one field.</li>
+     * </ul>
+     * </p>
      *
      * @param classOutline The class to check.
      * @return {@code true} if the class is a wrapper class, {@code false} otherwise.
@@ -362,12 +427,19 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return classOutline.implClass.fields().size() == 1;
     }
 
+    /**
+     * Ensures the wrapper candidate field does not carry JAXB annotations that
+     * would make wrapper flattening unsafe.
+     */
     private boolean checkFieldAnnotation(ClassOutline classOutline) {
         var implClass = classOutline.implClass;
         var fields = implClass.fields();
         return fields.values().stream().noneMatch(this::hasConflictingAnnotation);
     }
 
+    /**
+     * Returns true for JAXB annotations that conflict with wrapper flattening.
+     */
     private boolean isConflictingJaxbAnnotation(String className) {
         return className.equals(XmlElementWrapper.class.getName())
             || className.equals(XmlAttribute.class.getName())
@@ -377,6 +449,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             || className.equals(XmlTransient.class.getName());
     }
 
+    /**
+     * Checks whether a field contains JAXB annotations that should prevent wrapper flattening.
+     */
     private boolean hasConflictingAnnotation(JFieldVar field) {
         var classNamePrefix = XmlElementWrapper.class.getPackageName() + ".";
         return field.annotations().stream().anyMatch(anno -> {
@@ -393,7 +468,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      *
      * @param outline The JAXB outline to fix.
      */
-    public void fixJAXBDebugClass(Outline outline) {
+    private void fixJAXBDebugClass(Outline outline) {
         var model = outline.getModel();
         var codeModel = outline.getCodeModel();
         var rootPackage = codeModel.rootPackage();
@@ -437,7 +512,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * @param <T>         The type of the annotation.
      * @return The annotation of the specified type, or null if not found.
      */
-    public <T extends Annotation> JAnnotationUse getAnnotation(JAnnotatable annotatable, Class<T> clazz) {
+    private <T extends Annotation> JAnnotationUse getAnnotation(JAnnotatable annotatable, Class<T> clazz) {
         return annotatable.annotations().stream()
             .filter(anno -> anno.getAnnotationClass().fullName().equals(clazz.getName()))
             .findFirst()
