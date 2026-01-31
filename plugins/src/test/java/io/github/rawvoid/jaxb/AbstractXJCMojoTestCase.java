@@ -49,9 +49,11 @@ import java.util.stream.Collectors;
 public abstract class AbstractXJCMojoTestCase {
 
     protected Path baseDirectory;
-    protected Path schemaDirectory;
     protected Path generatedDirectory;
     protected Path classesDirectory;
+    protected Path schemaDirectory;
+    protected List<String> schemaIncludes;
+    protected List<String> schemaExcludes;
 
     protected AbstractXJCMojoTestCase() {
         this.baseDirectory = Path.of(getClass().getProtectionDomain().getCodeSource().getLocation().getPath())
@@ -65,6 +67,14 @@ public abstract class AbstractXJCMojoTestCase {
     public void setUp() throws Exception {
         cleanDirectory(generatedDirectory);
         cleanDirectory(classesDirectory);
+    }
+
+    public List<Class<?>> testExecute(List<String> args) throws Exception {
+        return this.testExecute(args, ".*", null);
+    }
+
+    public List<Class<?>> testExecute(List<String> args, @Language("RegExp") String regex) throws Exception {
+        return this.testExecute(args, regex, null);
     }
 
     @SuppressWarnings("UnusedReturnValue")
@@ -119,6 +129,12 @@ public abstract class AbstractXJCMojoTestCase {
         var mavenSession = new MavenSession(null, null, request, null);
         mojo.setMavenSession(mavenSession);
         mojo.setSchemaDirectory(schemaDirectory.toFile());
+        if (schemaIncludes != null && !schemaIncludes.isEmpty()) {
+            mojo.setSchemaIncludes(schemaIncludes.toArray(new String[0]));
+        }
+        if (schemaExcludes != null && !schemaExcludes.isEmpty()) {
+            mojo.setSchemaExcludes(schemaExcludes.toArray(new String[0]));
+        }
         mojo.setGenerateDirectory(generatedDirectory.toFile());
         mojo.setGeneratePackage(getGeneratePackage());
         mojo.setArgs(args);
