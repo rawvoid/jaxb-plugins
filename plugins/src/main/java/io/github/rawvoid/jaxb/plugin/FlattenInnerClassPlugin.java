@@ -24,7 +24,6 @@ import org.xml.sax.SAXException;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -54,7 +53,7 @@ public class FlattenInnerClassPlugin extends AbstractPlugin {
         classes.forEach((name, classList) -> {
             if (classList.size() == 1) {
                 var definedClass = classList.getFirst();
-                if (!isPrivate(definedClass) && definedClass.parentContainer() instanceof JDefinedClass) {
+                if (isPublic(definedClass) && definedClass.parentContainer() instanceof JDefinedClass) {
                     moveClass(definedClass, container);
                 }
             }
@@ -65,7 +64,7 @@ public class FlattenInnerClassPlugin extends AbstractPlugin {
         removeFromParentContainer(definedClass);
         setParentContainer(definedClass, newContainer);
         addClassToContainer(definedClass, newContainer);
-        ensureClassModifier(definedClass);
+        clearStaticModifier(definedClass.mods());
     }
 
     private void removeFromParentContainer(JDefinedClass definedClass) {
@@ -112,17 +111,9 @@ public class FlattenInnerClassPlugin extends AbstractPlugin {
         }
     }
 
-    private boolean isPrivate(JDefinedClass definedClass) {
+    private boolean isPublic(JDefinedClass definedClass) {
         var mods = definedClass.mods().getValue();
-        return (mods & JMod.PRIVATE) != 0;
-    }
-
-    private void ensureClassModifier(JDefinedClass definedClass) {
-        var mods = definedClass.mods();
-        Objects.requireNonNull(mods, "Mods cannot be null");
-
-        mods.setPublic();
-        clearStaticModifier(mods);
+        return (mods & JMod.PUBLIC) != 0;
     }
 
     private void clearStaticModifier(JMods mods) {
