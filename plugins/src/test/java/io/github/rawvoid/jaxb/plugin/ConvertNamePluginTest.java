@@ -104,7 +104,7 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
             "-name=Root"
         );
         List<String> list = new ArrayList<>();
-        testExecute(args, ".*(Humanson|Root)", (source, clazz) -> {
+        testExecute(args, ".*\\.(Humanson|Root)", (source, clazz) -> {
             list.add(clazz.getSimpleName());
         });
 
