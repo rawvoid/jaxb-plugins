@@ -6,4 +6,3 @@ io.github.rawvoid.jaxb.plugin.NamespacePlugin
 io.github.rawvoid.jaxb.plugin.ConvertNamePlugin
 io.github.rawvoid.jaxb.plugin.ElementWrapperPlugin
 io.github.rawvoid.jaxb.plugin.NsPrefixPlugin
-io.github.rawvoid.jaxb.plugin.FlattenInnerClassPlugin
