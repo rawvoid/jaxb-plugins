@@ -40,7 +40,7 @@ public class FlattenInnerClassPlugin extends AbstractPlugin {
         outline.getAllPackageContexts().forEach(packageOutline -> {
             var classes = packageOutline.getClasses().stream()
                 .map(classOutline -> classOutline.implClass)
-                .collect(Collectors.groupingBy(JDefinedClass::name));
+                .collect(Collectors.groupingBy(c -> c.name().toUpperCase()));
 
             var objectFactoryClass = packageOutline.objectFactory();
             var jPackage = packageOutline._package();
@@ -80,7 +80,10 @@ public class FlattenInnerClassPlugin extends AbstractPlugin {
 
     private void addClassToContainer(JDefinedClass definedClass, JClassContainer container) {
         var classes = getContainerClassesMap(container);
-        classes.put(definedClass.name(), definedClass);
+        var className = container instanceof JPackage
+            ? definedClass.name()
+            : definedClass.name().toUpperCase();
+        classes.put(className, definedClass);
     }
 
     private void setParentContainer(JDefinedClass definedClass, JClassContainer newContainer) {
