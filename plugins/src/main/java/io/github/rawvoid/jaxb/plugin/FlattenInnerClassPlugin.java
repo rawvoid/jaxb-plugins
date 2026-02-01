@@ -22,9 +22,7 @@ import com.sun.tools.xjc.outline.Outline;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -42,18 +40,46 @@ public class FlattenInnerClassPlugin extends AbstractPlugin {
                 .map(classOutline -> classOutline.implClass)
                 .collect(Collectors.groupingBy(c -> c.name().toUpperCase()));
 
-            var objectFactoryClass = packageOutline.objectFactory();
             var jPackage = packageOutline._package();
-            flattenClasses(jPackage, classes, objectFactoryClass);
+            flattenClasses(jPackage, classes);
+        });
+
+        outline.getClasses().forEach(classOutline -> {
+            var implClass = classOutline.implClass;
+
+            var innerClasses = getInnerClasses(implClass);
+            flattenClasses(implClass, innerClasses);
         });
         return true;
     }
 
-    private void flattenClasses(JClassContainer container, Map<String, List<JDefinedClass>> classes, JDefinedClass objectFactory) {
+    private Map<String, List<JDefinedClass>> getInnerClasses(JDefinedClass definedClass) {
+        Map<String, List<JDefinedClass>> classes = new TreeMap<>();
+        Queue<JDefinedClass> queue = new LinkedList<>();
+        queue.offer(definedClass);
+        while (!queue.isEmpty()) {
+            var currentClass = queue.poll();
+            var innerClasses = currentClass.classes();
+
+            while (innerClasses.hasNext()) {
+                var innerClass = innerClasses.next();
+                queue.offer(innerClass);
+
+                classes.computeIfAbsent(innerClass.name().toUpperCase(), k -> new ArrayList<>())
+                    .add(innerClass);
+            }
+        }
+
+        return classes;
+    }
+
+    private void flattenClasses(JClassContainer container, Map<String, List<JDefinedClass>> classes) {
         classes.forEach((name, classList) -> {
             if (classList.size() == 1) {
                 var definedClass = classList.getFirst();
-                if (isPublic(definedClass) && definedClass.parentContainer() instanceof JDefinedClass) {
+                if (isPublic(definedClass)
+                    && definedClass.parentContainer() instanceof JDefinedClass
+                    && definedClass.parentContainer() != container) {
                     moveClass(definedClass, container);
                 }
             }
@@ -64,7 +90,9 @@ public class FlattenInnerClassPlugin extends AbstractPlugin {
         removeFromParentContainer(definedClass);
         setParentContainer(definedClass, newContainer);
         addClassToContainer(definedClass, newContainer);
-        clearStaticModifier(definedClass.mods());
+        if (newContainer.isPackage()) {
+            clearStaticModifier(definedClass.mods());
+        }
     }
 
     private void removeFromParentContainer(JDefinedClass definedClass) {
