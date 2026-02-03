@@ -104,7 +104,7 @@ public class NormalizeClassPlugin extends AbstractPlugin {
     }
 
     private boolean isEqual(JDefinedClass class1, JDefinedClass class2) {
-        if (!class1.name().equals(class2.name())) {
+        if (!Objects.equals(class1.name(), class2.name())) {
             return false;
         }
 
@@ -124,7 +124,7 @@ public class NormalizeClassPlugin extends AbstractPlugin {
                 .spliteratorUnknownSize(class2._implements(), Spliterator.ORDERED), false)
             .collect(Collectors.toSet());
 
-        if (!implements1.equals(implements2)) {
+        if (!Objects.equals(implements1, implements2)) {
             return false;
         }
 
@@ -148,7 +148,7 @@ public class NormalizeClassPlugin extends AbstractPlugin {
                 return false;
             }
 
-            if (!field1.type().fullName().equals(field2.type().fullName())) {
+            if (!Objects.equals(field1.type().fullName(), field2.type().fullName())) {
                 return false;
             }
 
@@ -170,7 +170,7 @@ public class NormalizeClassPlugin extends AbstractPlugin {
         var map2 = annos2.stream()
             .collect(Collectors.groupingBy(a -> a.getAnnotationClass().fullName()));
 
-        if (!map1.keySet().equals(map2.keySet())) {
+        if (!Objects.equals(map1.keySet(), map2.keySet())) {
             return false;
         }
 
@@ -232,19 +232,19 @@ public class NormalizeClassPlugin extends AbstractPlugin {
         if (value1 instanceof JAnnotationStringValue) {
             var stringValue1 = value1.toString();
             var stringValue2 = value2.toString();
-            if (!stringValue1.equals(stringValue2)) {
+            if (!Objects.equals(stringValue1, stringValue2)) {
                 return false;
             }
         } else if (value1 instanceof JAnnotationClassValue) {
             var type1 = ((JAnnotationClassValue) value1).type();
             var type2 = ((JAnnotationClassValue) value2).type();
-            if (!type1.fullName().equals(type2.fullName())) {
+            if (!Objects.equals(type1.fullName(), type2.fullName())) {
                 return false;
             }
 
             var value1Value = ((JAnnotationClassValue) value1).value();
             var value2Value = ((JAnnotationClassValue) value2).value();
-            if (!value1Value.equals(value2Value)) {
+            if (!Objects.equals(value1Value, value2Value)) {
                 return false;
             }
         } else if (value1 instanceof JAnnotationArrayMember) {
