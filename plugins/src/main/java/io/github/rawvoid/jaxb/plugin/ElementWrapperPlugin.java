@@ -21,9 +21,7 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.CClassInfo;
 import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
-import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBElement;
-import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.annotation.*;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapters;
@@ -105,7 +103,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
 
         if (opt.debugMode) {
-            fixJAXBDebugClass(outline);
+            JaxbClassRefactorUtil.fixJAXBDebugClass(outline);
         }
 
         return true;
@@ -322,7 +320,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         allClasses.removeIf(definedClass -> definedClass.equals(wrapperClass));
         var wrapperClassName = wrapperClass.fullName();
         var existsReference = allClasses.stream()
-            .anyMatch(definedClass -> hasReference(definedClass, wrapperClassName));
+            .anyMatch(definedClass -> JaxbClassRefactorUtil.hasReference(definedClass, wrapperClassName));
         if (!existsReference) {
             return removeWrapperClass(wrapperClass);
         }
@@ -331,126 +329,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * Returns true if the definedClass references the classFullName.
-     *
-     * @param definedClass  the class to check for references
-     * @param classFullName the full name of the class to check for references
-     * @return true if the definedClass references the classFullName
-     */
-    private boolean hasReference(JDefinedClass definedClass, String classFullName) {
-        var superClass = definedClass.superClass();
-        var isRefBySuperClass = superClass != null && ClassNameDetector.detect(superClass.fullName(), classFullName);
-
-        return isRefBySuperClass
-            || isRefByAnnotation(definedClass, classFullName)
-            || definedClass.fields().values().stream()
-            .anyMatch(field -> isRefInField(field, classFullName))
-
-            || definedClass.methods().stream()
-            .anyMatch(method -> isRefInMethod(method, classFullName));
-    }
-
-    /**
-     * Returns true if the field type or annotation references the classFullName.
-     */
-    private boolean isRefInField(JFieldVar fieldVar, String classFullName) {
-        var typeName = fieldVar.type().fullName();
-        var isRefByType = ClassNameDetector.detect(typeName, classFullName);
-
-        return isRefByType || isRefByAnnotation(fieldVar, classFullName);
-    }
-
-    /**
-     * Returns true if the method return type or annotation references the classFullName.
-     */
-    private boolean isRefInMethod(JMethod method, String classFullName) {
-        var returnTypeName = method.type().fullName();
-        var isRefByReturn = ClassNameDetector.detect(returnTypeName, classFullName);
-
-        return isRefByReturn || isRefByAnnotation(method, classFullName)
-            || method.params().stream()
-            .anyMatch(param -> isRefInMethodParam(param, classFullName));
-    }
-
-    /**
-     * Returns true if the method parameter type or annotation references the classFullName.
-     */
-    private boolean isRefInMethodParam(JVar param, String classFullName) {
-        var typeName = param.type().fullName();
-        var isRefByType = ClassNameDetector.detect(typeName, classFullName);
-
-        return isRefByType || isRefByAnnotation(param, classFullName);
-    }
-
-    /**
-     * Returns true if the annotatable contains a reference to the classFullName.
-     */
-    private boolean isRefByAnnotation(JAnnotatable annotatable, String classFullName) {
-        if (annotatable == null) {
-            return false;
-        }
-        return annotatable.annotations().stream()
-            .anyMatch(annotation -> isRefInAnnotation(annotation, classFullName));
-    }
-
-    /**
-     * Returns true if the annotation contains a reference to the classFullName.
-     */
-    private boolean isRefInAnnotation(JAnnotationUse annotation, String classFullName) {
-        if (annotation == null) {
-            return false;
-        }
-        return annotation.getAnnotationMembers().values().stream().anyMatch(value -> switch (value) {
-            case JAnnotationClassValue classValue ->
-                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
-            case JAnnotationArrayMember arrayMember -> isRefInAnnotationArrayMember(arrayMember, classFullName);
-            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
-            default -> false;
-        });
-    }
-
-    /**
-     * Returns true if the annotation array member contains a reference to the classFullName.
-     */
-    private boolean isRefInAnnotationArrayMember(JAnnotationArrayMember arrayMember, String classFullName) {
-        if (arrayMember == null) {
-            return false;
-        }
-        return arrayMember.annotations2().stream().anyMatch(value -> switch (value) {
-            case JAnnotationClassValue classValue ->
-                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
-            case JAnnotationArrayMember subArrayMember -> isRefInAnnotationArrayMember(subArrayMember, classFullName);
-            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
-            default -> false;
-        });
-    }
-
-    /**
      * Removes the wrapper class from the parent container and ObjectFactory.
      *
      * @param wrapperClass The wrapper class to remove.
      */
     private boolean removeWrapperClass(JDefinedClass wrapperClass) {
-        // Remove the wrapper class from the parent container
-        var parentContainer = wrapperClass.parentContainer();
-        var classes = switch (parentContainer) {
-            case JDefinedClass clazz -> clazz.classes();
-            case JPackage jPackage -> jPackage.classes();
-            default -> throw new IllegalArgumentException("Unknown parent container type: " + parentContainer);
-        };
-        while (classes.hasNext()) {
-            if (wrapperClass.equals(classes.next())) {
-                classes.remove();
-                break;
-            }
-        }
-
-        // Remove the wrapper class from the ObjectFactory
-        var jPackage = wrapperClass._package();
-        var objectFactoryClass = jPackage._getClass("ObjectFactory");
-
-        objectFactoryClass.methods().removeIf(method ->
-            ClassNameDetector.detect(method.type().fullName(), wrapperClass.fullName()));
+        JaxbClassRefactorUtil.removeFromParentContainer(wrapperClass);
+        JaxbClassRefactorUtil.removeFromObjectFactory(wrapperClass);
 
         return true;
     }
@@ -565,46 +450,6 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             || className.equals(XmlTransient.class.getName());
     }
 
-    /**
-     * Fixes the JAXBDebug class in the JAXB outline.
-     *
-     * @param outline The JAXB outline to fix.
-     */
-    private void fixJAXBDebugClass(Outline outline) {
-        var model = outline.getModel();
-        var codeModel = outline.getCodeModel();
-        var rootPackage = codeModel.rootPackage();
-        var jaxbDebugClass = rootPackage._getClass("JAXBDebug");
-        if (jaxbDebugClass == null) return;
-
-        jaxbDebugClass.methods().removeIf(method -> method.name().equals("createContext"));
-
-        var createContextMethod = jaxbDebugClass.method(JMod.PUBLIC | JMod.STATIC, JAXBContext.class, "createContext");
-        var classLoader = createContextMethod.param(ClassLoader.class, "classLoader");
-        createContextMethod._throws(JAXBException.class);
-        var invoke = codeModel.ref(JAXBContext.class).staticInvoke("newInstance");
-        createContextMethod.body()._return(invoke);
-
-        var packageContexts = outline.getAllPackageContexts();
-        switch (model.strategy) {
-            case INTF_AND_IMPL -> {
-                var joiner = new StringJoiner(":");
-                for (var packageOutline : packageContexts) {
-                    joiner.add(packageOutline._package().name());
-                }
-                invoke.arg(joiner.toString()).arg(classLoader);
-            }
-            case BEAN_ONLY -> {
-                for (var packageContext : packageContexts) {
-                    var jPackage = packageContext._package();
-                    jPackage.classes().forEachRemaining(classInfo -> {
-                        invoke.arg(JExpr.dotclass(classInfo));
-                    });
-                }
-            }
-            default -> throw new IllegalStateException();
-        }
-    }
 
     /**
      * Gets the annotation of the specified type for the given annotatable element.
