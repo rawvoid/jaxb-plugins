@@ -22,8 +22,11 @@ import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.StringJoiner;
+import java.util.function.Consumer;
 
 /**
  * Structural refactoring utilities for JAXB-generated code.
@@ -191,15 +194,15 @@ public final class JaxbClassRefactorUtil {
         replaceAnnotationReferences(definedClass, targetType, newTargetType);
         // Replace field types and annotation references on fields.
         definedClass.fields().forEach((fieldName, fieldVar) -> {
-            replaceType(fieldVar.type(), targetType, newTargetType, () -> fieldVar.type(newTargetType));
+            replaceType(fieldVar.type(), targetType, newTargetType, fieldVar::type);
             replaceAnnotationReferences(fieldVar, targetType, newTargetType);
         });
         // Replace method return types, parameter types, and annotation references on methods/parameters.
         definedClass.methods().forEach(method -> {
-            replaceType(method.type(), targetType, newTargetType, () -> method.type(newTargetType));
+            replaceType(method.type(), targetType, newTargetType, method::type);
             replaceAnnotationReferences(method, targetType, newTargetType);
             method.params().forEach(param -> {
-                replaceType(param.type(), targetType, newTargetType, () -> param.type(newTargetType));
+                replaceType(param.type(), targetType, newTargetType, param::type);
                 replaceAnnotationReferences(param, targetType, newTargetType);
             });
         });
@@ -235,24 +238,24 @@ public final class JaxbClassRefactorUtil {
      * @param newTargetType the replacement type
      * @param typeSetter    callback to apply the replacement when needed
      */
-    public static void replaceType(JType currentType, JDefinedClass targetType, JDefinedClass newTargetType, Runnable typeSetter) {
+    public static void replaceType(JType currentType, JDefinedClass targetType, JDefinedClass newTargetType, Consumer<JType> typeSetter) {
+        if (!ClassNameDetector.detect(currentType.fullName(), targetType.fullName())) {
+            return;
+        }
         try {
             var clazz = currentType.getClass();
             if (currentType instanceof JDefinedClass) {
                 if (currentType == targetType) {
                     // Direct type match; use the callback to set the new type.
-                    typeSetter.run();
+                    typeSetter.accept(newTargetType);
                 }
             } else if (clazz.getSimpleName().equals("JNarrowedClass")) {
-                // Handle target types appearing in generic arguments.
-                var argsField = clazz.getField("args");
-                argsField.setAccessible(true);
-                var args = (List<JClass>) argsField.get(currentType);
-                // Replace generic arguments that match the target type.
-                args.replaceAll(arg -> arg == targetType ? newTargetType : arg);
+                // Handle generic type narrowing.
+                var newNarrowedClass = newJNarrowedClass(currentType, targetType, newTargetType);
+                typeSetter.accept(newNarrowedClass);
             } else if (clazz.getSimpleName().equals("JArrayClass")) {
                 // Handle array component types.
-                var componentTypeField = clazz.getField("componentType");
+                var componentTypeField = clazz.getDeclaredField("componentType");
                 componentTypeField.setAccessible(true);
                 var componentType = (JType) componentTypeField.get(currentType);
                 // Replace only when the component type equals the target type.
@@ -262,6 +265,35 @@ public final class JaxbClassRefactorUtil {
             }
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new IllegalStateException("Failed to replace type for " + currentType.fullName(), e);
+        }
+    }
+
+    public static JType newJNarrowedClass(JType currentType, JDefinedClass targetType, JDefinedClass newTargetType) {
+        var clazz = currentType.getClass();
+        if (!clazz.getSimpleName().equals("JNarrowedClass")) {
+            throw new IllegalArgumentException("Original type must be a JNarrowedClass");
+        }
+
+        try {
+            var basisField = clazz.getDeclaredField("basis");
+            basisField.setAccessible(true);
+            var basis = (JClass) basisField.get(currentType);
+
+            var argsField = clazz.getDeclaredField("args");
+            argsField.setAccessible(true);
+            var args = (List<JClass>) argsField.get(currentType);
+
+            args = new ArrayList<>(args);
+            args.replaceAll(arg -> arg == targetType ? newTargetType : arg);
+
+
+            var constructor = clazz.getDeclaredConstructor(JClass.class, List.class);
+            constructor.setAccessible(true);
+
+            return constructor.newInstance(basis, args);
+        } catch (NoSuchFieldException | IllegalAccessException | NoSuchMethodException | InstantiationException |
+                 InvocationTargetException e) {
+            throw new RuntimeException(e);
         }
     }
 
