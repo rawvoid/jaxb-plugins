@@ -93,6 +93,8 @@ public class NormalizeClassPlugin extends AbstractPlugin {
             var removeClass = classOutline.implClass;
             removeFromParentContainer(removeClass);
             var jPackage = removeClass.getPackage();
+            removeFromObjectFactory(jPackage, removeClass);
+            removeFromDebugClass(removeClass);
 
             outline.getClasses().forEach(c -> {
                 var definedClass = c.implClass;
@@ -110,6 +112,34 @@ public class NormalizeClassPlugin extends AbstractPlugin {
                 });
             });
         });
+    }
+
+    private void removeFromDebugClass(JDefinedClass removeClass) {
+        var codeModel = removeClass.owner();
+        var defaultPackage = codeModel._package("");
+        var debugClass = defaultPackage._getClass("JAXBDebug");
+        if (debugClass == null) {
+            return;
+        }
+        var classes = defaultPackage.classes();
+        while (classes.hasNext()) {
+            if (classes.next() == debugClass) {
+                classes.remove();
+                break;
+            }
+        }
+    }
+
+    private void removeFromObjectFactory(JPackage jPackage, JDefinedClass removeClass) {
+        if (jPackage == null) {
+            return;
+        }
+        var objectFactoryClass = jPackage._getClass("ObjectFactory");
+        if (objectFactoryClass == null) {
+            return;
+        }
+        objectFactoryClass.methods().removeIf(method ->
+            ClassNameDetector.detect(method.type().fullName(), removeClass.fullName()));
     }
 
     private void removeFromParentContainer(JDefinedClass definedClass) {
