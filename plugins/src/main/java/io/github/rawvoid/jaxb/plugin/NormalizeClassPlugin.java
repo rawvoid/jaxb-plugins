@@ -29,6 +29,8 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 /**
+ * JAXB plugin that normalizes duplicated generated classes by merging identical structures.
+ *
  * @author Rawvoid
  */
 @Option(name = "Xnormalize-class", description = "Normalize generated classes")
@@ -39,6 +41,9 @@ public class NormalizeClassPlugin extends AbstractPlugin {
         outline.getAllPackageContexts().forEach(packageOutline -> {
             removeDuplicateClasses(packageOutline);
         });
+        if (opt.debugMode) {
+            JaxbClassRefactorUtil.fixJAXBDebugClass(outline);
+        }
         return true;
     }
 
@@ -86,100 +91,16 @@ public class NormalizeClassPlugin extends AbstractPlugin {
 
     private void removeAndReplaceClass(List<ClassOutline> removeClasses, ClassOutline replaceClassOutline) {
         var replaceClass = replaceClassOutline.implClass;
-        var packageOutline = replaceClassOutline._package();
         var outline = replaceClassOutline.parent();
 
         removeClasses.forEach(classOutline -> {
             var removeClass = classOutline.implClass;
-            removeFromParentContainer(removeClass);
-            var jPackage = removeClass.getPackage();
-            removeFromObjectFactory(jPackage, removeClass);
-            removeFromDebugClass(removeClass);
+            JaxbClassRefactorUtil.removeFromParentContainer(removeClass);
+            JaxbClassRefactorUtil.removeFromObjectFactory(removeClass);
 
-            outline.getClasses().forEach(c -> {
-                var definedClass = c.implClass;
-
-                definedClass.fields().forEach((fieldName, fieldVar) -> {
-                    replaceType(fieldVar.type(), removeClass, replaceClass, () -> fieldVar.type(replaceClass));
-                });
-
-                definedClass.methods().forEach(method -> {
-                    replaceType(method.type(), removeClass, replaceClass, () -> method.type(replaceClass));
-
-                    method.params().forEach(param -> {
-                        replaceType(param.type(), removeClass, replaceClass, () -> param.type(replaceClass));
-                    });
-                });
-            });
+            outline.getClasses().forEach(c ->
+                JaxbClassRefactorUtil.replaceClassReferences(c.implClass, removeClass, replaceClass));
         });
-    }
-
-    private void removeFromDebugClass(JDefinedClass removeClass) {
-        var codeModel = removeClass.owner();
-        var defaultPackage = codeModel._package("");
-        var debugClass = defaultPackage._getClass("JAXBDebug");
-        if (debugClass == null) {
-            return;
-        }
-        var classes = defaultPackage.classes();
-        while (classes.hasNext()) {
-            if (classes.next() == debugClass) {
-                classes.remove();
-                break;
-            }
-        }
-    }
-
-    private void removeFromObjectFactory(JPackage jPackage, JDefinedClass removeClass) {
-        if (jPackage == null) {
-            return;
-        }
-        var objectFactoryClass = jPackage._getClass("ObjectFactory");
-        if (objectFactoryClass == null) {
-            return;
-        }
-        objectFactoryClass.methods().removeIf(method ->
-            ClassNameDetector.detect(method.type().fullName(), removeClass.fullName()));
-    }
-
-    private void removeFromParentContainer(JDefinedClass definedClass) {
-        var parentContainer = definedClass.parentContainer();
-
-        var classes = parentContainer.classes();
-        while (classes.hasNext()) {
-            var nextClass = classes.next();
-            if (nextClass == definedClass) {
-                classes.remove();
-                break;
-            }
-        }
-    }
-
-    private void replaceType(JType currentType, JDefinedClass targetType, JDefinedClass newTargetType, Runnable typeSetter) {
-        try {
-            var clazz = currentType.getClass();
-            if (currentType instanceof JDefinedClass) {
-                if (currentType == targetType) {
-                    typeSetter.run();
-                }
-            } else if (clazz.getSimpleName().equals("JNarrowedClass")) {
-                var argsField = clazz.getField("args");
-                argsField.setAccessible(true);
-                var args = (List<JClass>) argsField.get(currentType);
-
-                args.replaceAll(arg -> arg == targetType ? newTargetType : arg);
-            } else if (clazz.getSimpleName().equals("JArrayClass")) {
-                var componentTypeField = clazz.getField("componentType");
-                componentTypeField.setAccessible(true);
-                var componentType = (JType) componentTypeField.get(currentType);
-
-                if (componentType == targetType) {
-                    componentTypeField.set(currentType, newTargetType);
-                }
-            }
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new IllegalStateException("Failed to replace type for " + currentType.fullName(), e);
-        }
     }
 
     private boolean isEqual(JDefinedClass class1, JDefinedClass class2) {
