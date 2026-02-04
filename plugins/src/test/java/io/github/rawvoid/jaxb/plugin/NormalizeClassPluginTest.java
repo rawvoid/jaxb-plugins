@@ -20,6 +20,7 @@ import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -42,13 +43,19 @@ public class NormalizeClassPluginTest extends AbstractXJCMojoTestCase {
             .collect(Collectors.groupingBy(Class::getSimpleName));
 
         assertThat(classBySimpleName).containsKeys("NormalizeRoot", "Group", "AnotherGroup", "Entry");
+        assertThat(classBySimpleName).containsKey("BaseType");
+        assertThat(classBySimpleName).doesNotContainKey("EmptyChild");
         assertThat(classBySimpleName.get("Entry")).hasSize(1);
 
         var groupClass = classBySimpleName.get("Group").getFirst();
         var anotherGroupClass = classBySimpleName.get("AnotherGroup").getFirst();
         var entryClass = classBySimpleName.get("Entry").getFirst();
+        var baseTypeClass = classBySimpleName.get("BaseType").getFirst();
+        var normalizeRootClass = classBySimpleName.get("NormalizeRoot").getFirst();
 
         assertThat(groupClass.getDeclaredField("entry").getType()).isEqualTo(entryClass);
         assertThat(anotherGroupClass.getDeclaredField("entry").getType()).isEqualTo(entryClass);
+        assertThat(normalizeRootClass.getDeclaredField("emptyChild").getType()).isEqualTo(baseTypeClass);
+        assertThat(Modifier.isAbstract(baseTypeClass.getModifiers())).isFalse();
     }
 }
