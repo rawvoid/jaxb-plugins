@@ -36,8 +36,23 @@ import java.util.stream.StreamSupport;
 @Option(name = "Xnormalize-class", description = "Normalize generated classes")
 public class NormalizeClassPlugin extends AbstractPlugin {
 
+    private static final String FIELD_MODS = "mods";
+
+    private static final java.lang.reflect.Field JMODS_MODS_FIELD = getField(JMods.class, FIELD_MODS);
+
+    private static java.lang.reflect.Field getField(Class<?> type, String name) {
+        try {
+            var field = type.getDeclaredField(name);
+            field.setAccessible(true);
+            return field;
+        } catch (NoSuchFieldException ex) {
+            throw new IllegalStateException("Failed to access field '" + name + "' on " + type.getName(), ex);
+        }
+    }
+
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+        removeEmptyDerivedClasses(outline);
         outline.getAllPackageContexts().forEach(packageOutline -> {
             removeDuplicateClasses(packageOutline);
         });
@@ -45,6 +60,45 @@ public class NormalizeClassPlugin extends AbstractPlugin {
             JaxbClassRefactorUtil.fixJAXBDebugClass(outline);
         }
         return true;
+    }
+
+    private void removeEmptyDerivedClasses(Outline outline) {
+        var classOutlines = new ArrayList<>(outline.getClasses());
+        classOutlines.forEach(classOutline -> {
+            var implClass = classOutline.implClass;
+            var superClass = implClass.superClass();
+            if (!(superClass instanceof JDefinedClass definedSuperClass)) {
+                return;
+            }
+            if (!isEmptyClass(implClass)) {
+                return;
+            }
+
+            JaxbClassRefactorUtil.removeFromParentContainer(implClass);
+            JaxbClassRefactorUtil.removeFromObjectFactory(implClass);
+
+            outline.getClasses().forEach(c ->
+                JaxbClassRefactorUtil.replaceClassReferences(c.implClass, implClass, definedSuperClass));
+
+            if (definedSuperClass.isAbstract()) {
+                clearAbstractModifier(definedSuperClass.mods());
+            }
+        });
+    }
+
+    private boolean isEmptyClass(JDefinedClass definedClass) {
+        return definedClass.fields().isEmpty()
+            && definedClass.methods().isEmpty()
+            && !definedClass.classes().hasNext();
+    }
+
+    private void clearAbstractModifier(JMods mods) {
+        try {
+            var flags = (int) JMODS_MODS_FIELD.get(mods);
+            JMODS_MODS_FIELD.set(mods, flags & ~JMod.ABSTRACT);
+        } catch (IllegalAccessException ex) {
+            throw new IllegalStateException("Failed to clear abstract modifier", ex);
+        }
     }
 
     private void removeDuplicateClasses(PackageOutline packageOutline) {
