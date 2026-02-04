@@ -48,7 +48,16 @@
                     </xs:sequence>
                 </xs:complexType>
             </xs:element>
+            <xs:element name="emptyChild" type="tns:EmptyChild"/>
         </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="BaseType" abstract="true"/>
+
+    <xs:complexType name="EmptyChild">
+        <xs:complexContent>
+            <xs:extension base="tns:BaseType"/>
+        </xs:complexContent>
     </xs:complexType>
 
     <xs:element name="normalizeRoot" type="tns:NormalizeRoot"/>
