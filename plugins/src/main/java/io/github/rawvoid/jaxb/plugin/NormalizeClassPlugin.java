@@ -74,10 +74,7 @@ public class NormalizeClassPlugin extends AbstractPlugin {
             if (!isEmptyClass(implClass)) {
                 return;
             }
-            var className = implClass.name();
-            var superClassName = definedSuperClass.name();
-            if (!(className.startsWith(superClassName) || className.endsWith(superClassName)
-                || superClassName.startsWith(className) || superClassName.endsWith(className))) {
+            if (!isSimilarClassName(implClass.name(), definedSuperClass.name())) {
                 return;
             }
 
@@ -97,6 +94,13 @@ public class NormalizeClassPlugin extends AbstractPlugin {
         return definedClass.fields().isEmpty()
             && definedClass.methods().isEmpty()
             && !definedClass.classes().hasNext();
+    }
+
+    private boolean isSimilarClassName(String className, String superClassName) {
+        return className.startsWith(superClassName)
+            || className.endsWith(superClassName)
+            || superClassName.startsWith(className)
+            || superClassName.endsWith(className);
     }
 
     private void clearAbstractModifier(JMods mods) {
