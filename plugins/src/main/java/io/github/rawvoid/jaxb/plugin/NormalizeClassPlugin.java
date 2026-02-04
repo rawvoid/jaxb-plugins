@@ -49,18 +49,28 @@ public class NormalizeClassPlugin extends AbstractPlugin {
 
     private void removeDuplicateClasses(PackageOutline packageOutline) {
         var classOutlines = packageOutline.getClasses();
+        var classOutlinesGroup = classOutlines.stream()
+            .collect(Collectors.groupingBy(c -> c.implClass.name().toUpperCase()));
 
-        var groupedClasses = groupingEqualClasses(classOutlines);
-        for (var groupedClass : groupedClasses) {
-            if (groupedClass.size() <= 1) {
-                continue;
+        classOutlinesGroup.forEach((name, sameNameClasses) -> {
+            if (sameNameClasses.size() == 1) {
+                return;
             }
-            groupedClass.sort(Comparator.comparing(this::innerDepth));
-            var savingClass = groupedClass.getFirst();
+            var groupedClasses = groupingEqualClasses(sameNameClasses);
+            if (groupedClasses.size() > 1) {
+                return;
+            }
+            for (var groupedClass : groupedClasses) {
+                if (groupedClass.size() <= 1) {
+                    continue;
+                }
+                groupedClass.sort(Comparator.comparing(this::innerDepth));
+                var savingClass = groupedClass.getFirst();
 
-            var removeClasses = groupedClass.subList(1, groupedClass.size());
-            removeAndReplaceClass(removeClasses, savingClass);
-        }
+                var removeClasses = groupedClass.subList(1, groupedClass.size());
+                removeAndReplaceClass(removeClasses, savingClass);
+            }
+        });
     }
 
     private int innerDepth(ClassOutline classOutline) {
@@ -77,15 +87,13 @@ public class NormalizeClassPlugin extends AbstractPlugin {
         return depth;
     }
 
-    private List<List<ClassOutline>> groupingEqualClasses(Set<? extends ClassOutline> classes) {
+    private List<List<ClassOutline>> groupingEqualClasses(Collection<? extends ClassOutline> classes) {
         List<List<ClassOutline>> groupedClasses = new ArrayList<>();
-        for (var classOutline : classes) {
-            groupedClasses.stream()
-                .filter(group -> isEqual(group.getFirst().implClass, classOutline.implClass))
-                .findFirst()
-                .ifPresentOrElse(group -> group.add(classOutline),
-                    () -> groupedClasses.add(new ArrayList<>(List.of(classOutline))));
-        }
+        classes.forEach(classOutline -> groupedClasses.stream()
+            .filter(group -> isEqual(group.getFirst().implClass, classOutline.implClass))
+            .findFirst()
+            .ifPresentOrElse(group -> group.add(classOutline),
+                () -> groupedClasses.add(new ArrayList<>(List.of(classOutline)))));
         return groupedClasses;
     }
 
@@ -109,7 +117,6 @@ public class NormalizeClassPlugin extends AbstractPlugin {
         }
 
         if (class1.classes().hasNext() || class2.classes().hasNext()) {
-
             return false;
         }
 
