@@ -24,6 +24,7 @@ import com.sun.tools.xjc.outline.PackageOutline;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
+import java.lang.reflect.Field;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -38,9 +39,9 @@ public class NormalizeClassPlugin extends AbstractPlugin {
 
     private static final String FIELD_MODS = "mods";
 
-    private static final java.lang.reflect.Field JMODS_MODS_FIELD = getField(JMods.class, FIELD_MODS);
+    private static final Field JMODS_MODS_FIELD = getField(JMods.class, FIELD_MODS);
 
-    private static java.lang.reflect.Field getField(Class<?> type, String name) {
+    private static Field getField(Class<?> type, String name) {
         try {
             var field = type.getDeclaredField(name);
             field.setAccessible(true);
