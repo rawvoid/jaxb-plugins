@@ -44,18 +44,24 @@ public class NormalizeClassPluginTest extends AbstractXJCMojoTestCase {
 
         assertThat(classBySimpleName).containsKeys("NormalizeRoot", "Group", "AnotherGroup", "Entry");
         assertThat(classBySimpleName).containsKey("BaseType");
-        assertThat(classBySimpleName).doesNotContainKey("EmptyChild");
+        assertThat(classBySimpleName).containsKey("BaseNode");
+        assertThat(classBySimpleName).containsKey("EmptyChild");
+        assertThat(classBySimpleName).doesNotContainKey("Node");
         assertThat(classBySimpleName.get("Entry")).hasSize(1);
 
         var groupClass = classBySimpleName.get("Group").getFirst();
         var anotherGroupClass = classBySimpleName.get("AnotherGroup").getFirst();
         var entryClass = classBySimpleName.get("Entry").getFirst();
         var baseTypeClass = classBySimpleName.get("BaseType").getFirst();
+        var baseNodeClass = classBySimpleName.get("BaseNode").getFirst();
+        var emptyChildClass = classBySimpleName.get("EmptyChild").getFirst();
         var normalizeRootClass = classBySimpleName.get("NormalizeRoot").getFirst();
 
         assertThat(groupClass.getDeclaredField("entry").getType()).isEqualTo(entryClass);
         assertThat(anotherGroupClass.getDeclaredField("entry").getType()).isEqualTo(entryClass);
-        assertThat(normalizeRootClass.getDeclaredField("emptyChild").getType()).isEqualTo(baseTypeClass);
-        assertThat(Modifier.isAbstract(baseTypeClass.getModifiers())).isFalse();
+        assertThat(normalizeRootClass.getDeclaredField("emptyChild").getType()).isEqualTo(emptyChildClass);
+        assertThat(normalizeRootClass.getDeclaredField("node").getType()).isEqualTo(baseNodeClass);
+        assertThat(Modifier.isAbstract(baseTypeClass.getModifiers())).isTrue();
+        assertThat(Modifier.isAbstract(baseNodeClass.getModifiers())).isFalse();
     }
 }

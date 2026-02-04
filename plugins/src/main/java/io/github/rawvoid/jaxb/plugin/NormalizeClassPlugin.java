@@ -73,6 +73,12 @@ public class NormalizeClassPlugin extends AbstractPlugin {
             if (!isEmptyClass(implClass)) {
                 return;
             }
+            var className = implClass.name();
+            var superClassName = definedSuperClass.name();
+            if (!(className.startsWith(superClassName) || className.endsWith(superClassName)
+                || superClassName.startsWith(className) || superClassName.endsWith(className))) {
+                return;
+            }
 
             JaxbClassRefactorUtil.removeFromParentContainer(implClass);
             JaxbClassRefactorUtil.removeFromObjectFactory(implClass);
