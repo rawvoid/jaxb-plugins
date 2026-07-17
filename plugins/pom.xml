@@ -55,7 +55,7 @@
         <dependency>
             <groupId>org.jvnet.jaxb</groupId>
             <artifactId>jaxb-maven-plugin</artifactId>
-            <version>4.0.12</version>
+            <version>4.0.16</version>
             <scope>test</scope>
         </dependency>
         <dependency>
