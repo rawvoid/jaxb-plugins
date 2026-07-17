@@ -24,7 +24,7 @@
         <dependency>
             <groupId>org.jvnet.jaxb</groupId>
             <artifactId>jaxb-annox</artifactId>
-            <version>4.0.12</version>
+            <version>4.0.16</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
