@@ -7,6 +7,8 @@ updates:
       cronjob: "0 10 * * *"
       timezone: "Etc/GMT-8"
     open-pull-requests-limit: 100
+    assignees:
+      - rawvoid
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -15,3 +17,5 @@ updates:
       cronjob: "0 10 * * *"
       timezone: "Etc/GMT-8"
     open-pull-requests-limit: 100
+    assignees:
+      - rawvoid
