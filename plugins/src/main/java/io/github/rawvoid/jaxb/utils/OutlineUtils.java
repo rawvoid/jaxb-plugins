@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.plugin;
+package io.github.rawvoid.jaxb.utils;
 
 import com.sun.codemodel.*;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.plugin.ClassNameDetector;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 
@@ -39,9 +40,9 @@ import java.util.function.Consumer;
  * </ul>
  *
  */
-public final class JaxbClassRefactorUtil {
+public final class OutlineUtils {
 
-    private JaxbClassRefactorUtil() {
+    private OutlineUtils() {
     }
 
     /**
@@ -94,6 +95,44 @@ public final class JaxbClassRefactorUtil {
             }
             default -> throw new IllegalStateException();
         }
+    }
+
+    /**
+     * Removes the specified class from the JAXB {@link Outline} when it is not referenced by any other class.
+     * <p>
+     * Key steps:
+     * <ul>
+     *     <li>Scan all generated classes to detect references to the target type</li>
+     *     <li>If any reference exists, skip removal and return {@code false}</li>
+     *     <li>Remove the class from {@link Outline} lists and its parent container</li>
+     *     <li>Remove related factory methods from {@code ObjectFactory}</li>
+     * </ul>
+     *
+     * @param definedClass the class to remove
+     * @param outline      the JAXB outline containing all generated classes
+     * @return {@code true} if the class was removed, {@code false} if references were found or input is invalid
+     */
+    public static boolean removeClass(JDefinedClass definedClass, Outline outline) {
+        if (definedClass == null || outline == null) {
+            return false;
+        }
+        var classFullName = definedClass.fullName();
+        var hasReference = outline.getClasses().stream()
+            .map(classOutline -> classOutline.implClass)
+            .filter(implClass -> implClass != definedClass)
+            .anyMatch(implClass -> hasReference(implClass, classFullName));
+        if (hasReference) {
+            return false;
+        }
+
+        outline.getClasses().removeIf(classOutline -> classOutline.implClass == definedClass);
+        outline.getAllPackageContexts().forEach(packageOutline ->
+            packageOutline.getClasses().removeIf(classOutline -> classOutline.implClass == definedClass));
+
+        removeFromParentContainer(definedClass);
+        removeFromObjectFactory(definedClass);
+
+        return true;
     }
 
     /**
