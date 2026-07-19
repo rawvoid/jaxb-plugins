@@ -18,6 +18,7 @@ package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import jakarta.xml.bind.annotation.XmlSchema;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -26,35 +27,36 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * @author Rawvoid
+ * Smoke tests for deprecated {@link NamespacePlugin}.
+ * Uses dedicated {@code namespace.xsd} only.
  */
 @Deprecated
 class NamespacePluginTest extends AbstractXJCMojoTestCase {
 
+    private static final String NS = "https://www.github.com/rawvoid/xjc-plugins/namespace";
+
+    @BeforeEach
+    void setSchema() {
+        schemaIncludes = List.of("namespace.xsd");
+    }
+
     @Test
-    void testNamespacePackagePlugin() throws Exception {
+    void mapsNamespaceToPackageAndPrefix() throws Exception {
         var args = List.of(
             "-Xnamespace",
             "-mapping",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=n1",
-            "-package=pkg1",
-            "-mapping",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins/jsr310",
-            "-package=pkg2"
+            "-package=pkg1"
         );
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            var annotation = clazz.getAnnotation(XmlSchema.class);
-            var namespace = "https://www.github.com/rawvoid/xjc-plugins";
-            if (namespace.equals(annotation.namespace())) {
-                assertThat(clazz.getPackageName()).isEqualTo("pkg1");
-                Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
-                    .forEach(xmlns -> assertThat(xmlns.prefix()).isEqualTo("n1"));
-            } else if ("https://www.github.com/rawvoid/xjc-plugins/jsr310".equals(annotation.namespace())) {
-                assertThat(clazz.getPackageName()).isEqualTo("pkg2");
-            }
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+            var annotation = clazz.getPackage().getAnnotation(XmlSchema.class);
+            assertThat(annotation).isNotNull();
+            assertThat(annotation.namespace()).isEqualTo(NS);
+            Arrays.stream(annotation.xmlns())
+                .filter(xmlns -> NS.equals(xmlns.namespaceURI()))
+                .forEach(xmlns -> assertThat(xmlns.prefix()).isEqualTo("n1"));
         });
     }
-
 }
