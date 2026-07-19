@@ -17,14 +17,28 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * XJC integration tests for {@link ConvertNamePlugin}.
+ * Uses dedicated {@code convert-name.xsd} only.
+ */
 public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
+
+    private static final String PKG = "com\\.github\\.rawvoid\\.xjc_plugins\\.convert_name";
+    private static final String NS = "https://www.github.com/rawvoid/xjc-plugins/convert-name";
+
+    @BeforeEach
+    void setSchema() {
+        schemaIncludes = List.of("convert-name.xsd");
+    }
 
     @Test
     void testClassNameConvert() throws Exception {
@@ -34,7 +48,7 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
             "-token=Person",
             "-name=CustomPerson"
         );
-        testExecute(args, ".*CustomPerson", (source, clazz) -> {
+        testExecute(args, PKG + "\\.CustomPerson", (source, clazz) -> {
             assertThat(clazz.getSimpleName()).isEqualTo("CustomPerson");
         });
     }
@@ -47,20 +61,11 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
             "-token=name",
             "-name=fullName"
         );
-        testExecute(args, ".*Person", (source, clazz) -> {
+        testExecute(args, PKG + "\\.Person", (source, clazz) -> {
             assertThat(clazz.getSimpleName()).isEqualTo("Person");
-            // JAXB's NameConverter.toPropertyName might be used for both field and methods
-            // In NameConvertPlugin, we override toPropertyName
-            // According to debug log: Method: getfullName (note the lowercase 'f' if not handled by super)
-            var methods = clazz.getDeclaredMethods();
-            boolean hasGetFullName = false;
-            for (var m : methods) {
-                if (m.getName().equalsIgnoreCase("getfullName")) {
-                    hasGetFullName = true;
-                    break;
-                }
-            }
-            assertThat(hasGetFullName).isTrue();
+            // toPropertyName replaces the token; accessor casing follows the mapping as-is.
+            var methodNames = Arrays.stream(clazz.getDeclaredMethods()).map(m -> m.getName()).toList();
+            assertThat(methodNames).anyMatch(n -> n.equalsIgnoreCase("getfullName"));
         });
     }
 
@@ -69,7 +74,7 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xconvert-name",
             "-package-name",
-            "-token=https://www.github.com/rawvoid/xjc-plugins",
+            "-token=" + NS,
             "-name=io.github.rawvoid.custom"
         );
         testExecute(args, "io\\.github\\.rawvoid\\.custom\\.Person", (source, clazz) -> {
@@ -85,9 +90,8 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
             "-regex=Per(.*)",
             "-name=Human$1"
         );
-        testExecute(args, ".*Humanon", (source, clazz) -> {
-            // "Person" matches "Per(.*)" with group 1 as "son".
-            // Replace with "Human$1" results in "Humanson"
+        testExecute(args, PKG + "\\.Humanson", (source, clazz) -> {
+            // "Person" matches "Per(.*)" with group 1 as "son" → "Humanson"
             assertThat(clazz.getSimpleName()).isEqualTo("Humanson");
         });
     }
@@ -104,13 +108,41 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
             "-name=Root"
         );
         List<String> list = new ArrayList<>();
-        testExecute(args, ".*\\.(Humanson|Root)", (source, clazz) -> {
+        testExecute(args, PKG + "\\.(Humanson|Root)", (source, clazz) -> {
             list.add(clazz.getSimpleName());
         });
 
-        assertThat(list).containsExactlyInAnyOrder(
-            "Humanson",
-            "Root"
+        assertThat(list).containsExactlyInAnyOrder("Humanson", "Root");
+    }
+
+    @Test
+    void testConstantNameConvert() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-constant-name",
+            "-token=red",
+            "-name=SCARLET"
         );
+        testExecute(args, PKG + "\\.Color", (source, clazz) -> {
+            assertThat(clazz.isEnum()).isTrue();
+            var constants = Arrays.stream(clazz.getEnumConstants()).map(Object::toString).toList();
+            assertThat(constants).contains("SCARLET", "BLUE");
+            assertThat(constants).doesNotContain("RED");
+        });
+    }
+
+    @Test
+    void testVariableNameConvert() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-variable-name",
+            "-token=name",
+            "-name=fullName"
+        );
+        testExecute(args, PKG + "\\.Person", (source, clazz) -> {
+            var fieldNames = Arrays.stream(clazz.getDeclaredFields()).map(f -> f.getName()).toList();
+            assertThat(fieldNames).contains("fullName");
+            assertThat(fieldNames).doesNotContain("name");
+        });
     }
 }
