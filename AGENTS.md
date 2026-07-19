@@ -45,7 +45,7 @@ Everything below serves these two priorities.
 
 ## Communication
 
-- **Dialogue with the user: Chinese.** Code comments / Javadoc stay English (see above).
+- **Reply in the same language the user is using.** Code comments / Javadoc stay English (see above).
 - When reviewing design, state trade-offs briefly; implement once direction is clear.
 - If the user corrects an assumption, update code and conventions accordingly.
 - Keep commit and PR text proportional to the change: *what* and *why*.
