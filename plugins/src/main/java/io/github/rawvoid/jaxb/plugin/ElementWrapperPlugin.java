@@ -21,6 +21,8 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
+import com.sun.xml.xsom.XSElementDecl;
+import com.sun.xml.xsom.XSParticle;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlNsForm;
 import org.slf4j.Logger;
@@ -32,6 +34,7 @@ import javax.xml.namespace.QName;
 import java.util.*;
 
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
+import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
 
 /**
  * Flattens single-collection wrapper types into {@code List} properties with
@@ -43,9 +46,17 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
  * always returns null).
  * </p>
  * <p>
- * Scope: a non-collection element property whose type is a wrapper class (exactly one
+ * Scope: a non-collection property whose type is a wrapper class (exactly one
  * non-value-list collection element property, no base class). Nested “list of wrappers” is
  * not recursively unwrapped.
+ * </p>
+ * <p>
+ * Nillable optional complex wrappers: XJC binds them as {@link CReferencePropertyInfo} with a
+ * local {@link CElementInfo} ({@code JAXBElement&lt;Wrapper&gt;}) because
+ * {@code nillable + optional} yields {@code RawTypeSet.Mode.CAN_BE_TYPEREF}, and the default
+ * is reference binding ({@code BIProperty#createElementOrReferenceProperty}). This plugin
+ * rewrites that shape into a repeated element list with
+ * {@code @XmlElementWrapper(nillable = true)} and drops the synthetic local element info.
  * </p>
  *
  * @author Rawvoid
@@ -72,6 +83,22 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     ) {
     }
 
+    /**
+     * Resolved outer property that points at a pure wrapper shell.
+     *
+     * @param orphanElementInfo local {@link CElementInfo} synthesized for nillable reference
+     *                          binding; removed after a successful flatten, or {@code null}
+     */
+    private record ResolvedWrapperOuter(
+        CClassInfo wrapper,
+        CElementPropertyInfo inner,
+        QName wrapperName,
+        boolean wrapperNillable,
+        boolean wrapperRequired,
+        CElementInfo orphanElementInfo
+    ) {
+    }
+
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
         flattenedFields.clear();
@@ -80,7 +107,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         var usedWrappers = new LinkedHashSet<CClassInfo>();
 
         for (var owner : List.copyOf(model.beans().values())) {
-            flattenOwner(owner, wrappers, usedWrappers);
+            flattenOwner(model, owner, wrappers, usedWrappers);
         }
 
         if (Boolean.TRUE.equals(removeWrapperClass)) {
@@ -141,51 +168,151 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             && !elementProperty.isValueList();
     }
 
-    private void flattenOwner(CClassInfo owner, Set<CClassInfo> wrappers, Set<CClassInfo> usedWrappers) {
+    private void flattenOwner(
+        Model model,
+        CClassInfo owner,
+        Set<CClassInfo> wrappers,
+        Set<CClassInfo> usedWrappers
+    ) {
         var properties = owner.getProperties();
         for (var i = 0; i < properties.size(); i++) {
             var outer = properties.get(i);
-            var wrapper = resolveWrapperTarget(outer, wrappers);
-            if (wrapper == null || owner == wrapper) {
+            var resolved = resolveWrapperOuter(outer, wrappers);
+            if (resolved == null || owner == resolved.wrapper()) {
                 continue;
             }
 
-            var inner = wrapper.getProperties().getFirst();
-            if (!(inner instanceof CElementPropertyInfo innerElement)) {
-                continue;
-            }
-
-            var replacement = createFlattenedElementProperty((CElementPropertyInfo) outer, innerElement);
+            var replacement = createFlattenedElementProperty(outer, resolved.inner());
             if (!replaceProperty(owner, i, outer, replacement)) {
                 continue;
             }
 
-            usedWrappers.add(wrapper);
-            recordFlattenedField(owner, (CElementPropertyInfo) outer, replacement);
+            usedWrappers.add(resolved.wrapper());
+            flattenedFields.add(new FlattenedField(
+                owner,
+                replacement.getName(false),
+                resolved.wrapperName(),
+                resolved.wrapperNillable(),
+                resolved.wrapperRequired()
+            ));
+
+            if (resolved.orphanElementInfo() != null
+                && !removeElementInfo(model, resolved.orphanElementInfo())) {
+                log.warn("Could not remove synthetic element info for {}.{}",
+                    owner.fullName(), outer.getName(false));
+            }
+
             log.debug("Flattened {}.{} (wrapper {})",
-                owner.fullName(), outer.getName(false), wrapper.fullName());
+                owner.fullName(), outer.getName(false), resolved.wrapper().fullName());
         }
     }
 
     /**
-     * Non-collection element property whose single type is a known wrapper class.
+     * Resolves a non-collection outer property to a pure wrapper shell.
+     * <p>
+     * Two XJC shapes are accepted:
+     * <ul>
+     *   <li>{@link CElementPropertyInfo} — ordinary element binding (non-nillable optional
+     *       or required shells)</li>
+     *   <li>{@link CReferencePropertyInfo} with a single local {@link CElementInfo} whose
+     *       content type is the wrapper — XJC default for nillable + optional complex
+     *       elements ({@code JAXBElement&lt;Wrapper&gt;})</li>
+     * </ul>
+     * </p>
      */
-    private CClassInfo resolveWrapperTarget(CPropertyInfo outer, Set<CClassInfo> wrappers) {
-        if (outer.isCollection() || !(outer instanceof CElementPropertyInfo elementProperty)) {
+    private ResolvedWrapperOuter resolveWrapperOuter(CPropertyInfo outer, Set<CClassInfo> wrappers) {
+        if (outer.isCollection()) {
             return null;
         }
+        if (outer instanceof CElementPropertyInfo elementProperty) {
+            return resolveFromElementProperty(elementProperty, wrappers);
+        }
+        if (outer instanceof CReferencePropertyInfo referenceProperty) {
+            return resolveFromReferenceProperty(referenceProperty, wrappers);
+        }
+        return null;
+    }
+
+    private ResolvedWrapperOuter resolveFromElementProperty(
+        CElementPropertyInfo elementProperty,
+        Set<CClassInfo> wrappers
+    ) {
         if (elementProperty.getAdapter() != null || elementProperty.getTypes().size() != 1) {
             return null;
         }
-        var target = elementProperty.getTypes().getFirst().getTarget();
+        var typeRef = elementProperty.getTypes().getFirst();
+        var target = typeRef.getTarget();
         if (!(target instanceof CClassInfo classInfo) || !wrappers.contains(classInfo)) {
             return null;
         }
-        return classInfo;
+        var inner = classInfo.getProperties().getFirst();
+        if (!(inner instanceof CElementPropertyInfo innerElement)) {
+            return null;
+        }
+        return new ResolvedWrapperOuter(
+            classInfo,
+            innerElement,
+            typeRef.getTagName(),
+            typeRef.isNillable() || isSchemaNillable(elementProperty),
+            elementProperty.isRequired(),
+            null
+        );
+    }
+
+    private ResolvedWrapperOuter resolveFromReferenceProperty(
+        CReferencePropertyInfo referenceProperty,
+        Set<CClassInfo> wrappers
+    ) {
+        // Mixed / wildcard / multi-element reference properties are not wrapper shells.
+        if (referenceProperty.isMixed()
+            || referenceProperty.getWildcard() != null
+            || referenceProperty.getElements().size() != 1) {
+            return null;
+        }
+
+        var element = referenceProperty.getElements().iterator().next();
+        // Simple-mode may invent a local bean class; only handle JAXBElement-style CElementInfo.
+        if (!(element instanceof CElementInfo elementInfo) || elementInfo.hasClass()) {
+            return null;
+        }
+
+        var content = elementInfo.getContentType();
+        if (!(content instanceof CClassInfo classInfo) || !wrappers.contains(classInfo)) {
+            return null;
+        }
+
+        var inner = classInfo.getProperties().getFirst();
+        if (!(inner instanceof CElementPropertyInfo innerElement)) {
+            return null;
+        }
+
+        // XJC creates this CElementInfo only for the reference binding of this particle;
+        // remove it after flatten so the wrapper is not kept alive and ObjectFactory stays clean.
+        return new ResolvedWrapperOuter(
+            classInfo,
+            innerElement,
+            elementInfo.getElementName(),
+            isSchemaNillable(referenceProperty)
+                || elementInfo.getProperty().getTypes().getFirst().isNillable(),
+            referenceProperty.isRequired(),
+            elementInfo
+        );
+    }
+
+    /**
+     * Reads {@code nillable} from the original XSD element particle when available.
+     */
+    private static boolean isSchemaNillable(CPropertyInfo property) {
+        var component = property.getSchemaComponent();
+        if (component instanceof XSParticle particle
+            && particle.getTerm() instanceof XSElementDecl elementDecl) {
+            return elementDecl.isNillable();
+        }
+        return false;
     }
 
     private CElementPropertyInfo createFlattenedElementProperty(
-        CElementPropertyInfo outer,
+        CPropertyInfo outer,
         CElementPropertyInfo inner
     ) {
         var flattened = new CElementPropertyInfo(
@@ -269,21 +396,6 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         properties.remove(index);
         properties.add(index, properties.removeLast());
         return true;
-    }
-
-    private void recordFlattenedField(
-        CClassInfo owner,
-        CElementPropertyInfo outer,
-        CElementPropertyInfo replacement
-    ) {
-        var typeRef = outer.getTypes().getFirst();
-        flattenedFields.add(new FlattenedField(
-            owner,
-            replacement.getName(false),
-            typeRef.getTagName(),
-            typeRef.isNillable(),
-            outer.isRequired()
-        ));
     }
 
     private void removeUnusedWrappers(Model model, Set<CClassInfo> wrappers) {
@@ -448,5 +560,3 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             || (formDefault == XmlNsForm.UNQUALIFIED && !generatedNS.isEmpty());
     }
 }
-
-

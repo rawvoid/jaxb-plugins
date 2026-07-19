@@ -17,7 +17,6 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
-import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlType;
@@ -118,21 +117,19 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void skipsNillableComplexOuterAsJaxbElement() throws Exception {
-        // XJC models nillable complex elements as JAXBElement; plugin only flattens
-        // CElementPropertyInfo pure shells, so AliasList remains.
+    void flattensNillableComplexOuterWithWrapperNillable() throws Exception {
+        // XJC models nillable+optional complex elements as CReferencePropertyInfo /
+        // JAXBElement; the plugin rewrites them into List + @XmlElementWrapper(nillable=true).
         var classes = testExecute(List.of("-Xelement-wrapper"), ROOT, (source, clazz) -> {
-            var aliases = clazz.getDeclaredField("aliases");
-            assertThat(aliases.getAnnotation(XmlElementWrapper.class)).isNull();
-            assertThat(aliases.getType()).isEqualTo(JAXBElement.class);
-
-            var generic = aliases.getGenericType();
-            assertThat(generic).isInstanceOf(ParameterizedType.class);
-            var args = ((ParameterizedType) generic).getActualTypeArguments();
-            assertThat(args).hasSize(1);
-            assertThat(((Class<?>) args[0]).getSimpleName()).isEqualTo("AliasList");
+            assertListField(clazz, "aliases", String.class, "alias");
+            var wrapper = clazz.getDeclaredField("aliases").getAnnotation(XmlElementWrapper.class);
+            assertThat(wrapper).isNotNull();
+            assertThat(wrapper.nillable()).isTrue();
+            assertThat(wrapper.required()).isFalse();
+            assertThat(wrapper.name()).isEqualTo("##default");
         });
-        assertThat(simpleNames(classes)).contains("AliasList");
+        // Shell only used as nillable wrapper → removed after flatten.
+        assertThat(simpleNames(classes)).doesNotContain("AliasList");
     }
 
     @Test
@@ -140,14 +137,13 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
         var classes = testExecute(List.of("-Xelement-wrapper"), ".*", null);
         var names = simpleNames(classes);
 
-        // Pure wrappers only used as flattenable shells → removed.
+        // Pure wrappers only used as flattenable shells (incl. nillable aliases) → removed.
         assertThat(names).doesNotContain(
-            "TagList", "ProductList", "CodeList", "NoteList", "BatchList", "GroupList");
+            "TagList", "ProductList", "CodeList", "NoteList", "BatchList", "GroupList", "AliasList");
 
-        // Still referenced after flatten (or never flattened).
+        // Still referenced after flatten.
         assertThat(names).contains(
             "SharedItems", // global element still uses it
-            "AliasList",   // nillable complex outer → not flattened
             "GroupShell",  // list item type after one-level flatten
             "Product",
             "MixedBag",
