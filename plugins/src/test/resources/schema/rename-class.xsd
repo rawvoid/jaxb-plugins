@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/rename"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/rename"
+           xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
+           jaxb:version="3.0"
+           elementFormDefault="qualified">
+
+    <!-- Unconflicted bean renames. -->
+    <xs:complexType name="Person">
+        <xs:sequence>
+            <xs:element name="name" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AddressType">
+        <xs:sequence>
+            <xs:element name="city" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Global enum for unconflicted rename. -->
+    <xs:simpleType name="Color">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="RED"/>
+            <xs:enumeration value="BLUE"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Two beans that can be mapped onto the same target name (conflict fixture). -->
+    <xs:complexType name="Alpha">
+        <xs:sequence>
+            <xs:element name="value" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Beta">
+        <xs:sequence>
+            <xs:element name="value" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Nested types under a holder (package filter still uses owner package). -->
+    <xs:complexType name="Holder">
+        <xs:sequence>
+            <xs:element name="item">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="note" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="status">
+                <xs:simpleType>
+                    <xs:annotation>
+                        <xs:appinfo>
+                            <jaxb:typesafeEnumClass name="LocalStatus"/>
+                        </xs:appinfo>
+                    </xs:annotation>
+                    <xs:restriction base="xs:string">
+                        <xs:enumeration value="OPEN"/>
+                        <xs:enumeration value="CLOSED"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="person" type="tns:Person"/>
+    <xs:element name="address" type="tns:AddressType"/>
+    <xs:element name="holder" type="tns:Holder"/>
+</xs:schema>

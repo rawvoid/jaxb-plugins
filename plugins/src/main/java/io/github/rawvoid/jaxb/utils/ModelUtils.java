@@ -68,14 +68,29 @@ public final class ModelUtils {
     public static final Field CCLASSINFO_PARENT_FIELD = getField(CClassInfo.class, "parent");
 
     /**
+     * Reflection field for accessing the short name of a {@link CClassInfo}.
+     */
+    public static final Field CCLASSINFO_SHORTNAME_FIELD = getField(CClassInfo.class, "shortName");
+
+    /**
      * Reflection field for accessing the parent container of a {@link CEnumLeafInfo}.
      */
     public static final Field CENUMLEAFINFO_PARENT_FIELD = getField(CEnumLeafInfo.class, "parent");
 
     /**
+     * Reflection field for accessing the short name of a {@link CEnumLeafInfo}.
+     */
+    public static final Field CENUMLEAFINFO_SHORTNAME_FIELD = getField(CEnumLeafInfo.class, "shortName");
+
+    /**
      * Reflection field for accessing the parent of CElementInfo.
      */
     public static final Field CELEMENTINFO_PARENT_FIELD = getField(CElementInfo.class, "parent");
+
+    /**
+     * Reflection field for accessing the generated class name of a {@link CElementInfo}.
+     */
+    public static final Field CELEMENTINFO_CLASSNAME_FIELD = getField(CElementInfo.class, "className");
 
     /**
      * Reflection field for accessing the element mappings in Model.
