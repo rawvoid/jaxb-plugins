@@ -53,11 +53,12 @@ import java.util.regex.Pattern;
 @Option(name = "Xlombok", description = "Add Lombok annotations to generated classes and optionally remove getters/setters")
 public class LombokPlugin extends AbstractPlugin {
 
-    private static final String DATA = "lombok.Data";
-    private static final String EQUALS_AND_HASH_CODE = "lombok.EqualsAndHashCode";
-    private static final String BUILDER = "lombok.Builder";
-    private static final String NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
-    private static final String ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
+    /** Fully-qualified names of Lombok annotations (distinct from CLI option fields like {@code builder}). */
+    private static final String LOMBOK_DATA = "lombok.Data";
+    private static final String LOMBOK_EQUALS_AND_HASH_CODE = "lombok.EqualsAndHashCode";
+    private static final String LOMBOK_BUILDER = "lombok.Builder";
+    private static final String LOMBOK_NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
+    private static final String LOMBOK_ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
 
     @Option(name = "anno", description = "Lombok annotation to add (repeatable). Defaults to @lombok.Data when omitted")
     List<XAnnotation<?>> annotations;
@@ -126,14 +127,15 @@ public class LombokPlugin extends AbstractPlugin {
         if (Boolean.TRUE.equals(builder) && !implClass.isAbstract()) {
             // Abstract classes cannot use @Builder. Empty types would get identical
             // no-arg constructors from both @NoArgsConstructor and @AllArgsConstructor.
-            addIfAbsent(resolved, BUILDER, "@lombok.Builder");
-            addIfAbsent(resolved, NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
+            addIfAbsent(resolved, LOMBOK_BUILDER, "@lombok.Builder");
+            addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
             if (!implClass.fields().isEmpty()) {
-                addIfAbsent(resolved, ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
+                addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
             }
         }
 
-        if (hasData(resolved) && hasNonObjectSuperclass(implClass) && !containsAnnotation(resolved, EQUALS_AND_HASH_CODE)) {
+        if (hasData(resolved) && hasNonObjectSuperclass(implClass)
+            && !containsAnnotation(resolved, LOMBOK_EQUALS_AND_HASH_CODE)) {
             resolved.add(parseAnnotation("@lombok.EqualsAndHashCode(callSuper = true)"));
         }
         return resolved;
@@ -152,7 +154,7 @@ public class LombokPlugin extends AbstractPlugin {
     }
 
     private static boolean hasData(List<XAnnotation<?>> resolved) {
-        return containsAnnotation(resolved, DATA);
+        return containsAnnotation(resolved, LOMBOK_DATA);
     }
 
     private static boolean containsAnnotation(List<XAnnotation<?>> resolved, String fqcn) {
