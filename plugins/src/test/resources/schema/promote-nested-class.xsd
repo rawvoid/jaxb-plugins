@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/flatten"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/flatten"
+           xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
+           jaxb:version="3.0"
+           elementFormDefault="qualified">
+
+    <!--
+      Two sibling wrappers each contain an "entry" type.
+      Group / AnotherGroup can lift to package scope; the two Entry types share a
+      simple name and must remain nested under their respective wrappers.
+    -->
+    <xs:complexType name="FlattenRoot">
+        <xs:sequence>
+            <xs:element name="group">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="entry">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element name="value" type="xs:string"/>
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="anotherGroup">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="entry">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element name="value" type="xs:string"/>
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Unique simple names at every nesting level; all nested types should become
+      top-level after repeated one-level promotions.
+    -->
+    <xs:complexType name="DeepRoot">
+        <xs:sequence>
+            <xs:element name="level1">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="level2">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element name="level3">
+                                        <xs:complexType>
+                                            <xs:sequence>
+                                                <xs:element name="leaf" type="xs:string"/>
+                                            </xs:sequence>
+                                        </xs:complexType>
+                                    </xs:element>
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Local simpleType enums need jaxb:typesafeEnumClass (XJC never auto-enums locals).
+      Unique names: Payload and Status both lift to package scope.
+    -->
+    <xs:complexType name="EnumHolder">
+        <xs:sequence>
+            <xs:element name="payload">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="status">
+                            <xs:simpleType>
+                                <xs:annotation>
+                                    <xs:appinfo>
+                                        <jaxb:typesafeEnumClass name="Status"/>
+                                    </xs:appinfo>
+                                </xs:annotation>
+                                <xs:restriction base="xs:string">
+                                    <xs:enumeration value="OPEN"/>
+                                    <xs:enumeration value="CLOSED"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Global enum "ConflictName" occupies package scope. A nested complex type
+      with the same simple name must stop under its wrapper and not promote.
+    -->
+    <xs:simpleType name="ConflictName">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="X"/>
+            <xs:enumeration value="Y"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="ConflictRoot">
+        <xs:sequence>
+            <xs:element name="wrapper">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="conflictName">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element name="note" type="xs:string"/>
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="flattenRoot" type="tns:FlattenRoot"/>
+    <xs:element name="deepRoot" type="tns:DeepRoot"/>
+    <xs:element name="enumHolder" type="tns:EnumHolder"/>
+    <xs:element name="conflictRoot" type="tns:ConflictRoot"/>
+</xs:schema>
