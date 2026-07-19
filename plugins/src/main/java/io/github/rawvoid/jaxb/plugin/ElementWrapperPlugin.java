@@ -28,7 +28,9 @@ import org.xml.sax.SAXException;
 import javax.xml.namespace.QName;
 import java.util.*;
 
+import static io.github.rawvoid.jaxb.utils.ModelUtils.CPROPERTYINFO_PARENT_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
+import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 
 /**
  * Flattens single-collection wrapper types into {@code List} properties with
@@ -207,8 +209,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * Replaces {@code outer} with {@code replacement} at {@code index}, using
-     * {@link CClassInfo#addProperty} so {@code setParent} runs officially.
+     * Replaces {@code outer} with {@code replacement} <strong>in place</strong> so
+     * {@code propOrder} and field declaration order stay unchanged.
+     * <p>
+     * {@link CClassInfo#addProperty} always appends, which would move the flattened
+     * property to the end; we therefore assign parent via the same field
+     * {@code setParent} uses and {@link List#set(int, Object)} at the original index.
+     * </p>
      */
     private boolean replaceProperty(
         CClassInfo owner,
@@ -223,12 +230,24 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
 
         var properties = owner.getProperties();
-        properties.remove(outer);
-        owner.addProperty(replacement);
+        if (index < 0 || index >= properties.size() || properties.get(index) != outer) {
+            index = -1;
+            for (var i = 0; i < properties.size(); i++) {
+                if (properties.get(i) == outer) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index < 0) {
+                log.warn("Skip flattening {}.{}: outer property not found on owner",
+                    owner.fullName(), outer.getName(false));
+                return false;
+            }
+        }
 
-        // addProperty appends; restore original propOrder position.
-        var last = properties.removeLast();
-        properties.add(index, last);
+        // Mirror CPropertyInfo.setParent (package-private) without appending to the list.
+        setFieldValue(CPROPERTYINFO_PARENT_FIELD, replacement, owner);
+        properties.set(index, replacement);
         return true;
     }
 

@@ -19,6 +19,7 @@ package io.github.rawvoid.jaxb.plugin;
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
+import jakarta.xml.bind.annotation.XmlType;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -60,6 +61,15 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
             assertThat(Arrays.stream(clazz.getDeclaredMethods())
                 .map(Method::getName)
                 .noneMatch(name -> name.equals("setItems"))).isTrue();
+
+            // Flattened property must keep its original position (name, items, count).
+            var propOrder = clazz.getAnnotation(XmlType.class).propOrder();
+            assertThat(propOrder).containsExactly("name", "items", "count");
+            var fieldNames = Arrays.stream(clazz.getDeclaredFields())
+                .map(f -> f.getName())
+                .filter(n -> !n.contains("$"))
+                .toList();
+            assertThat(fieldNames).containsExactly("name", "items", "count");
         });
 
         // Wrapper class Items should be removed from the model when remove-wrapper-class=true.
