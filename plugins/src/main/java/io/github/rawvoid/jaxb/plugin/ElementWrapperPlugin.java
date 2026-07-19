@@ -107,16 +107,20 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * A wrapper is a pure collection shell: one element-collection property, no inheritance,
-     * no attribute wildcard, no subclasses. Broader shapes (mixed content, attributes, etc.)
-     * must not be flattened — their structure is not equivalent to {@code @XmlElementWrapper}.
+     * A wrapper is a pure collection shell: one element-collection property, no base class,
+     * no attribute wildcard. Broader shapes must not be flattened — they are not equivalent
+     * to {@code @XmlElementWrapper}.
+     * <p>
+     * Having subclasses does <strong>not</strong> disqualify the type: the shell shape is
+     * about this class's own properties. Subclasses only affect whether we may
+     * <em>delete</em> the class after flattening (see {@link #isReferenced}).
+     * </p>
      */
     private boolean isWrapperClass(CClassInfo classInfo) {
         // Attribute wildcard is not represented as a CPropertyInfo entry but still contributes
         // structure (see CClassInfo#hasAttributeWildcard / BeanGenerator attribute wildcard field).
         if (classInfo.isAbstract()
             || classInfo.hasAttributeWildcard()
-            || classInfo.hasSubClasses()
             || classInfo.getBaseClass() != null
             || classInfo.getRefBaseClass() != null
             || classInfo.getProperties().size() != 1) {
@@ -316,7 +320,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * </p>
      */
     private boolean isReferenced(Model model, CClassInfo target) {
-        // Subclasses keep the type live even if no property currently points at it.
+        // Subclasses still need the base bean to be generated; never remove a type that is extended.
         if (target.hasSubClasses()) {
             return true;
         }
