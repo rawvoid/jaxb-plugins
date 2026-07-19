@@ -16,34 +16,34 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.*;
+import com.sun.codemodel.JAnnotationUse;
 import com.sun.tools.xjc.Options;
-import com.sun.tools.xjc.model.CClassInfo;
-import com.sun.tools.xjc.outline.ClassOutline;
+import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
-import jakarta.xml.bind.JAXBElement;
-import jakarta.xml.bind.annotation.*;
-import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
-import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapters;
+import jakarta.xml.bind.annotation.XmlElementWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
-import java.lang.annotation.Annotation;
+import javax.xml.namespace.QName;
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-import static io.github.rawvoid.jaxb.utils.OutlineUtils.*;
+import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
 
 /**
- * JAXB plugin that simplifies element wrappers in the generated code.
+ * Flattens single-collection wrapper types into {@code List} properties with
+ * {@link XmlElementWrapper}.
  * <p>
- * This plugin identifies wrapper classes (classes with a single collection property)
- * and flattens them by moving the {@link jakarta.xml.bind.annotation.XmlElementWrapper}
- * and {@link jakarta.xml.bind.annotation.XmlElement} annotations to the field
- * that uses the wrapper class, then optionally removing the wrapper class itself.
+ * Structural rewrites happen in {@link #postProcessModel(Model, ErrorHandler)} so BeanGenerator
+ * emits collection fields and item {@code @XmlElement} annotations. {@link #run} only adds
+ * {@link XmlElementWrapper}, which XJC never generates ({@code CElementPropertyInfo#getXmlName()}
+ * always returns null).
+ * </p>
+ * <p>
+ * Scope: a non-collection element property whose type is a wrapper class (exactly one
+ * non-value-list collection element property, no base class). Nested “list of wrappers” is
+ * not recursively unwrapped.
  * </p>
  *
  * @author Rawvoid
@@ -56,415 +56,369 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
     Boolean removeWrapperClass;
 
+    /** Captured in postProcessModel; used in run to place {@link XmlElementWrapper}. */
+    private final List<FlattenedField> flattenedFields = new ArrayList<>();
+
+    private record FlattenedField(
+        CClassInfo owner,
+        String propertyName,
+        QName wrapperName,
+        boolean wrapperNillable,
+        boolean wrapperRequired
+    ) {
+    }
+
     @Override
-    public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        // Identify candidate wrapper classes once and reuse across the run.
-        var elementWrapperClasses = findElementWrapperClasses(outline);
-        var allClasses = outline.getClasses().stream()
-            .map(i -> i.implClass)
-            .collect(Collectors.toSet());
-        for (var classOutline : outline.getClasses()) {
-            var implClass = classOutline.implClass;
-            var fields = implClass.fields();
+    public void postProcessModel(Model model, ErrorHandler errorHandler) {
+        flattenedFields.clear();
 
-            fields.values().stream().filter(field -> {
-                // Only handle fields whose type is a recognized wrapper class.
-                if (!elementWrapperClasses.containsKey(field.type().fullName())) return false;
+        var wrappers = findWrapperClasses(model);
+        var usedWrappers = new LinkedHashSet<CClassInfo>();
 
-                // Skip if the field has a @XmlJavaTypeAdapter or @XmlJavaTypeAdapters annotation
-                // because the adapter expects the wrapper type and changing it would break behavior.
-                var hasTypeAdapter = getAnnotation(field, XmlJavaTypeAdapter.class) != null
-                    || getAnnotation(field, XmlJavaTypeAdapters.class) != null;
-                if (hasTypeAdapter) return false;
-
-                // Skip if wrapper annotation already exists to avoid duplicate annotations.
-                return getAnnotation(field, XmlElementWrapper.class) == null;
-            }).forEach(field -> handleWrapperField(field, implClass));
+        for (var owner : List.copyOf(model.beans().values())) {
+            flattenOwner(owner, wrappers, usedWrappers);
         }
 
         if (Boolean.TRUE.equals(removeWrapperClass)) {
-            var removedClasses = new ArrayList<JDefinedClass>();
-            var notRemovedClasses = new ArrayList<JDefinedClass>();
-            elementWrapperClasses.values().stream().map(ClassOutline::getImplClass).forEach(wrapperClass -> {
-                var removed = removeWrapperClass(wrapperClass, allClasses);
-                if (removed) {
-                    removedClasses.add(wrapperClass);
-                } else {
-                    notRemovedClasses.add(wrapperClass);
-                }
-            });
-
-            var message = String.join("\n    ", removedClasses.stream()
-                .map(JDefinedClass::fullName).toList());
-            log.info("Removed wrapper classes: {}", message);
-
-            message = String.join("\n    ", notRemovedClasses.stream()
-                .map(JDefinedClass::fullName).toList());
-            log.info("Skipped removing wrapper classes: {}", message);
-
+            removeUnusedWrappers(model, usedWrappers);
         }
 
-        if (opt.debugMode) {
-            fixJAXBDebugClass(outline);
+        if (!flattenedFields.isEmpty()) {
+            log.info("Flattened {} wrapper field(s)", flattenedFields.size());
         }
+    }
 
+    @Override
+    public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+        for (var flattened : flattenedFields) {
+            annotateXmlElementWrapper(outline, flattened);
+        }
         return true;
     }
 
-    /**
-     * Flattens a wrapper field by migrating element annotations and retyping the field.
-     * <p>
-     * The wrapper class is expected to contain exactly one collection field. This method
-     * moves the element-related annotations from the inner field to the outer field,
-     * adds the {@link XmlElementWrapper} annotation, and updates accessor signatures
-     * to the inner collection type.
-     * </p>
-     */
-    private void handleWrapperField(JFieldVar outerField, JDefinedClass outerClass) {
-        var type = outerField.type();
-
-        var innerClass = (JDefinedClass) type;
-        var innerField = innerClass.fields().values().iterator().next();
-
-        var outerXmlElement = getAnnotation(outerField, XmlElement.class);
-        // If @XmlElement specifies a type attribute, it cannot be converted to / wrapped with @XmlElementWrapper
-        if (outerXmlElement != null && outerXmlElement.getAnnotationMembers().get("type") != null) return;
-
-        migrateAnnotation(outerField, innerField, outerClass, innerClass);
-        addXmlElementWrapper(outerField, outerXmlElement);
-
-        var newType = innerField.type();
-        outerField.type(newType);
-
-        // Update getter and setter methods
-        var fieldName = outerField.name();
-        var capName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
-        var getterName = "get" + capName;
-        var setterName = "set" + capName;
-
-        for (var method : outerClass.methods()) {
-            if (method.name().equals(getterName) && method.params().isEmpty()) {
-                method.type(newType);
-            } else if (method.name().equals(setterName) && method.params().size() == 1) {
-                method.params().getFirst().type(newType);
+    private Set<CClassInfo> findWrapperClasses(Model model) {
+        var result = new LinkedHashSet<CClassInfo>();
+        for (var classInfo : model.beans().values()) {
+            if (isWrapperClass(classInfo)) {
+                result.add(classInfo);
             }
         }
+        return result;
     }
 
     /**
-     * Adds {@link XmlElementWrapper} to the outer field and reuses compatible members from
-     * the existing {@link XmlElement} annotation.
+     * A wrapper is a pure collection shell: one element-collection property, no base class,
+     * no attribute wildcard. Broader shapes must not be flattened — they are not equivalent
+     * to {@code @XmlElementWrapper}.
      * <p>
-     * Only a subset of members are compatible with {@link XmlElementWrapper}; other members
-     * (e.g., type) are intentionally ignored.
+     * Having subclasses does <strong>not</strong> disqualify the type: the shell shape is
+     * about this class's own properties. Subclasses only affect whether we may
+     * <em>delete</em> the class after flattening (see {@link #isReferenced}).
      * </p>
      */
-    private void addXmlElementWrapper(JFieldVar outerField, JAnnotationUse outerXmlElement) {
-        var xmlElementWrapper = outerField.annotate(XmlElementWrapper.class);
-        if (outerXmlElement == null) return;
-
-        outerField.removeAnnotation(outerXmlElement);
-        outerXmlElement.getAnnotationMembers().forEach((key, value) -> {
-            switch (key) {
-                case "name" -> xmlElementWrapper.param("name", value);
-                case "nillable" -> xmlElementWrapper.param("nillable", value);
-                case "required" -> xmlElementWrapper.param("required", value);
-                case "namespace" -> xmlElementWrapper.param("namespace", value);
-                default -> {
-                    // Ignore other members
-                }
-            }
-        });
-    }
-
-    /**
-     * Migrates element annotations from the inner field to the outer field.
-     * <p>
-     * Rules:
-     * <ul>
-     *     <li>Prefer {@link XmlElement}/{@link XmlElementRef} when present.</li>
-     *     <li>Otherwise copy array variants {@link XmlElements}/{@link XmlElementRefs}.</li>
-     *     <li>If no relevant annotation exists and the names differ, synthesize {@link XmlElement}.</li>
-     * </ul>
-     * If an element-ref style is used, merge {@link XmlSeeAlso} information from the wrapper
-     * class into the owning class to keep polymorphic bindings intact.
-     * </p>
-     */
-    private void migrateAnnotation(JFieldVar outerField, JFieldVar innerField, JDefinedClass outerClass, JDefinedClass innerClass) {
-        JAnnotationUse targetAnnotation;
-        if ((targetAnnotation = getAnnotation(innerField, XmlElement.class)) != null
-            || (targetAnnotation = getAnnotation(innerField, XmlElementRef.class)) != null) {
-            var newAnnotation = outerField.annotate(targetAnnotation.getAnnotationClass());
-            copyAnnotationMembers(targetAnnotation, newAnnotation);
-
-            setXmlElementName(newAnnotation, outerField, innerField);
-        } else if ((targetAnnotation = getAnnotation(innerField, XmlElements.class)) != null
-            || (targetAnnotation = getAnnotation(innerField, XmlElementRefs.class)) != null) {
-            var newArrayAnnotation = outerField.annotate(targetAnnotation.getAnnotationClass());
-            copyAnnotationMembers(targetAnnotation, newArrayAnnotation);
-
-            var value = (JAnnotationArrayMember) targetAnnotation.getAnnotationMembers().get("value");
-
-            // override the value array
-            var newValues = newArrayAnnotation.paramArray("value");
-            value.annotations().forEach(anno -> {
-                var newAnno = newValues.annotate(anno.getAnnotationClass());
-                copyAnnotationMembers(anno, newAnno);
-
-                setXmlElementName(newAnno, outerField, innerField);
-            });
-        } else if (!outerField.name().equals(innerField.name())) {
-            var newXmlElement = outerField.annotate(XmlElement.class);
-
-            setXmlElementName(newXmlElement, outerField, innerField);
-        }
-
-        var targetAnnotationName = targetAnnotation == null ? null : targetAnnotation.getAnnotationClass().fullName();
-        if (Objects.equals(targetAnnotationName, XmlElementRef.class.getName()) || Objects.equals(targetAnnotationName, XmlElementRefs.class.getName())) {
-            mergeSeeAlsoClass(outerClass, innerClass);
-        }
-
-        copyAnnotation(outerField, innerField, XmlJavaTypeAdapter.class);
-        copyAnnotation(outerField, innerField, XmlJavaTypeAdapters.class);
-    }
-
-    /**
-     * Copies a single annotation (if present) from the inner field to the outer field.
-     */
-    private void copyAnnotation(JFieldVar outerField, JFieldVar innerField, Class<? extends Annotation> annotationClass) {
-        var targetAnnotation = getAnnotation(innerField, annotationClass);
-        if (targetAnnotation == null) return;
-
-        var newAnnotation = outerField.annotate(targetAnnotation.getAnnotationClass());
-        copyAnnotationMembers(targetAnnotation, newAnnotation);
-    }
-
-    /**
-     * Merges {@link XmlSeeAlso} class references from the wrapper class into the
-     * owning class to preserve polymorphic element references after flattening.
-     */
-    private void mergeSeeAlsoClass(JDefinedClass outerClass, JDefinedClass innerClass) {
-        var innerClassSeeAlso = getAnnotation(innerClass, XmlSeeAlso.class);
-        if (innerClassSeeAlso == null) return;
-
-        var innerSeeAlsoTypes = (JAnnotationArrayMember) innerClassSeeAlso.getAnnotationMembers().get("value");
-
-        var innerSeeAlsoTypesList = innerSeeAlsoTypes.annotations2().stream()
-            .map(i -> (JAnnotationClassValue) i)
-            .map(i -> i.type().fullName())
-            .toList();
-        var outerClassSeeAlso = getAnnotation(outerClass, XmlSeeAlso.class);
-        if (outerClassSeeAlso == null) {
-            outerClassSeeAlso = outerClass.annotate(XmlSeeAlso.class);
-        }
-        var outerSeeAlsoTypes = (JAnnotationArrayMember) outerClassSeeAlso.getAnnotationMembers().get("value");
-        if (outerSeeAlsoTypes == null) {
-            outerSeeAlsoTypes = outerClassSeeAlso.paramArray("value");
-        }
-        var outerSeeAlsoTypesList = outerSeeAlsoTypes.annotations2().stream()
-            .map(i -> (JAnnotationClassValue) i)
-            .map(i -> i.type().fullName())
-            .toList();
-
-        for (var className : innerSeeAlsoTypesList) {
-            if (!outerSeeAlsoTypesList.contains(className)) {
-                outerSeeAlsoTypes.param(outerClass.owner().ref(className));
-            }
-        }
-    }
-
-    /**
-     * Ensures the element name stays consistent when the wrapper field name differs
-     * from the inner collection field name.
-     */
-    private void setXmlElementName(JAnnotationUse targetAnnotation, JFieldVar outerField, JFieldVar innerField) {
-        var name = getAnnotationNameValue(targetAnnotation);
-        if (name == null && !outerField.name().equals(innerField.name())) {
-            targetAnnotation.param("name", innerField.name());
-        }
-    }
-
-    /**
-     * Copies all annotation members from source to target.
-     */
-    private void copyAnnotationMembers(JAnnotationUse source, JAnnotationUse target) {
-        for (var member : source.getAnnotationMembers().entrySet()) {
-            target.param(member.getKey(), member.getValue());
-        }
-    }
-
-    /**
-     * Returns the explicit "name" member of an annotation if present.
-     */
-    private String getAnnotationNameValue(JAnnotationUse annotation) {
-        if (annotation == null) {
-            return null;
-        }
-        var value = annotation.getAnnotationMembers().get("name");
-        if (value == null) {
-            return null;
-        }
-        return value.toString();
-    }
-
-    /**
-     * Removes the wrapper class when it is not referenced by any other generated class.
-     * <p>
-     * References include: super types, field types, return types, and parameter types.
-     * If any reference remains, the wrapper class is preserved.
-     * </p>
-     */
-    private boolean removeWrapperClass(JDefinedClass wrapperClass, Set<JDefinedClass> allClasses) {
-        // Wrapper classes with inner classes are not removable.
-        if (wrapperClass.classes().hasNext()) {
+    private boolean isWrapperClass(CClassInfo classInfo) {
+        // Attribute wildcard is not represented as a CPropertyInfo entry but still contributes
+        // structure (see CClassInfo#hasAttributeWildcard / BeanGenerator attribute wildcard field).
+        if (classInfo.isAbstract()
+            || classInfo.hasAttributeWildcard()
+            || classInfo.getBaseClass() != null
+            || classInfo.getRefBaseClass() != null
+            || classInfo.getProperties().size() != 1) {
             return false;
         }
-        allClasses.removeIf(definedClass -> definedClass.equals(wrapperClass));
-        var wrapperClassName = wrapperClass.fullName();
-        var existsReference = allClasses.stream()
-            .anyMatch(definedClass -> hasReference(definedClass, wrapperClassName));
-        if (!existsReference) {
-            return removeWrapperClass(wrapperClass);
+
+        var property = classInfo.getProperties().getFirst();
+        if (!property.isCollection() || property.ref().isEmpty()) {
+            return false;
         }
 
+        // Classic XSD wrappers are element collections; value lists map to @XmlList, not wrapper.
+        return property instanceof CElementPropertyInfo elementProperty
+            && !elementProperty.isValueList();
+    }
+
+    private void flattenOwner(CClassInfo owner, Set<CClassInfo> wrappers, Set<CClassInfo> usedWrappers) {
+        var properties = owner.getProperties();
+        for (var i = 0; i < properties.size(); i++) {
+            var outer = properties.get(i);
+            var wrapper = resolveWrapperTarget(outer, wrappers);
+            if (wrapper == null || owner == wrapper) {
+                continue;
+            }
+
+            var inner = wrapper.getProperties().getFirst();
+            if (!(inner instanceof CElementPropertyInfo innerElement)) {
+                continue;
+            }
+
+            var replacement = createFlattenedElementProperty((CElementPropertyInfo) outer, innerElement);
+            if (!replaceProperty(owner, i, outer, replacement)) {
+                continue;
+            }
+
+            usedWrappers.add(wrapper);
+            recordFlattenedField(owner, (CElementPropertyInfo) outer, replacement);
+            log.debug("Flattened {}.{} (wrapper {})",
+                owner.fullName(), outer.getName(false), wrapper.fullName());
+        }
+    }
+
+    /**
+     * Non-collection element property whose single type is a known wrapper class.
+     */
+    private CClassInfo resolveWrapperTarget(CPropertyInfo outer, Set<CClassInfo> wrappers) {
+        if (outer.isCollection() || !(outer instanceof CElementPropertyInfo elementProperty)) {
+            return null;
+        }
+        if (elementProperty.getAdapter() != null || elementProperty.getTypes().size() != 1) {
+            return null;
+        }
+        var target = elementProperty.getTypes().getFirst().getTarget();
+        if (!(target instanceof CClassInfo classInfo) || !wrappers.contains(classInfo)) {
+            return null;
+        }
+        return classInfo;
+    }
+
+    private CElementPropertyInfo createFlattenedElementProperty(
+        CElementPropertyInfo outer,
+        CElementPropertyInfo inner
+    ) {
+        var flattened = new CElementPropertyInfo(
+            outer.getName(true),
+            CElementPropertyInfo.CollectionMode.REPEATED_ELEMENT,
+            inner.id(),
+            inner.getExpectedMimeType(),
+            outer.getSchemaComponent(),
+            new CCustomizations(outer.getCustomizations()),
+            outer.getLocator(),
+            false
+        );
+        flattened.setName(true, outer.getName(true));
+        flattened.setName(false, outer.getName(false));
+
+        for (var typeRef : inner.getTypes()) {
+            flattened.getTypes().add(new CTypeRef(
+                typeRef.getTarget(),
+                typeRef.getTagName(),
+                typeRef.getTypeName(),
+                typeRef.isNillable(),
+                typeRef.defaultValue
+            ));
+        }
+
+        if (inner.getAdapter() != null) {
+            flattened.setAdapter(inner.getAdapter());
+        }
+        if (outer.realization != null) {
+            flattened.realization = outer.realization;
+        } else if (inner.realization != null) {
+            flattened.realization = inner.realization;
+        }
+        flattened.javadoc = outer.javadoc;
+        flattened.inlineBinaryData = outer.inlineBinaryData || inner.inlineBinaryData;
+        return flattened;
+    }
+
+    /**
+     * Replaces {@code outer} with {@code replacement} while preserving propOrder.
+     * <p>
+     * Uses {@link CClassInfo#addProperty} so official {@code setParent} (including
+     * customization linkage) runs, then moves the appended property back to
+     * {@code index}. Existing siblings are left untouched — they already have a parent
+     * and must not go through {@code addProperty} again.
+     * </p>
+     * <p>
+     * {@link CClassInfo#addProperty} silently no-ops when {@code ref()} is empty. We therefore
+     * append first and verify the tail is {@code replacement} <em>before</em> removing
+     * {@code outer}, so a failed append never drops the original property.
+     * </p>
+     */
+    private boolean replaceProperty(
+        CClassInfo owner,
+        int index,
+        CPropertyInfo outer,
+        CElementPropertyInfo replacement
+    ) {
+        if (replacement.ref().isEmpty()) {
+            log.warn("Skip flattening {}.{}: replacement has no type refs",
+                owner.fullName(), outer.getName(false));
+            return false;
+        }
+
+        var properties = owner.getProperties();
+        // 1) Append + setParent. Outer remains at `index` until this is confirmed.
+        int sizeBefore = properties.size();
+        owner.addProperty(replacement);
+        if (properties.size() != sizeBefore + 1 || properties.getLast() != replacement) {
+            // addProperty no-op'd — model unchanged.
+            log.warn("Skip flattening {}.{}: addProperty did not append the replacement",
+                owner.fullName(), outer.getName(false));
+            return false;
+        }
+
+        // 2) Drop outer, then move replacement from the tail into its slot.
+        //    Example: [name, items, count, replacement]
+        //      remove(1) → [name, count, replacement]
+        //      removeLast + add(1, …) → [name, replacement, count]
+        //    Because we only remove at `index` (< sizeBefore), the tail stays `replacement`.
+        properties.remove(index);
+        properties.add(index, properties.removeLast());
+        return true;
+    }
+
+    private void recordFlattenedField(
+        CClassInfo owner,
+        CElementPropertyInfo outer,
+        CElementPropertyInfo replacement
+    ) {
+        var typeRef = outer.getTypes().getFirst();
+        flattenedFields.add(new FlattenedField(
+            owner,
+            replacement.getName(false),
+            typeRef.getTagName(),
+            typeRef.isNillable(),
+            outer.isRequired()
+        ));
+    }
+
+    private void removeUnusedWrappers(Model model, Set<CClassInfo> wrappers) {
+        var removed = new ArrayList<String>();
+        var kept = new ArrayList<String>();
+
+        for (var wrapper : wrappers) {
+            if (!model.beans().containsValue(wrapper)) {
+                continue;
+            }
+            if (isReferenced(model, wrapper)) {
+                kept.add(wrapper.fullName());
+                continue;
+            }
+            if (removeClass(model, wrapper)) {
+                removed.add(wrapper.fullName());
+            } else {
+                kept.add(wrapper.fullName());
+            }
+        }
+
+        if (!removed.isEmpty()) {
+            log.info("Removed wrapper classes:\n    {}", String.join("\n    ", removed));
+        }
+        if (!kept.isEmpty()) {
+            log.info("Skipped removing wrapper classes:\n    {}", String.join("\n    ", kept));
+        }
+    }
+
+    /**
+     * Returns true if {@code target} is still reachable from other model members after
+     * flattening. Covers inheritance, nesting, property type refs, and element decls.
+     * <p>
+     * Intentionally does <strong>not</strong> consult {@link Model#typeUses()}: that map is a
+     * registry of named schema types (the type's own entry always points at itself), not a
+     * reverse-reference index. Using it would prevent every named wrapper from ever being
+     * removed.
+     * </p>
+     */
+    private boolean isReferenced(Model model, CClassInfo target) {
+        // Subclasses still need the base bean to be generated; never remove a type that is extended.
+        if (target.hasSubClasses()) {
+            return true;
+        }
+
+        for (var bean : model.beans().values()) {
+            if (bean == target) {
+                continue;
+            }
+            // Inheritance (subclass → this) and nested class parent link.
+            if (bean.getBaseClass() == target || bean.parent() == target) {
+                return true;
+            }
+            if (propertyRefsTarget(bean.getProperties(), target)) {
+                return true;
+            }
+        }
+
+        for (var elementInfo : model.getAllElements()) {
+            // Global/local element whose content type is this class, or whose property refs it.
+            if (elementInfo.getContentType() == target) {
+                return true;
+            }
+            var property = elementInfo.getProperty();
+            if (property != null && propertyRefsTarget(List.of(property), target)) {
+                return true;
+            }
+        }
         return false;
     }
 
-    /**
-     * Removes the wrapper class from the parent container and ObjectFactory.
-     *
-     * @param wrapperClass The wrapper class to remove.
-     */
-    private boolean removeWrapperClass(JDefinedClass wrapperClass) {
-        removeFromParentContainer(wrapperClass);
-        removeFromObjectFactory(wrapperClass);
-
-        return true;
-    }
-
-    /**
-     * Finds wrapper classes in the JAXB outline.
-     * <p>
-     * A wrapper class must declare exactly one collection property and must not
-     * inherit any additional properties from its base classes.
-     * </p>
-     *
-     * @param outline The JAXB outline to search.
-     * @return A map of wrapper class names to their {@link CClassInfo} instances.
-     */
-    private Map<String, ClassOutline> findElementWrapperClasses(Outline outline) {
-        return outline.getClasses().stream()
-            .filter(this::isWrapperClass)
-            .collect(Collectors.toMap(i -> i.implClass.fullName(), Function.identity()));
-    }
-
-    /**
-     * Checks if a class is a wrapper class that can be flattened by the plugin.
-     * <p>
-     * A wrapper class is defined as:
-     * <ul>
-     *     <li>Not an abstract class</li>
-     *     <li>Not an interface</li>
-     *     <li>Has no superclass</li>
-     *     <li>Contains exactly one non-static field</li>
-     *     <li>The field type is a collection</li>
-     *     <li>The field type is not JAXBElement</li>
-     *     <li>The field has no conflicting JAXB annotations</li>
-     * </ul>
-     * </p>
-     *
-     * @param classOutline The class outline to check
-     * @return {@code true} if the class is a wrapper class, {@code false} otherwise
-     */
-    private boolean isWrapperClass(ClassOutline classOutline) {
-        var implClass = classOutline.implClass;
-        // Check if the class is abstract, an interface, or has a superclass, it cannot be a wrapper class.
-        if (implClass.isAbstract() || implClass.isInterface() || implClass.superClass() != null) {
-            return false;
-        }
-
-        var fields = implClass.fields();
-        if (fields.size() != 1) {
-            return false;
-        }
-
-        // Get the single field
-        var field = fields.values().iterator().next();
-        if (isStatic(field.mods())) {
-            return false;
-        }
-        var fieldTypeName = field.type().fullName();
-
-        return isCollection(fieldTypeName)
-            && !ClassNameDetector.detect(fieldTypeName, JAXBElement.class.getName())
-            && !hasConflictingAnnotation(field);
-    }
-
-    /**
-     * Returns true if the modifiers contain the static modifier.
-     */
-    private boolean isStatic(JMods mods) {
-        return (mods.getValue() & JMod.STATIC) != 0;
-    }
-
-    /**
-     * Returns true if the full type name is a collection type.
-     */
-    private boolean isCollection(String fullTypeName) {
-        if (fullTypeName == null) {
-            return false;
-        }
-        var idx = fullTypeName.indexOf('<');
-        if (idx > 0) {
-            fullTypeName = fullTypeName.substring(0, idx);
-        }
-        try {
-            var clazz = Class.forName(fullTypeName);
-            return Collection.class.isAssignableFrom(clazz);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * Checks whether a field contains JAXB annotations that should prevent wrapper flattening.
-     */
-    private boolean hasConflictingAnnotation(JFieldVar field) {
-        var classNamePrefix = XmlElementWrapper.class.getPackageName() + ".";
-        return field.annotations().stream().anyMatch(anno -> {
-            var className = anno.getAnnotationClass().fullName();
-            if (!className.startsWith(classNamePrefix)) {
-                return false;
+    private static boolean propertyRefsTarget(Iterable<CPropertyInfo> properties, CClassInfo target) {
+        for (var property : properties) {
+            for (var ref : property.ref()) {
+                if (ref == target) {
+                    return true;
+                }
             }
-            return isConflictingJaxbAnnotation(className);
-        });
+        }
+        return false;
+    }
+
+    private void annotateXmlElementWrapper(Outline outline, FlattenedField flattened) {
+        var classOutline = outline.getClazz(flattened.owner());
+        var field = classOutline.implClass.fields().get(flattened.propertyName());
+        if (field == null) {
+            log.warn("Could not find field {} on {}",
+                flattened.propertyName(), flattened.owner().fullName());
+            return;
+        }
+
+        var alreadyPresent = field.annotations().stream()
+            .anyMatch(a -> a.getAnnotationClass().fullName().equals(XmlElementWrapper.class.getName()));
+        if (alreadyPresent) {
+            return;
+        }
+
+        var annotation = field.annotate(XmlElementWrapper.class);
+        applyXmlElementWrapperParams(annotation, flattened);
     }
 
     /**
-     * Returns true for JAXB annotations that conflict with wrapper flattening.
+     * Maps the original outer element QName onto {@link XmlElementWrapper}.
+     * <p>
+     * Strategy (aligned with JAXB annotation defaulting):
+     * <ul>
+     *   <li><b>name</b> — omit when equal to the Java field name so the runtime uses
+     *       {@code ##default} (property name). Set only when the schema local name differs.</li>
+     *   <li><b>namespace</b> — set whenever the outer element has a non-empty namespace URI.
+     *       This is independent of the name check: the local name may match the field name
+     *       while the element still lives in a namespace that package-info defaulting would
+     *       not recover (e.g. a different NS than {@code @XmlSchema.namespace}).</li>
+     *   <li><b>nillable</b> / <b>required</b> — only when true on the original outer element.</li>
+     * </ul>
+     * Empty namespace URI is left defaulted (unqualified / form-default behaviour).
+     * </p>
      */
-    private boolean isConflictingJaxbAnnotation(String className) {
-        return className.equals(XmlElementWrapper.class.getName())
-            || className.equals(XmlAttribute.class.getName())
-            || className.equals(XmlAnyAttribute.class.getName())
-            || className.equals(XmlValue.class.getName())
-            || className.equals(XmlList.class.getName())
-            || className.equals(XmlTransient.class.getName());
-    }
+    private void applyXmlElementWrapperParams(JAnnotationUse annotation, FlattenedField flattened) {
+        var wrapperName = flattened.wrapperName();
+        if (wrapperName == null) {
+            return;
+        }
 
+        var localName = wrapperName.getLocalPart();
+        if (localName != null && !localName.isEmpty() && !localName.equals(flattened.propertyName())) {
+            annotation.param("name", localName);
+        }
 
-    /**
-     * Gets the annotation of the specified type for the given annotatable element.
-     *
-     * @param annotatable The annotatable element to get the annotation for.
-     * @param clazz       The class of the annotation to get.
-     * @param <T>         The type of the annotation.
-     * @return The annotation of the specified type, or null if not found.
-     */
-    private <T extends Annotation> JAnnotationUse getAnnotation(JAnnotatable annotatable, Class<T> clazz) {
-        return annotatable.annotations().stream()
-            .filter(anno -> anno.getAnnotationClass().fullName().equals(clazz.getName()))
-            .findFirst()
-            .orElse(null);
+        var namespace = wrapperName.getNamespaceURI();
+        if (namespace != null && !namespace.isEmpty()) {
+            annotation.param("namespace", namespace);
+        }
+
+        if (flattened.wrapperNillable()) {
+            annotation.param("nillable", true);
+        }
+        if (flattened.wrapperRequired()) {
+            annotation.param("required", true);
+        }
     }
 }
+
