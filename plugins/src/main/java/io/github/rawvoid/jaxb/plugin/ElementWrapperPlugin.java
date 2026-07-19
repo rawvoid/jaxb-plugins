@@ -209,13 +209,8 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * Replaces {@code outer} with {@code replacement} <strong>in place</strong> so
-     * {@code propOrder} and field declaration order stay unchanged.
-     * <p>
-     * {@link CClassInfo#addProperty} always appends, which would move the flattened
-     * property to the end; we therefore assign parent via the same field
-     * {@code setParent} uses and {@link List#set(int, Object)} at the original index.
-     * </p>
+     * Replaces {@code outer} with {@code replacement} in place so propOrder is preserved.
+     * Avoids {@link CClassInfo#addProperty}, which always appends.
      */
     private boolean replaceProperty(
         CClassInfo owner,
@@ -229,25 +224,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             return false;
         }
 
-        var properties = owner.getProperties();
-        if (index < 0 || index >= properties.size() || properties.get(index) != outer) {
-            index = -1;
-            for (var i = 0; i < properties.size(); i++) {
-                if (properties.get(i) == outer) {
-                    index = i;
-                    break;
-                }
-            }
-            if (index < 0) {
-                log.warn("Skip flattening {}.{}: outer property not found on owner",
-                    owner.fullName(), outer.getName(false));
-                return false;
-            }
-        }
-
         // Mirror CPropertyInfo.setParent (package-private) without appending to the list.
         setFieldValue(CPROPERTYINFO_PARENT_FIELD, replacement, owner);
-        properties.set(index, replacement);
+        owner.getProperties().set(index, replacement);
         return true;
     }
 
