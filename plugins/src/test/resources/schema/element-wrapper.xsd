@@ -46,8 +46,9 @@
             <xs:element name="codes" type="tns:CodeList"/>
 
             <!--
-              Nillable complex elements become JAXBElement&lt;AliasList&gt; in XJC.
-              The plugin only flattens CElementPropertyInfo shells, so this stays nested.
+              Nillable + optional complex shells are bound by XJC as CReferencePropertyInfo
+              (JAXBElement&lt;AliasList&gt;). ElementWrapperPlugin rewrites them to List +
+              @XmlElementWrapper(nillable = true).
             -->
             <xs:element name="aliases" type="tns:AliasList" nillable="true" minOccurs="0"/>
 

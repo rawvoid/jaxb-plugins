@@ -294,6 +294,28 @@ public final class ModelUtils {
     }
 
     /**
+     * Removes a {@link CElementInfo} from {@link Model#getAllElements()} / element mappings.
+     * Used when a synthetic local element (e.g. nillable reference binding) is rewritten away.
+     *
+     * @return {@code true} if the element was present and removed
+     */
+    @SuppressWarnings("unchecked")
+    public static boolean removeElementInfo(Model model, CElementInfo elementInfo) {
+        if (model == null || elementInfo == null) {
+            return false;
+        }
+        var elementMappings =
+            (Map<Object, Map<QName, CElementInfo>>) getFieldValue(MODEL_ELEMENT_MAPPINGS_FIELD, model);
+        var scope = elementInfo.getScope();
+        var scopeClass = scope != null ? scope.getClazz() : null;
+        var mapping = elementMappings.get(scopeClass);
+        if (mapping == null) {
+            return false;
+        }
+        return mapping.remove(elementInfo.getElementName()) != null;
+    }
+
+    /**
      * Replaces the base class of a subclass with a new base class.
      * Unlinks from the old base class and links to the new one.
      *
