@@ -45,6 +45,12 @@ public class FlattenInnerClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(byName.get("Level1").getFirst().isMemberClass()).isTrue();
         assertThat(byName.get("Level2").getFirst().isMemberClass()).isTrue();
         assertThat(byName.get("Level3").getFirst().isMemberClass()).isTrue();
+
+        assertThat(byName.get("Payload").getFirst().isMemberClass()).isTrue();
+        assertThat(byName.get("Status").getFirst().isMemberClass()).isTrue();
+        assertThat(byName.get("Status").getFirst().isEnum()).isTrue();
+        assertThat(byName.get("Wrapper").getFirst().isMemberClass()).isTrue();
+        assertThat(byName.get("ConflictName")).anyMatch(c -> c.isMemberClass() && !c.isEnum());
     }
 
     @Test
@@ -54,7 +60,9 @@ public class FlattenInnerClassPluginTest extends AbstractXJCMojoTestCase {
 
         assertThat(byName).containsKeys(
             "FlattenRoot", "Group", "AnotherGroup", "Entry",
-            "DeepRoot", "Level1", "Level2", "Level3"
+            "DeepRoot", "Level1", "Level2", "Level3",
+            "EnumHolder", "Payload", "Status",
+            "ConflictRoot", "Wrapper", "ConflictName"
         );
 
         var flattenRoot = byName.get("FlattenRoot").getFirst();
@@ -93,6 +101,34 @@ public class FlattenInnerClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(deepRoot.getDeclaredField("level1").getType()).isEqualTo(level1);
         assertThat(level1.getDeclaredField("level2").getType()).isEqualTo(level2);
         assertThat(level2.getDeclaredField("level3").getType()).isEqualTo(level3);
+
+        // Nested payload + enum with unique names both become top-level.
+        var enumHolder = byName.get("EnumHolder").getFirst();
+        var payload = byName.get("Payload").getFirst();
+        var status = byName.get("Status").getFirst();
+        assertThat(payload.isMemberClass()).isFalse();
+        assertThat(status.isMemberClass()).isFalse();
+        assertThat(status.isEnum()).isTrue();
+        assertThat(enumHolder.getDeclaredField("payload").getType()).isEqualTo(payload);
+        assertThat(payload.getDeclaredField("status").getType()).isEqualTo(status);
+
+        // Global enum ConflictName occupies package scope. Nested bean of the same simple
+        // name still lifts one level (Wrapper → ConflictRoot) then stops before package.
+        var packageEnum = byName.get("ConflictName").stream()
+            .filter(c -> c.isEnum() && !c.isMemberClass())
+            .findFirst()
+            .orElseThrow();
+        var nestedConflictBean = byName.get("ConflictName").stream()
+            .filter(c -> !c.isEnum())
+            .findFirst()
+            .orElseThrow();
+        var conflictRoot = byName.get("ConflictRoot").getFirst();
+        var wrapper = byName.get("Wrapper").getFirst();
+        assertThat(packageEnum.isMemberClass()).isFalse();
+        assertThat(wrapper.isMemberClass()).isFalse();
+        assertThat(nestedConflictBean.isMemberClass()).isTrue();
+        assertThat(nestedConflictBean.getEnclosingClass()).isEqualTo(conflictRoot);
+        assertThat(wrapper.getDeclaredField("conflictName").getType()).isEqualTo(nestedConflictBean);
     }
 
     private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {

@@ -18,6 +18,8 @@
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://www.github.com/rawvoid/xjc-plugins/flatten"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/flatten"
+           xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
+           jaxb:version="3.0"
            elementFormDefault="qualified">
 
     <!--
@@ -84,6 +86,65 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      Local simpleType enums need jaxb:typesafeEnumClass (XJC never auto-enums locals).
+      Unique names: Payload and Status both lift to package scope.
+    -->
+    <xs:complexType name="EnumHolder">
+        <xs:sequence>
+            <xs:element name="payload">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="status">
+                            <xs:simpleType>
+                                <xs:annotation>
+                                    <xs:appinfo>
+                                        <jaxb:typesafeEnumClass name="Status"/>
+                                    </xs:appinfo>
+                                </xs:annotation>
+                                <xs:restriction base="xs:string">
+                                    <xs:enumeration value="OPEN"/>
+                                    <xs:enumeration value="CLOSED"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Global enum "ConflictName" occupies package scope. A nested complex type
+      with the same simple name must stop under its wrapper and not promote.
+    -->
+    <xs:simpleType name="ConflictName">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="X"/>
+            <xs:enumeration value="Y"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="ConflictRoot">
+        <xs:sequence>
+            <xs:element name="wrapper">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="conflictName">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element name="note" type="xs:string"/>
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="flattenRoot" type="tns:FlattenRoot"/>
     <xs:element name="deepRoot" type="tns:DeepRoot"/>
+    <xs:element name="enumHolder" type="tns:EnumHolder"/>
+    <xs:element name="conflictRoot" type="tns:ConflictRoot"/>
 </xs:schema>

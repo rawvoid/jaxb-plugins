@@ -68,6 +68,11 @@ public final class ModelUtils {
     public static final Field CCLASSINFO_PARENT_FIELD = getField(CClassInfo.class, "parent");
 
     /**
+     * Reflection field for accessing the parent container of a {@link CEnumLeafInfo}.
+     */
+    public static final Field CENUMLEAFINFO_PARENT_FIELD = getField(CEnumLeafInfo.class, "parent");
+
+    /**
      * Reflection field for accessing the parent of CElementInfo.
      */
     public static final Field CELEMENTINFO_PARENT_FIELD = getField(CElementInfo.class, "parent");
