@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,24 +34,68 @@ public class FlattenInnerClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testFlattenInnerClasses() throws Exception {
-        var args = List.of(
-            "-Xflatten-inner-class"
+    void withoutPlugin_keepsDeepNesting() throws Exception {
+        var classes = testExecute(List.of(), ".*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKeys("FlattenRoot", "Group", "AnotherGroup", "Entry");
+        assertThat(byName.get("Group").getFirst().isMemberClass()).isTrue();
+        assertThat(byName.get("AnotherGroup").getFirst().isMemberClass()).isTrue();
+        assertThat(byName.get("Entry")).allMatch(Class::isMemberClass);
+        assertThat(byName.get("Level1").getFirst().isMemberClass()).isTrue();
+        assertThat(byName.get("Level2").getFirst().isMemberClass()).isTrue();
+        assertThat(byName.get("Level3").getFirst().isMemberClass()).isTrue();
+    }
+
+    @Test
+    void flattensUniqueNamesAndStopsOnConflict() throws Exception {
+        var classes = testExecute(List.of("-Xflatten-inner-class"), ".*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKeys(
+            "FlattenRoot", "Group", "AnotherGroup", "Entry",
+            "DeepRoot", "Level1", "Level2", "Level3"
         );
-        var classes = testExecute(args, ".*", null);
-        var classBySimpleName = classes.stream()
-            .collect(Collectors.groupingBy(Class::getSimpleName));
 
-        assertThat(classBySimpleName).containsKeys("FlattenRoot", "Group", "AnotherGroup", "Entry");
+        var flattenRoot = byName.get("FlattenRoot").getFirst();
+        var group = byName.get("Group").getFirst();
+        var anotherGroup = byName.get("AnotherGroup").getFirst();
 
-        var flattenRootClass = classBySimpleName.get("FlattenRoot").getFirst();
-        var groupClass = classBySimpleName.get("Group").getFirst();
-        var anotherGroupClass = classBySimpleName.get("AnotherGroup").getFirst();
+        // Unique sibling wrappers lift to package scope.
+        assertThat(group.isMemberClass()).isFalse();
+        assertThat(anotherGroup.isMemberClass()).isFalse();
+        assertThat(flattenRoot.getDeclaredField("group").getType()).isEqualTo(group);
+        assertThat(flattenRoot.getDeclaredField("anotherGroup").getType()).isEqualTo(anotherGroup);
 
-        assertThat(flattenRootClass.getDeclaredField("group").getType()).isEqualTo(groupClass);
-        assertThat(flattenRootClass.getDeclaredField("anotherGroup").getType()).isEqualTo(anotherGroupClass);
+        // Conflicting Entry names stop under their wrappers.
+        assertThat(byName.get("Entry")).hasSize(2).allMatch(Class::isMemberClass);
+        assertThat(group.getDeclaredClasses()).extracting(Class::getSimpleName).containsExactly("Entry");
+        assertThat(anotherGroup.getDeclaredClasses()).extracting(Class::getSimpleName).containsExactly("Entry");
+        assertThat(group.getDeclaredField("entry").getType()).isEqualTo(byName.get("Entry").stream()
+            .filter(c -> c.getEnclosingClass() == group)
+            .findFirst()
+            .orElseThrow());
+        assertThat(anotherGroup.getDeclaredField("entry").getType()).isEqualTo(byName.get("Entry").stream()
+            .filter(c -> c.getEnclosingClass() == anotherGroup)
+            .findFirst()
+            .orElseThrow());
 
-        assertThat(groupClass.isMemberClass()).isFalse();
-        assertThat(anotherGroupClass.isMemberClass()).isFalse();
+        // Deep unique chain fully flattens to package scope.
+        assertThat(byName.get("DeepRoot").getFirst().isMemberClass()).isFalse();
+        assertThat(byName.get("Level1").getFirst().isMemberClass()).isFalse();
+        assertThat(byName.get("Level2").getFirst().isMemberClass()).isFalse();
+        assertThat(byName.get("Level3").getFirst().isMemberClass()).isFalse();
+
+        var deepRoot = byName.get("DeepRoot").getFirst();
+        var level1 = byName.get("Level1").getFirst();
+        var level2 = byName.get("Level2").getFirst();
+        var level3 = byName.get("Level3").getFirst();
+        assertThat(deepRoot.getDeclaredField("level1").getType()).isEqualTo(level1);
+        assertThat(level1.getDeclaredField("level2").getType()).isEqualTo(level2);
+        assertThat(level2.getDeclaredField("level3").getType()).isEqualTo(level3);
+    }
+
+    private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
+        return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
     }
 }

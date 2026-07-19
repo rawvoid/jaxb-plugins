@@ -20,6 +20,11 @@
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/flatten"
            elementFormDefault="qualified">
 
+    <!--
+      Two sibling wrappers each contain an "entry" type.
+      Group / AnotherGroup can lift to package scope; the two Entry types share a
+      simple name and must remain nested under their respective wrappers.
+    -->
     <xs:complexType name="FlattenRoot">
         <xs:sequence>
             <xs:element name="group">
@@ -51,5 +56,34 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      Unique simple names at every nesting level; all nested types should become
+      top-level after repeated one-level promotions.
+    -->
+    <xs:complexType name="DeepRoot">
+        <xs:sequence>
+            <xs:element name="level1">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="level2">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element name="level3">
+                                        <xs:complexType>
+                                            <xs:sequence>
+                                                <xs:element name="leaf" type="xs:string"/>
+                                            </xs:sequence>
+                                        </xs:complexType>
+                                    </xs:element>
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="flattenRoot" type="tns:FlattenRoot"/>
+    <xs:element name="deepRoot" type="tns:DeepRoot"/>
 </xs:schema>
