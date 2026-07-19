@@ -18,7 +18,7 @@ Everything below serves these two priorities.
 ## Java style
 
 - Local variables: prefer `var` when the type is obvious from the initializer.
-- Keep methods small; extract non-trivial decisions into well-named helpers with brief *why* comments.
+- Optimize for human readability: clear structure, one level of abstraction per method, names that carry intent. Extract helpers when they make the main flow easier to follow or avoid repetition—not to minimize line count. Prefer brief *why* comments when the reason is non-obvious.
 - Favor straightforward APIs over deep abstraction layers.
 - No dead code, unused parameters, or comments that merely restate the next line.
 - **Code comments and Javadoc: English only.**
