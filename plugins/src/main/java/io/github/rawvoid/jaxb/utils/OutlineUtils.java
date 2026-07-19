@@ -17,6 +17,7 @@
 package io.github.rawvoid.jaxb.utils;
 
 import com.sun.codemodel.*;
+import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import io.github.rawvoid.jaxb.plugin.ClassNameDetector;
 import jakarta.xml.bind.JAXBContext;
@@ -37,12 +38,115 @@ import java.util.function.Consumer;
  *     <li>Fix the {@code createContext} generation logic in {@code JAXBDebug}</li>
  *     <li>Safely remove deleted classes from the parent container and {@code ObjectFactory}</li>
  *     <li>Find and replace class references in fields, methods, parameters, and annotations</li>
+ *     <li>Remove XJC property accessors by model property names (not crude name prefixes)</li>
  * </ul>
  *
  */
 public final class OutlineUtils {
 
     private OutlineUtils() {
+    }
+
+    /**
+     * Removes XJC-generated property accessors from a class using the property model.
+     * <p>
+     * Names follow XJC ({@code prop.getName(true)} seed + {@code get}/{@code is}/{@code set}).
+     * Removal also checks arity so unrelated overloads are kept:
+     * </p>
+     * <ul>
+     *   <li>Bean getter: {@code getX()}/{@code isX()} — 0 params, non-void return</li>
+     *   <li>Array indexed getter (collection): {@code getX(int)} — 1 param</li>
+     *   <li>Array length (collection only): {@code getXLength()} — 0 params
+     *       (XJC {@code ArrayField}, not a JavaBeans property)</li>
+     *   <li>Bean / array setter: {@code setX(T)} or {@code setX(T[])} — 1 param</li>
+     *   <li>Array indexed setter (collection): {@code setX(int, T)} — 2 params</li>
+     * </ul>
+     * <p>
+     * {@code isSetX}/{@code unsetX} are not matched. Only
+     * {@link ClassOutline#getDeclaredFields() declared} properties are considered.
+     * </p>
+     *
+     * @param classOutline   target class outline
+     * @param removeGetters  remove property getters when true
+     * @param removeSetters  remove property setters when true
+     */
+    public static void removePropertyAccessors(ClassOutline classOutline, boolean removeGetters, boolean removeSetters) {
+        if (!removeGetters && !removeSetters) {
+            return;
+        }
+        var properties = new ArrayList<PropertyAccessors>();
+        for (var fieldOutline : classOutline.getDeclaredFields()) {
+            var prop = fieldOutline.getPropertyInfo();
+            properties.add(new PropertyAccessors(prop.getName(true), prop.isCollection()));
+        }
+        if (properties.isEmpty()) {
+            return;
+        }
+        classOutline.implClass.methods().removeIf(method -> {
+            for (var property : properties) {
+                if (removeGetters && isXjcPropertyGetter(method, property)) {
+                    return true;
+                }
+                if (removeSetters && isXjcPropertySetter(method, property)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
+
+    /**
+     * XJC property accessor name seeds and whether the property is multi-valued
+     * (list or array realization).
+     */
+    private record PropertyAccessors(String seed, boolean collection) {
+    }
+
+    /**
+     * Whether {@code method} is an XJC-style getter for the given property.
+     */
+    private static boolean isXjcPropertyGetter(JMethod method, PropertyAccessors property) {
+        if (isVoidReturn(method)) {
+            return false;
+        }
+        var name = method.name();
+        var arity = method.params().size();
+        var getName = "get" + property.seed();
+        var isName = "is" + property.seed();
+
+        // getX() / isX() — single value or whole list/array
+        if ((getName.equals(name) || isName.equals(name)) && arity == 0) {
+            return true;
+        }
+        // ArrayField only: getX(int idx)
+        if (property.collection() && getName.equals(name) && arity == 1) {
+            return true;
+        }
+        // ArrayField only: getXLength()
+        return property.collection()
+            && ("get" + property.seed() + "Length").equals(name)
+            && arity == 0;
+    }
+
+    /**
+     * Whether {@code method} is an XJC-style setter for the given property.
+     */
+    private static boolean isXjcPropertySetter(JMethod method, PropertyAccessors property) {
+        if (!("set" + property.seed()).equals(method.name())) {
+            return false;
+        }
+        var arity = method.params().size();
+        // setX(value) or setX(T[]) 
+        if (arity == 1) {
+            return true;
+        }
+        // ArrayField only: setX(int idx, T value)
+        return property.collection() && arity == 2;
+    }
+
+    private static boolean isVoidReturn(JMethod method) {
+        var type = method.type();
+        return type != null && "void".equals(type.name());
     }
 
     /**
