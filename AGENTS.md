@@ -21,6 +21,7 @@ Everything below serves these two priorities.
 - Keep methods small; extract non-trivial decisions into well-named helpers with brief *why* comments.
 - Favor straightforward APIs over deep abstraction layers.
 - No dead code, unused parameters, or comments that merely restate the next line.
+- **Code comments and Javadoc: English only.**
 
 ## Design when changing XJC / generated code
 
@@ -44,6 +45,7 @@ Everything below serves these two priorities.
 
 ## Communication
 
+- **Dialogue with the user: Chinese.** Code comments / Javadoc stay English (see above).
 - When reviewing design, state trade-offs briefly; implement once direction is clear.
 - If the user corrects an assumption, update code and conventions accordingly.
 - Keep commit and PR text proportional to the change: *what* and *why*.
