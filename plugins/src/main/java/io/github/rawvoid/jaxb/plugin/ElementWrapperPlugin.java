@@ -16,6 +16,7 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.codemodel.JAnnotationUse;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
@@ -105,8 +106,17 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return result;
     }
 
+    /**
+     * A wrapper is a pure collection shell: one element-collection property, no inheritance,
+     * no attribute wildcard, no subclasses. Broader shapes (mixed content, attributes, etc.)
+     * must not be flattened — their structure is not equivalent to {@code @XmlElementWrapper}.
+     */
     private boolean isWrapperClass(CClassInfo classInfo) {
+        // Attribute wildcard is not represented as a CPropertyInfo entry but still contributes
+        // structure (see CClassInfo#hasAttributeWildcard / BeanGenerator attribute wildcard field).
         if (classInfo.isAbstract()
+            || classInfo.hasAttributeWildcard()
+            || classInfo.hasSubClasses()
             || classInfo.getBaseClass() != null
             || classInfo.getRefBaseClass() != null
             || classInfo.getProperties().size() != 1) {
@@ -118,7 +128,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             return false;
         }
 
-        // Classic XSD wrappers are element collections; value lists / attributes are not.
+        // Classic XSD wrappers are element collections; value lists map to @XmlList, not wrapper.
         return property instanceof CElementPropertyInfo elementProperty
             && !elementProperty.isValueList();
     }
@@ -214,6 +224,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * {@code index}. Existing siblings are left untouched — they already have a parent
      * and must not go through {@code addProperty} again.
      * </p>
+     * <p>
+     * {@link CClassInfo#addProperty} silently no-ops when {@code ref()} is empty. We therefore
+     * append first and verify the tail is {@code replacement} <em>before</em> removing
+     * {@code outer}, so a failed append never drops the original property.
+     * </p>
      */
     private boolean replaceProperty(
         CClassInfo owner,
@@ -228,12 +243,23 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
 
         var properties = owner.getProperties();
-        properties.remove(index);
+        // 1) Append + setParent. Outer remains at `index` until this is confirmed.
+        int sizeBefore = properties.size();
         owner.addProperty(replacement);
+        if (properties.size() != sizeBefore + 1 || properties.getLast() != replacement) {
+            // addProperty no-op'd — model unchanged.
+            log.warn("Skip flattening {}.{}: addProperty did not append the replacement",
+                owner.fullName(), outer.getName(false));
+            return false;
+        }
 
-        // addProperty always appends; restore the original slot.
-        var added = properties.removeLast();
-        properties.add(index, added);
+        // 2) Drop outer, then move replacement from the tail into its slot.
+        //    Example: [name, items, count, replacement]
+        //      remove(1) → [name, count, replacement]
+        //      removeLast + add(1, …) → [name, replacement, count]
+        //    Because we only remove at `index` (< sizeBefore), the tail stays `replacement`.
+        properties.remove(index);
+        properties.add(index, properties.removeLast());
         return true;
     }
 
@@ -279,33 +305,53 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Returns true if {@code target} is still reachable from other model members after
+     * flattening. Covers inheritance, nesting, property type refs, and element decls.
+     * <p>
+     * Intentionally does <strong>not</strong> consult {@link Model#typeUses()}: that map is a
+     * registry of named schema types (the type's own entry always points at itself), not a
+     * reverse-reference index. Using it would prevent every named wrapper from ever being
+     * removed.
+     * </p>
+     */
     private boolean isReferenced(Model model, CClassInfo target) {
+        // Subclasses keep the type live even if no property currently points at it.
+        if (target.hasSubClasses()) {
+            return true;
+        }
+
         for (var bean : model.beans().values()) {
             if (bean == target) {
                 continue;
             }
+            // Inheritance (subclass → this) and nested class parent link.
             if (bean.getBaseClass() == target || bean.parent() == target) {
                 return true;
             }
-            for (var property : bean.getProperties()) {
-                for (var ref : property.ref()) {
-                    if (ref == target) {
-                        return true;
-                    }
-                }
+            if (propertyRefsTarget(bean.getProperties(), target)) {
+                return true;
             }
         }
 
         for (var elementInfo : model.getAllElements()) {
+            // Global/local element whose content type is this class, or whose property refs it.
             if (elementInfo.getContentType() == target) {
                 return true;
             }
             var property = elementInfo.getProperty();
-            if (property != null) {
-                for (var ref : property.ref()) {
-                    if (ref == target) {
-                        return true;
-                    }
+            if (property != null && propertyRefsTarget(List.of(property), target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean propertyRefsTarget(Iterable<CPropertyInfo> properties, CClassInfo target) {
+        for (var property : properties) {
+            for (var ref : property.ref()) {
+                if (ref == target) {
+                    return true;
                 }
             }
         }
@@ -328,20 +374,41 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
 
         var annotation = field.annotate(XmlElementWrapper.class);
+        applyXmlElementWrapperParams(annotation, flattened);
+    }
+
+    /**
+     * Maps the original outer element QName onto {@link XmlElementWrapper}.
+     * <p>
+     * Strategy (aligned with JAXB annotation defaulting):
+     * <ul>
+     *   <li><b>name</b> — omit when equal to the Java field name so the runtime uses
+     *       {@code ##default} (property name). Set only when the schema local name differs.</li>
+     *   <li><b>namespace</b> — set whenever the outer element has a non-empty namespace URI.
+     *       This is independent of the name check: the local name may match the field name
+     *       while the element still lives in a namespace that package-info defaulting would
+     *       not recover (e.g. a different NS than {@code @XmlSchema.namespace}).</li>
+     *   <li><b>nillable</b> / <b>required</b> — only when true on the original outer element.</li>
+     * </ul>
+     * Empty namespace URI is left defaulted (unqualified / form-default behaviour).
+     * </p>
+     */
+    private void applyXmlElementWrapperParams(JAnnotationUse annotation, FlattenedField flattened) {
         var wrapperName = flattened.wrapperName();
         if (wrapperName == null) {
             return;
         }
 
         var localName = wrapperName.getLocalPart();
-        // Match field name → leave name/namespace at annotation defaults (##default).
         if (localName != null && !localName.isEmpty() && !localName.equals(flattened.propertyName())) {
             annotation.param("name", localName);
-            var namespace = wrapperName.getNamespaceURI();
-            if (namespace != null && !namespace.isEmpty()) {
-                annotation.param("namespace", namespace);
-            }
         }
+
+        var namespace = wrapperName.getNamespaceURI();
+        if (namespace != null && !namespace.isEmpty()) {
+            annotation.param("namespace", namespace);
+        }
+
         if (flattened.wrapperNillable()) {
             annotation.param("nillable", true);
         }
@@ -350,3 +417,4 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
     }
 }
+
