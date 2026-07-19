@@ -45,7 +45,13 @@ Everything below serves these two priorities.
 
 ## Communication
 
-- **Reply in the same language the user is using.** Code comments / Javadoc stay English (see above).
+- **Match the user's language for all user-facing prose.** Chat replies,
+  implementation plans, design notes, review summaries, and commit/PR text
+  written for humans must use the same language as the user's messages.
+  Do not default those to English just because this file or the codebase is English.
+- **Code comments and Javadoc: English only** (see Java style). Keep identifiers,
+  paths, CLI flags, and API names unchanged; only the surrounding prose follows
+  the user.
 - When reviewing design, state trade-offs briefly; implement once direction is clear.
 - If the user corrects an assumption, update code and conventions accordingly.
 - Keep commit and PR text proportional to the change: *what* and *why*.
