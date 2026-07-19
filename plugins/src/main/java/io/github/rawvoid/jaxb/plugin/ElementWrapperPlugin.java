@@ -19,8 +19,10 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.codemodel.JAnnotationUse;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
+import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
+import jakarta.xml.bind.annotation.XmlNsForm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
@@ -56,7 +58,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
     Boolean removeWrapperClass;
 
-    /** Captured in postProcessModel; used in run to place {@link XmlElementWrapper}. */
+    /**
+     * Captured in postProcessModel; used in run to place {@link XmlElementWrapper}.
+     */
     private final List<FlattenedField> flattenedFields = new ArrayList<>();
 
     private record FlattenedField(
@@ -378,26 +382,32 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
 
         var annotation = field.annotate(XmlElementWrapper.class);
-        applyXmlElementWrapperParams(annotation, flattened);
+        applyXmlElementWrapperParams(annotation, flattened, classOutline);
     }
 
     /**
      * Maps the original outer element QName onto {@link XmlElementWrapper}.
      * <p>
-     * Strategy (aligned with JAXB annotation defaulting):
+     * Mirrors XJC {@code AbstractField#writeXmlElementAnnotation} defaulting so we do not
+     * emit redundant members that only restate package-info / form defaults:
      * <ul>
-     *   <li><b>name</b> — omit when equal to the Java field name so the runtime uses
-     *       {@code ##default} (property name). Set only when the schema local name differs.</li>
-     *   <li><b>namespace</b> — set whenever the outer element has a non-empty namespace URI.
-     *       This is independent of the name check: the local name may match the field name
-     *       while the element still lives in a namespace that package-info defaulting would
-     *       not recover (e.g. a different NS than {@code @XmlSchema.namespace}).</li>
+     *   <li><b>name</b> — omit when equal to the Java field name ({@code ##default}).</li>
+     *   <li><b>namespace</b> — omit when annotation defaulting already yields the correct URI.
+     *       Under {@code elementFormDefault=qualified}, that means the package's most-used
+     *       namespace (or the enclosing type's target namespace); under {@code unqualified},
+     *       emit only when the element actually has a non-empty namespace.
+     *       Schema {@code targetNamespace} alone is not an "explicit" declaration on the
+     *       wrapper type — putting it on every field would duplicate {@code package-info}.
+     *   </li>
      *   <li><b>nillable</b> / <b>required</b> — only when true on the original outer element.</li>
      * </ul>
-     * Empty namespace URI is left defaulted (unqualified / form-default behaviour).
      * </p>
      */
-    private void applyXmlElementWrapperParams(JAnnotationUse annotation, FlattenedField flattened) {
+    private void applyXmlElementWrapperParams(
+        JAnnotationUse annotation,
+        FlattenedField flattened,
+        ClassOutline classOutline
+    ) {
         var wrapperName = flattened.wrapperName();
         if (wrapperName == null) {
             return;
@@ -408,9 +418,8 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             annotation.param("name", localName);
         }
 
-        var namespace = wrapperName.getNamespaceURI();
-        if (namespace != null && !namespace.isEmpty()) {
-            annotation.param("namespace", namespace);
+        if (needsExplicitWrapperNamespace(wrapperName, classOutline)) {
+            annotation.param("namespace", wrapperName.getNamespaceURI());
         }
 
         if (flattened.wrapperNillable()) {
@@ -420,5 +429,24 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             annotation.param("required", true);
         }
     }
+
+    /**
+     * Whether {@code @XmlElementWrapper} must restate {@code namespace}.
+     * Same rule as XJC {@code AbstractField#writeXmlElementAnnotation} for {@code @XmlElement}:
+     * skip when package-info / form default already imply the correct URI.
+     */
+    private boolean needsExplicitWrapperNamespace(QName wrapperName, ClassOutline classOutline) {
+        var generatedNS = wrapperName.getNamespaceURI();
+        var pkg = classOutline._package();
+        var formDefault = pkg.getElementFormDefault();
+        var typeName = classOutline.target.getTypeName();
+        var enclosingTypeNS = typeName == null
+            ? pkg.getMostUsedNamespaceURI()
+            : typeName.getNamespaceURI();
+
+        return (formDefault == XmlNsForm.QUALIFIED && !generatedNS.equals(enclosingTypeNS))
+            || (formDefault == XmlNsForm.UNQUALIFIED && !generatedNS.isEmpty());
+    }
 }
+
 
