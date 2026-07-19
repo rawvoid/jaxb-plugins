@@ -17,7 +17,9 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import jakarta.xml.bind.annotation.XmlNs;
 import jakarta.xml.bind.annotation.XmlSchema;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -26,11 +28,20 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Test cases for NsPrefixPlugin.
- *
- * @author Rawvoid
+ * XJC integration tests for {@link NsPrefixPlugin}.
+ * Uses dedicated {@code ns-prefix.xsd} only.
  */
 class NsPrefixPluginTest extends AbstractXJCMojoTestCase {
+
+    private static final String NS = "https://www.github.com/rawvoid/xjc-plugins/ns-prefix";
+    private static final String EXTRA_NS = "https://www.github.com/rawvoid/xjc-plugins/ns-prefix/extra";
+    private static final String PKG = "com.github.rawvoid.xjc_plugins.ns_prefix";
+    private static final String ITEM = "com\\.github\\.rawvoid\\.xjc_plugins\\.ns_prefix\\.Item";
+
+    @BeforeEach
+    void setSchema() {
+        schemaIncludes = List.of("ns-prefix.xsd");
+    }
 
     @Test
     void testNsPrefixPluginBasic() throws Exception {
@@ -38,174 +49,142 @@ class NsPrefixPluginTest extends AbstractXJCMojoTestCase {
             "-Xns-prefix",
             "-config",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=n1"
         );
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            var annotation = clazz.getAnnotation(XmlSchema.class);
-            var namespace = "https://www.github.com/rawvoid/xjc-plugins";
-
-            if (namespace.equals(annotation.namespace())) {
-                Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
-                    .forEach(xmlns -> assertThat(xmlns.prefix()).isEqualTo("n1"));
-            }
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(prefixFor(clazz, NS)).isEqualTo("n1");
         });
     }
 
     @Test
-    void testNsPrefixPluginWithPackageFilter() throws Exception {
+    void testPackageFilterMatches() throws Exception {
         var args = List.of(
             "-Xns-prefix",
             "-config",
-            "-package=com\\.github\\.rawvoid\\..*",
+            "-package=com\\.github\\.rawvoid\\.xjc_plugins\\.ns_prefix",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=n1"
         );
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            var annotation = clazz.getAnnotation(XmlSchema.class);
-            var namespace = "https://www.github.com/rawvoid/xjc-plugins";
-
-            if (namespace.equals(annotation.namespace())) {
-                List<jakarta.xml.bind.annotation.XmlNs> matchedNamespaces = Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
-                    .toList();
-
-                String packageName = clazz.getPackageName();
-                if (packageName.startsWith("com.github.rawvoid")) {
-                    assertThat(matchedNamespaces).isNotEmpty();
-                    assertThat(matchedNamespaces.getFirst().prefix()).isEqualTo("n1");
-                } else {
-                    assertThat(matchedNamespaces).isEmpty();
-                }
-            }
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo(PKG);
+            assertThat(prefixFor(clazz, NS)).isEqualTo("n1");
         });
     }
 
     @Test
-    void testNsPrefixPluginMultipleNamespaces() throws Exception {
+    void testPackageFilterMisses() throws Exception {
+        var args = List.of(
+            "-Xns-prefix",
+            "-config",
+            "-package=com\\.example\\.other",
+            "-xmlns",
+            "-ns=" + NS,
+            "-prefix=n1"
+        );
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(xmlSchema(clazz).xmlns())
+                .noneMatch(xmlns -> NS.equals(xmlns.namespaceURI()) && "n1".equals(xmlns.prefix()));
+        });
+    }
+
+    @Test
+    void testMultipleNamespacesOnSamePackage() throws Exception {
         var args = List.of(
             "-Xns-prefix",
             "-config",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=n1",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins/test",
-            "-prefix=test"
+            "-ns=" + EXTRA_NS,
+            "-prefix=ex"
         );
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            var annotation = clazz.getAnnotation(XmlSchema.class);
-            var namespace1 = "https://www.github.com/rawvoid/xjc-plugins";
-            var namespace2 = "https://www.github.com/rawvoid/xjc-plugins/test";
-
-            if (namespace1.equals(annotation.namespace())) {
-                var matchedNamespaces = Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace1.equals(xmlns.namespaceURI()))
-                    .toList();
-                assertThat(matchedNamespaces).hasSize(1);
-                assertThat(matchedNamespaces.getFirst().prefix()).isEqualTo("n1");
-            } else if (namespace2.equals(annotation.namespace())) {
-                var matchedNamespaces = Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace2.equals(xmlns.namespaceURI()))
-                    .toList();
-                assertThat(matchedNamespaces).hasSize(1);
-                assertThat(matchedNamespaces.getFirst().prefix()).isEqualTo("test");
-            }
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(prefixFor(clazz, NS)).isEqualTo("n1");
+            assertThat(prefixFor(clazz, EXTRA_NS)).isEqualTo("ex");
         });
     }
 
     @Test
-    void testNsPrefixPluginWithEmptyConfigs() throws Exception {
+    void testEmptyConfigsIsNoOp() throws Exception {
         var args = List.of("-Xns-prefix");
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            assertThat(clazz).isNotNull();
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(xmlSchema(clazz)).isNotNull();
+            assertThat(xmlSchema(clazz).namespace()).isEqualTo(NS);
         });
     }
 
     @Test
-    void testNsPrefixPluginUpdateExisting() throws Exception {
+    void testUpdateExistingPrefix() throws Exception {
         var args = List.of(
             "-Xns-prefix",
             "-config",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=updated"
         );
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            var annotation = clazz.getAnnotation(XmlSchema.class);
-            var namespace = "https://www.github.com/rawvoid/xjc-plugins";
-
-            if (namespace.equals(annotation.namespace())) {
-                var matchedNamespaces = Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
-                    .toList();
-                assertThat(matchedNamespaces).hasSize(1);
-                assertThat(matchedNamespaces.getFirst().prefix()).isEqualTo("updated");
-            }
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(prefixFor(clazz, NS)).isEqualTo("updated");
+            assertThat(xmlNsFor(clazz, NS)).hasSize(1);
         });
     }
 
     @Test
-    void testNsPrefixPluginMultipleConfigs() throws Exception {
+    void testMultipleConfigsMergeXmlns() throws Exception {
         var args = List.of(
             "-Xns-prefix",
             "-config",
-            "-package=com\\.github\\.rawvoid\\..*",
+            "-package=com\\.github\\.rawvoid\\.xjc_plugins\\.ns_prefix",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=first",
             "-config",
-            "-package=com\\.github\\.rawvoid\\..*",
+            "-package=com\\.github\\.rawvoid\\.xjc_plugins\\.ns_prefix",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins/test",
+            "-ns=" + EXTRA_NS,
             "-prefix=second"
         );
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            var annotation = clazz.getAnnotation(XmlSchema.class);
-            var namespace1 = "https://www.github.com/rawvoid/xjc-plugins";
-            var namespace2 = "https://www.github.com/rawvoid/xjc-plugins/test";
-
-            if (namespace1.equals(annotation.namespace())) {
-                var matchedNamespaces = Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace1.equals(xmlns.namespaceURI()))
-                    .toList();
-                assertThat(matchedNamespaces).hasSize(1);
-                assertThat(matchedNamespaces.getFirst().prefix()).isEqualTo("first");
-            } else if (namespace2.equals(annotation.namespace())) {
-                var matchedNamespaces = Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace2.equals(xmlns.namespaceURI()))
-                    .toList();
-                assertThat(matchedNamespaces).hasSize(1);
-                assertThat(matchedNamespaces.getFirst().prefix()).isEqualTo("second");
-            }
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(prefixFor(clazz, NS)).isEqualTo("first");
+            assertThat(prefixFor(clazz, EXTRA_NS)).isEqualTo("second");
         });
     }
 
     @Test
-    void testNsPrefixPluginDuplicateNamespaceReplacement() throws Exception {
+    void testDuplicateNamespaceReplacement() throws Exception {
         var args = List.of(
             "-Xns-prefix",
             "-config",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=first",
             "-xmlns",
-            "-ns=https://www.github.com/rawvoid/xjc-plugins",
+            "-ns=" + NS,
             "-prefix=second"
         );
-        testExecute(args, ".*package-info", (source, clazz) -> {
-            var annotation = clazz.getAnnotation(XmlSchema.class);
-            var namespace = "https://www.github.com/rawvoid/xjc-plugins";
-
-            if (namespace.equals(annotation.namespace())) {
-                var matchedNamespaces = Arrays.stream(annotation.xmlns())
-                    .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
-                    .toList();
-                assertThat(matchedNamespaces).hasSize(1);
-                assertThat(matchedNamespaces.getFirst().prefix()).isEqualTo("second");
-            }
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(xmlNsFor(clazz, NS)).hasSize(1);
+            assertThat(prefixFor(clazz, NS)).isEqualTo("second");
         });
+    }
+
+    private static XmlSchema xmlSchema(Class<?> clazz) {
+        var annotation = clazz.getPackage().getAnnotation(XmlSchema.class);
+        assertThat(annotation).isNotNull();
+        return annotation;
+    }
+
+    private static List<XmlNs> xmlNsFor(Class<?> clazz, String namespace) {
+        return Arrays.stream(xmlSchema(clazz).xmlns())
+            .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
+            .toList();
+    }
+
+    private static String prefixFor(Class<?> clazz, String namespace) {
+        var matched = xmlNsFor(clazz, namespace);
+        assertThat(matched).as("xmlns for %s", namespace).isNotEmpty();
+        return matched.getFirst().prefix();
     }
 }
