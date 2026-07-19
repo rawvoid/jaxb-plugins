@@ -20,6 +20,7 @@ import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -29,14 +30,25 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * XJC integration tests for {@link ElementWrapperPlugin}.
+ * Uses dedicated {@code element-wrapper.xsd} only.
+ */
 public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
+
+    private static final String ROOT = "com\\.example\\.wrapper\\.RootType";
+
+    @BeforeEach
+    void setSchema() {
+        schemaIncludes = List.of("element-wrapper.xsd");
+    }
 
     @Test
     public void testElementWrapper() throws Exception {
         var args = List.<String>of(
             "-Xelement-wrapper"
         );
-        var classes = testExecute(args, ".*RootType", (source, clazz) -> {
+        var classes = testExecute(args, ROOT, (source, clazz) -> {
             var itemsField = clazz.getDeclaredField("items");
             var xmlElementAnno = itemsField.getAnnotation(XmlElement.class);
             var xmlElementWrapper = itemsField.getAnnotation(XmlElementWrapper.class);
@@ -85,7 +97,7 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
             "-Xelement-wrapper",
             "-remove-wrapper-class=false"
         );
-        var classes = testExecute(args, ".*RootType", (source, clazz) -> {
+        var classes = testExecute(args, ROOT, (source, clazz) -> {
             var itemsField = clazz.getDeclaredField("items");
             assertThat(itemsField.getAnnotation(XmlElementWrapper.class)).isNotNull();
             assertThat(itemsField.getAnnotation(XmlElement.class)).isNotNull();
