@@ -34,7 +34,6 @@ import java.util.*;
 
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CPROPERTYINFO_PARENT_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
-import static io.github.rawvoid.jaxb.utils.OutlineUtils.fixJAXBDebugClass;
 import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 
 /**
@@ -116,12 +115,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+        // Structure (types / wrapper-class removal) was already applied in postProcessModel,
+        // before BeanGenerator ran. JAXBDebug is built from the post-processed model, so no
+        // Codemodel repair is needed here — only @XmlElementWrapper annotations.
         for (var flattened : flattenedFields) {
             annotateXmlElementWrapper(outline, flattened);
-        }
-
-        if (opt.debugMode) {
-            fixJAXBDebugClass(outline);
         }
         return true;
     }
