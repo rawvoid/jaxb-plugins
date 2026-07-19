@@ -28,9 +28,7 @@ import org.xml.sax.SAXException;
 import javax.xml.namespace.QName;
 import java.util.*;
 
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CPROPERTYINFO_PARENT_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 
 /**
  * Flattens single-collection wrapper types into {@code List} properties with
@@ -209,8 +207,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * Replaces {@code outer} with {@code replacement} in place so propOrder is preserved.
-     * Avoids {@link CClassInfo#addProperty}, which always appends.
+     * Replaces {@code outer} with {@code replacement} while preserving propOrder.
+     * <p>
+     * Uses {@link CClassInfo#addProperty} so official {@code setParent} (including
+     * customization linkage) runs, then moves the appended property back to
+     * {@code index}. Existing siblings are left untouched — they already have a parent
+     * and must not go through {@code addProperty} again.
+     * </p>
      */
     private boolean replaceProperty(
         CClassInfo owner,
@@ -224,9 +227,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             return false;
         }
 
-        // Mirror CPropertyInfo.setParent (package-private) without appending to the list.
-        setFieldValue(CPROPERTYINFO_PARENT_FIELD, replacement, owner);
-        owner.getProperties().set(index, replacement);
+        var properties = owner.getProperties();
+        properties.remove(index);
+        owner.addProperty(replacement);
+
+        // addProperty always appends; restore the original slot.
+        var added = properties.removeLast();
+        properties.add(index, added);
         return true;
     }
 
