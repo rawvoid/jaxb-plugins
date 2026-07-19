@@ -58,7 +58,9 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
     Boolean removeWrapperClass;
 
-    /** Captured in postProcessModel; used in run to place {@link XmlElementWrapper}. */
+    /**
+     * Captured in postProcessModel; used in run to place {@link XmlElementWrapper}.
+     */
     private final List<FlattenedField> flattenedFields = new ArrayList<>();
 
     private record FlattenedField(
@@ -416,22 +418,8 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             annotation.param("name", localName);
         }
 
-        // Same predicate XJC uses for @XmlElement namespace (AbstractField).
-        var generatedNS = wrapperName.getNamespaceURI() != null ? wrapperName.getNamespaceURI() : "";
-        var pkg = classOutline._package();
-        var formDefault = pkg.getElementFormDefault();
-        var enclosingTypeNS = classOutline.target.getTypeName() == null
-            ? pkg.getMostUsedNamespaceURI()
-            : classOutline.target.getTypeName().getNamespaceURI();
-        if (enclosingTypeNS == null) {
-            enclosingTypeNS = "";
-        }
-
-        boolean needNamespace =
-            (formDefault == XmlNsForm.QUALIFIED && !generatedNS.equals(enclosingTypeNS))
-                || (formDefault == XmlNsForm.UNQUALIFIED && !generatedNS.isEmpty());
-        if (needNamespace) {
-            annotation.param("namespace", generatedNS);
+        if (needsExplicitWrapperNamespace(wrapperName, classOutline)) {
+            annotation.param("namespace", wrapperName.getNamespaceURI());
         }
 
         if (flattened.wrapperNillable()) {
@@ -440,6 +428,24 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         if (flattened.wrapperRequired()) {
             annotation.param("required", true);
         }
+    }
+
+    /**
+     * Whether {@code @XmlElementWrapper} must restate {@code namespace}.
+     * Same rule as XJC {@code AbstractField#writeXmlElementAnnotation} for {@code @XmlElement}:
+     * skip when package-info / form default already imply the correct URI.
+     */
+    private boolean needsExplicitWrapperNamespace(QName wrapperName, ClassOutline classOutline) {
+        var generatedNS = wrapperName.getNamespaceURI();
+        var pkg = classOutline._package();
+        var formDefault = pkg.getElementFormDefault();
+        var typeName = classOutline.target.getTypeName();
+        var enclosingTypeNS = typeName == null
+            ? pkg.getMostUsedNamespaceURI()
+            : typeName.getNamespaceURI();
+
+        return (formDefault == XmlNsForm.QUALIFIED && !generatedNS.equals(enclosingTypeNS))
+            || (formDefault == XmlNsForm.UNQUALIFIED && !generatedNS.isEmpty());
     }
 }
 
