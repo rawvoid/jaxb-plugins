@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Rawvoid(https://github.com/rawvoid)
+ * Copyright 2026 Rawvoid(https://github.com/rawvoid)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
  * It modifies the generated JAXB classes to use the specified package names for the
  * corresponding XML namespaces.
  * </p>
- *
+ * <p>
  * {@code @Deprecated} This plugin is deprecated and may be removed in future versions.
  *
  * @author Rawvoid
