@@ -35,6 +35,8 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static io.github.rawvoid.jaxb.utils.OutlineUtils.*;
+
 /**
  * JAXB plugin that simplifies element wrappers in the generated code.
  * <p>
@@ -103,7 +105,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         }
 
         if (opt.debugMode) {
-            JaxbClassRefactorUtil.fixJAXBDebugClass(outline);
+            fixJAXBDebugClass(outline);
         }
 
         return true;
@@ -320,7 +322,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         allClasses.removeIf(definedClass -> definedClass.equals(wrapperClass));
         var wrapperClassName = wrapperClass.fullName();
         var existsReference = allClasses.stream()
-            .anyMatch(definedClass -> JaxbClassRefactorUtil.hasReference(definedClass, wrapperClassName));
+            .anyMatch(definedClass -> hasReference(definedClass, wrapperClassName));
         if (!existsReference) {
             return removeWrapperClass(wrapperClass);
         }
@@ -334,8 +336,8 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * @param wrapperClass The wrapper class to remove.
      */
     private boolean removeWrapperClass(JDefinedClass wrapperClass) {
-        JaxbClassRefactorUtil.removeFromParentContainer(wrapperClass);
-        JaxbClassRefactorUtil.removeFromObjectFactory(wrapperClass);
+        removeFromParentContainer(wrapperClass);
+        removeFromObjectFactory(wrapperClass);
 
         return true;
     }
