@@ -18,12 +18,15 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.OutlineUtils;
 import org.xml.sax.ErrorHandler;
 
 /**
- * JAXB plugin to remove generated setter methods for fields.
- * This plugin provides the {@code -Xremove-setter} option to exclude
- * setter methods from the generated JAXB classes.
+ * Removes XJC-generated setter methods for bean properties.
+ * <p>
+ * Uses the property model ({@code prop.getName(true)}) to identify accessors,
+ * matching XJC naming rather than stripping every {@code set*} method.
+ * </p>
  *
  * @author Rawvoid
  */
@@ -32,10 +35,8 @@ public class RemoveSetterPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {
-        var classes = outline.getClasses();
-        for (var classOutline : classes) {
-            var methods = classOutline.implClass.methods();
-            methods.removeIf(method -> method.name().startsWith("set") && method.params().size() == 1);
+        for (var classOutline : outline.getClasses()) {
+            OutlineUtils.removePropertyAccessors(classOutline, false, true);
         }
         return true;
     }

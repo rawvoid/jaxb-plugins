@@ -19,6 +19,7 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.OutlineUtils;
 import org.jvnet.jaxb.annox.model.XAnnotation;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 import org.xml.sax.ErrorHandler;
@@ -95,16 +96,10 @@ public class LombokPlugin extends AbstractPlugin {
             var resolved = resolveAnnotations(implClass);
             applyAnnotations(implClass, className, resolved);
 
-            var methods = implClass.methods();
-            if (Boolean.TRUE.equals(removeGetter)) {
-                methods.removeIf(method ->
-                    (method.name().startsWith("get") || method.name().startsWith("is"))
-                        && method.params().isEmpty());
-            }
-            if (Boolean.TRUE.equals(removeSetter)) {
-                methods.removeIf(method ->
-                    method.name().startsWith("set") && method.params().size() == 1);
-            }
+            OutlineUtils.removePropertyAccessors(
+                classOutline,
+                Boolean.TRUE.equals(removeGetter),
+                Boolean.TRUE.equals(removeSetter));
         }
         return true;
     }

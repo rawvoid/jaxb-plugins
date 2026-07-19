@@ -245,13 +245,14 @@ Adds Lombok annotations to generated classes and removes XJC-generated getters/s
 ### 🗑️ **RemoveGetterPlugin** `-Xremove-getter`
 *The getter ghost!*
 
-Remove unnecessary getter methods from generated classes when you only need setters or direct field access.
+Remove XJC-generated **property** getters (matched via the property model, not every `get*`/`is*` method).
 
 **🔥 Use Cases:**
 - Create immutable-like structures
 - Reduce method count for cleaner APIs
 - Optimize for specific use cases
 - Custom access patterns
+- Pair with Lombok (`-Xlombok`) instead of hand-rolling annotate + remove
 
 **⚡ Quick Start:**
 ```bash
@@ -263,7 +264,7 @@ Remove unnecessary getter methods from generated classes when you only need sett
 ### 🗑️ **RemoveSetterPlugin** `-Xremove-setter`
 *The setter slayer!*
 
-Remove unnecessary setter methods from generated classes when you only need getters or want read-only objects.
+Remove XJC-generated **property** setters (matched via the property model, not every `set*` method).
 
 **🔥 Use Cases:**
 - Create read-only DTOs

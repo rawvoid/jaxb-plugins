@@ -18,12 +18,15 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.OutlineUtils;
 import org.xml.sax.ErrorHandler;
 
 /**
- * JAXB plugin to remove generated getter methods for fields.
- * This plugin provides the {@code -Xremove-getter} option to exclude
- * getter methods from the generated JAXB classes.
+ * Removes XJC-generated getter methods for bean properties.
+ * <p>
+ * Uses the property model ({@code prop.getName(true)}) to identify accessors,
+ * matching XJC naming rather than stripping every {@code get*}/{@code is*} method.
+ * </p>
  *
  * @author Rawvoid
  */
@@ -32,11 +35,8 @@ public class RemoveGetterPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {
-        var classes = outline.getClasses();
-        for (var classOutline : classes) {
-            var methods = classOutline.implClass.methods();
-            methods.removeIf(method -> (method.name().startsWith("get") || method.name().startsWith("is"))
-                && method.params().isEmpty());
+        for (var classOutline : outline.getClasses()) {
+            OutlineUtils.removePropertyAccessors(classOutline, true, false);
         }
         return true;
     }

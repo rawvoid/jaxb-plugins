@@ -17,6 +17,7 @@
 package io.github.rawvoid.jaxb.utils;
 
 import com.sun.codemodel.*;
+import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import io.github.rawvoid.jaxb.plugin.ClassNameDetector;
 import jakarta.xml.bind.JAXBContext;
@@ -25,6 +26,7 @@ import jakarta.xml.bind.JAXBException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.StringJoiner;
 import java.util.function.Consumer;
@@ -37,12 +39,58 @@ import java.util.function.Consumer;
  *     <li>Fix the {@code createContext} generation logic in {@code JAXBDebug}</li>
  *     <li>Safely remove deleted classes from the parent container and {@code ObjectFactory}</li>
  *     <li>Find and replace class references in fields, methods, parameters, and annotations</li>
+ *     <li>Remove XJC property accessors by model property names (not crude name prefixes)</li>
  * </ul>
  *
  */
 public final class OutlineUtils {
 
     private OutlineUtils() {
+    }
+
+    /**
+     * Removes XJC-generated property accessors from a class using the property model.
+     * <p>
+     * Method names are derived the same way XJC does: {@code prop.getName(true)} as the seed,
+     * then {@code get}/{@code is}/{@code set} prefixes (see XJC {@code SingleField},
+     * {@code AbstractFieldWithVar#getGetterMethod}). Array overloads such as
+     * {@code getX(int)} / {@code setX(int, T)} / {@code getXLength()} are removed when their
+     * base name matches. Methods like {@code isSetXxx}/{@code unsetXxx} are not targeted.
+     * </p>
+     * <p>
+     * Only properties declared on this class are considered ({@link ClassOutline#getDeclaredFields()});
+     * inherited accessors stay on the superclass. Callers that need Lombok-generated accessors
+     * must supply Lombok at compile time; list getters lose XJC's lazy-init body after removal.
+     * </p>
+     *
+     * @param classOutline   target class outline
+     * @param removeGetters  remove property getters when true
+     * @param removeSetters  remove property setters when true
+     */
+    public static void removePropertyAccessors(ClassOutline classOutline, boolean removeGetters, boolean removeSetters) {
+        if (!removeGetters && !removeSetters) {
+            return;
+        }
+        var getterNames = new HashSet<String>();
+        var setterNames = new HashSet<String>();
+        for (var fieldOutline : classOutline.getDeclaredFields()) {
+            var seed = fieldOutline.getPropertyInfo().getName(true);
+            if (removeGetters) {
+                getterNames.add("get" + seed);
+                getterNames.add("is" + seed);
+                getterNames.add("get" + seed + "Length");
+            }
+            if (removeSetters) {
+                setterNames.add("set" + seed);
+            }
+        }
+        if (getterNames.isEmpty() && setterNames.isEmpty()) {
+            return;
+        }
+        classOutline.implClass.methods().removeIf(method -> {
+            var name = method.name();
+            return getterNames.contains(name) || setterNames.contains(name);
+        });
     }
 
     /**
