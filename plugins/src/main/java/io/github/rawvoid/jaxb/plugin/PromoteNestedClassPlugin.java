@@ -79,10 +79,10 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  *
  * @author Rawvoid
  */
-@Option(name = "Xflatten-inner-class", description = "Lift nested classes and enums toward package scope until a name conflict")
-public class FlattenInnerClassPlugin extends AbstractPlugin {
+@Option(name = "Xpromote-nested-class", description = "Lift nested classes and enums toward package scope until a name conflict")
+public class PromoteNestedClassPlugin extends AbstractPlugin {
 
-    private static final Logger log = LoggerFactory.getLogger(FlattenInnerClassPlugin.class);
+    private static final Logger log = LoggerFactory.getLogger(PromoteNestedClassPlugin.class);
 
     /**
      * Nesting is defined on the model; changing parents here is enough for

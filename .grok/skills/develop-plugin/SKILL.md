@@ -102,7 +102,7 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 | `ReflectUtils` | Localized reflection helpers |
 | `FieldAccessor` / `DefaultFieldAccessor` | Field access patterns on generated types |
 
-Prefer public XJC / CodeModel APIs. If package-private fields force reflection, keep it localized (static `Field` constants like `FlattenInnerClassPlugin` or utils).
+Prefer public XJC / CodeModel APIs. If package-private fields force reflection, keep it localized (static `Field` constants like `PromoteNestedClassPlugin` or utils).
 
 ### Design rules for generated output
 
@@ -132,7 +132,7 @@ Without this line, XJC never loads the plugin.
 7. Dedicated schema when `schema.xsd` is insufficient:
    - add `plugins/src/test/resources/schema/<name>.xsd`
    - in `@BeforeEach`: `schemaIncludes = List.of("<name>.xsd");`  
-     (see `FlattenInnerClassPluginTest`)
+     (see `PromoteNestedClassPluginTest`)
 8. Run focused suite:
 
 ```bash
@@ -162,7 +162,7 @@ Widen to `mvn -pl plugins test` if the change can affect shared model/utils.
 | `JSR310Plugin` | `-Xjsr310` | Type mapping + adapters on fields |
 | `ConvertNamePlugin` | `-Xconvert-name` | `postParseArgument` + `NameConverter` |
 | `ElementWrapperPlugin` | `-Xelement-wrapper` | Dual-phase: model flatten + wrapper annotation |
-| `FlattenInnerClassPlugin` | `-Xflatten-inner-class` | CodeModel structure via reflection |
+| `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
 | `NsPrefixPlugin` | `-Xns-prefix` | Nested list configs on `@XmlSchema` |
 | `NamespacePlugin` | `-Xnamespace` | **Deprecated** — do not copy |
 

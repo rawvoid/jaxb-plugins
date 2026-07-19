@@ -155,10 +155,10 @@ Simplify your generated code by automatically flattening wrapper classes. Moves 
 
 ---
 
-### 🧩 **FlattenInnerClassPlugin** `-Xflatten-inner-class`
-*The nested-type flattener!*
+### 🧩 **PromoteNestedClassPlugin** `-Xpromote-nested-class`
+*The nested-type promoter!*
 
-Lifts nested beans **and enums** toward package scope one parent level at a time. Promotion stops when a simple name is already taken under the target parent (beans and enums share that namespace). Keeps generated APIs shallow without unsafe renames.
+Promotes nested beans **and enums** toward package scope one parent level at a time. Promotion stops when a simple name is already taken under the target parent (beans and enums share that namespace). Keeps generated APIs shallow without unsafe renames.
 
 **🔥 Use Cases:**
 - Promote nested classes and enums toward top-level types
@@ -167,7 +167,7 @@ Lifts nested beans **and enums** toward package scope one parent level at a time
 
 **⚡ Quick Start:**
 ```bash
--Xflatten-inner-class
+-Xpromote-nested-class
 ```
 
 **Notes:**

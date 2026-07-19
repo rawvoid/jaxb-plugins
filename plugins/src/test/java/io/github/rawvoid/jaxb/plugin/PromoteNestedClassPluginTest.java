@@ -26,11 +26,11 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class FlattenInnerClassPluginTest extends AbstractXJCMojoTestCase {
+public class PromoteNestedClassPluginTest extends AbstractXJCMojoTestCase {
 
     @BeforeEach
     void setSchema() {
-        schemaIncludes = List.of("flatten-inner-class.xsd");
+        schemaIncludes = List.of("promote-nested-class.xsd");
     }
 
     @Test
@@ -54,8 +54,8 @@ public class FlattenInnerClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void flattensUniqueNamesAndStopsOnConflict() throws Exception {
-        var classes = testExecute(List.of("-Xflatten-inner-class"), ".*", null);
+    void promotesUniqueNamesAndStopsOnConflict() throws Exception {
+        var classes = testExecute(List.of("-Xpromote-nested-class"), ".*", null);
         var byName = bySimpleName(classes);
 
         assertThat(byName).containsKeys(
@@ -88,7 +88,7 @@ public class FlattenInnerClassPluginTest extends AbstractXJCMojoTestCase {
             .findFirst()
             .orElseThrow());
 
-        // Deep unique chain fully flattens to package scope.
+        // Deep unique chain fully promotes to package scope.
         assertThat(byName.get("DeepRoot").getFirst().isMemberClass()).isFalse();
         assertThat(byName.get("Level1").getFirst().isMemberClass()).isFalse();
         assertThat(byName.get("Level2").getFirst().isMemberClass()).isFalse();
