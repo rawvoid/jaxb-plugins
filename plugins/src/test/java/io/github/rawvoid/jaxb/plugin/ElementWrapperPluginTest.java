@@ -45,6 +45,8 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
             assertThat(xmlElementAnno.name()).isEqualTo("item");
             assertThat(xmlElementWrapper).isNotNull();
             assertThat(xmlElementWrapper.name()).isEqualTo("##default");
+            // targetNamespace is covered by package-info; do not restate it on the field.
+            assertThat(xmlElementWrapper.namespace()).isEqualTo("##default");
 
             // Field is List<String> after model-level flattening.
             assertThat(List.class.isAssignableFrom(itemsField.getType())).isTrue();
