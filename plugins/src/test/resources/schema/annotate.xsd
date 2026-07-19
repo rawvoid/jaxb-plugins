@@ -16,10 +16,11 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins"
-           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/annotate"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/annotate"
            elementFormDefault="qualified">
 
+    <!-- Primary bean: multi-field + boolean for field/method annotation tests. -->
     <xs:complexType name="Person">
         <xs:sequence>
             <xs:element name="name" type="xs:string"/>
@@ -29,5 +30,14 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!-- Second type for multi-pattern and selective class/package filters. -->
+    <xs:complexType name="Order">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="total" type="xs:int"/>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="person" type="tns:Person"/>
+    <xs:element name="order" type="tns:Order"/>
 </xs:schema>

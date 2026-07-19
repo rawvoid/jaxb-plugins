@@ -123,16 +123,17 @@ Without this line, XJC never loads the plugin.
 
 1. Class: `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/<Name>PluginTest`
 2. Extend `AbstractXJCMojoTestCase`
-3. Pass real CLI args: `testExecute(List.of("-Xmy-feature", …), ".*ClassRegex", (source, clazz) -> { … })`
-4. Assert on compiled `Class` and/or generated source string
-5. Prefer AssertJ (`assertThat`)
-6. Cover at least:
+3. **One dedicated schema per test class** (required):
+   - add `plugins/src/test/resources/schema/<plugin-id>.xsd` with its own `targetNamespace`
+   - in `@BeforeEach`: `schemaIncludes = List.of("<plugin-id>.xsd");`
+   - do **not** share schemas across plugin tests; harness fails if `schemaIncludes` is empty
+   - put contrast types in the same file when a negative/filter case needs them
+4. Pass real CLI args: `testExecute(List.of("-Xmy-feature", …), "package\\.Class", (source, clazz) -> { … })`
+5. Prefer precise FQCN filters over loose `.*Person` patterns
+6. Assert on compiled `Class` and/or generated source string; prefer AssertJ (`assertThat`)
+7. Cover at least:
    - baseline without plugin when behavior differs
    - happy path with the real option string shape
-7. Dedicated schema when `schema.xsd` is insufficient:
-   - add `plugins/src/test/resources/schema/<name>.xsd`
-   - in `@BeforeEach`: `schemaIncludes = List.of("<name>.xsd");`  
-     (see `PromoteNestedClassPluginTest`)
 8. Run focused suite:
 
 ```bash
@@ -140,6 +141,8 @@ mvn -pl plugins test -Dtest=<Name>PluginTest
 ```
 
 Widen to `mvn -pl plugins test` if the change can affect shared model/utils.
+
+Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTest`.
 
 ## Step 5 — Done checklist
 

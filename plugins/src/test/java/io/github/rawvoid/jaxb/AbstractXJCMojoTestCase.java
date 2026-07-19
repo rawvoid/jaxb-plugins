@@ -44,6 +44,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
+ * Base harness for XJC plugin integration tests.
+ * <p>
+ * Subclasses that generate code must set {@link #schemaIncludes} to exactly one
+ * dedicated schema under {@code src/test/resources/schema/} (no shared directory scan).
+ * </p>
+ *
  * @author Rawvoid
  */
 public abstract class AbstractXJCMojoTestCase {
@@ -129,9 +135,12 @@ public abstract class AbstractXJCMojoTestCase {
         var mavenSession = new MavenSession(null, null, request, null);
         mojo.setMavenSession(mavenSession);
         mojo.setSchemaDirectory(schemaDirectory.toFile());
-        if (schemaIncludes != null && !schemaIncludes.isEmpty()) {
-            mojo.setSchemaIncludes(schemaIncludes.toArray(new String[0]));
+        // Each *PluginTest must pin exactly one dedicated schema (no shared directory scan).
+        if (schemaIncludes == null || schemaIncludes.isEmpty()) {
+            throw new IllegalStateException(
+                "schemaIncludes must list the dedicated test schema (one file per *PluginTest)");
         }
+        mojo.setSchemaIncludes(schemaIncludes.toArray(new String[0]));
         if (schemaExcludes != null && !schemaExcludes.isEmpty()) {
             mojo.setSchemaExcludes(schemaExcludes.toArray(new String[0]));
         }

@@ -15,24 +15,130 @@
   ~ limitations under the License.
   -->
 
+<!--
+  Fixtures for ElementWrapperPlugin:
+  - Pure single-collection shells flatten into List + @XmlElementWrapper
+  - Complex item types, required/nillable outer elements, hyphenated names
+  - Shared wrapper kept when still referenced (global element)
+  - Non-wrapper multi-field types stay as nested beans
+  - List-of-wrapper-shells is flattened once only (no recursive unwrap)
+-->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="http://example.com/wrapper"
-           xmlns:tns="http://example.com/wrapper"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/element-wrapper"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/element-wrapper"
            elementFormDefault="qualified">
 
-    <xs:element name="root" type="tns:RootType"/>
+    <xs:element name="root" type="tns:Root"/>
+    <!-- Keeps SharedItems after Root.shared is flattened. -->
+    <xs:element name="sharedItems" type="tns:SharedItems"/>
 
-    <xs:complexType name="RootType">
+    <xs:complexType name="Root">
         <xs:sequence>
-            <xs:element name="name" type="xs:string"/>
-            <xs:element name="items" type="tns:Items" minOccurs="0"/>
+            <xs:element name="title" type="xs:string"/>
+
+            <!-- Optional pure wrapper of strings. -->
+            <xs:element name="tags" type="tns:TagList" minOccurs="0"/>
+
+            <!-- Pure wrapper of complex items. -->
+            <xs:element name="products" type="tns:ProductList" minOccurs="0"/>
+
+            <!-- Required outer element → @XmlElementWrapper(required = true). -->
+            <xs:element name="codes" type="tns:CodeList"/>
+
+            <!--
+              Nillable complex elements become JAXBElement&lt;AliasList&gt; in XJC.
+              The plugin only flattens CElementPropertyInfo shells, so this stays nested.
+            -->
+            <xs:element name="aliases" type="tns:AliasList" nillable="true" minOccurs="0"/>
+
+            <!-- Optional pure wrapper (no nillable) for a second string-list field. -->
+            <xs:element name="notes" type="tns:NoteList" minOccurs="0"/>
+
+            <!-- Hyphenated XML name ≠ Java property name → explicit wrapper name. -->
+            <xs:element name="item-batch" type="tns:BatchList" minOccurs="0"/>
+
+            <!-- Flattened here, but class kept via global element above. -->
+            <xs:element name="shared" type="tns:SharedItems" minOccurs="0"/>
+
+            <!-- Two properties → not a wrapper shell; must stay nested. -->
+            <xs:element name="mixed" type="tns:MixedBag" minOccurs="0"/>
+
+            <!--
+              GroupList is a pure wrapper of GroupShell.
+              After one-level flatten: List&lt;GroupShell&gt;.
+              GroupShell itself is a pure wrapper but is not unwrapped again.
+            -->
+            <xs:element name="groups" type="tns:GroupList" minOccurs="0"/>
+
+            <xs:element name="total" type="xs:int"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TagList">
+        <xs:sequence>
+            <xs:element name="tag" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Product">
+        <xs:sequence>
+            <xs:element name="sku" type="xs:string"/>
+            <xs:element name="price" type="xs:decimal"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ProductList">
+        <xs:sequence>
+            <xs:element name="product" type="tns:Product" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CodeList">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AliasList">
+        <xs:sequence>
+            <xs:element name="alias" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="NoteList">
+        <xs:sequence>
+            <xs:element name="note" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="BatchList">
+        <xs:sequence>
+            <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="SharedItems">
+        <xs:sequence>
+            <xs:element name="entry" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MixedBag">
+        <xs:sequence>
+            <xs:element name="value" type="xs:string"/>
             <xs:element name="count" type="xs:int"/>
         </xs:sequence>
     </xs:complexType>
 
-    <xs:complexType name="Items">
+    <xs:complexType name="GroupShell">
         <xs:sequence>
-            <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+            <xs:element name="member" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="GroupList">
+        <xs:sequence>
+            <xs:element name="group" type="tns:GroupShell" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>
 

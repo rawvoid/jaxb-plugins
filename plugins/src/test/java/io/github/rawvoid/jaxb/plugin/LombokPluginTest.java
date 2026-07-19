@@ -17,6 +17,7 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -25,13 +26,24 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * @author Rawvoid
+ * XJC integration tests for {@link LombokPlugin}.
+ * Uses dedicated {@code lombok.xsd} only.
  */
 class LombokPluginTest extends AbstractXJCMojoTestCase {
 
+    private static final String PKG = "com\\.github\\.rawvoid\\.xjc_plugins\\.lombok";
+    private static final String PERSON = PKG + "\\.Person";
+    private static final String ORDER = PKG + "\\.Order";
+    private static final String EMPTY_CHILD = PKG + "\\.EmptyChild";
+
+    @BeforeEach
+    void setSchema() {
+        schemaIncludes = List.of("lombok.xsd");
+    }
+
     @Test
     void testBaselineWithoutPlugin() throws Exception {
-        testExecute(List.of(), ".*Person", (source, clazz) -> {
+        testExecute(List.of(), PERSON, (source, clazz) -> {
             assertThat(source).doesNotContain("@Data");
             assertThat(hasPropertyGetterInSource(source)).isTrue();
             assertThat(hasPropertySetterInSource(source)).isTrue();
@@ -40,7 +52,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void testDefaultLombok() throws Exception {
-        testExecute(List.of("-Xlombok"), ".*Person", (source, clazz) -> {
+        testExecute(List.of("-Xlombok"), PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(hasPropertyGetterInSource(source)).isFalse();
             assertThat(hasPropertySetterInSource(source)).isFalse();
@@ -57,7 +69,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
             "-anno=@lombok.Getter",
             "-anno=@lombok.Setter"
         );
-        testExecute(args, ".*Person", (source, clazz) -> {
+        testExecute(args, PERSON, (source, clazz) -> {
             assertThat(source).contains("@Getter");
             assertThat(source).contains("@Setter");
             assertThat(source).doesNotContain("@Data");
@@ -69,7 +81,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testKeepSetters() throws Exception {
         var args = List.of("-Xlombok", "-remove-setter=false");
-        testExecute(args, ".*Person", (source, clazz) -> {
+        testExecute(args, PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(hasPropertyGetterInSource(source)).isFalse();
             assertThat(hasPropertySetterInSource(source)).isTrue();
@@ -79,7 +91,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testBuilder() throws Exception {
         var args = List.of("-Xlombok", "-builder");
-        testExecute(args, ".*Person", (source, clazz) -> {
+        testExecute(args, PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(source).contains("@Builder");
             assertThat(source).contains("@NoArgsConstructor");
@@ -92,18 +104,19 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testRegexFilter() throws Exception {
         var args = List.of("-Xlombok", "-regex=.*Person");
-        testExecute(args, ".*Person", (source, clazz) -> {
+        testExecute(args, PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(hasPropertyGetterInSource(source)).isFalse();
         });
-        // Order uses same schema package when schema.xsd is the only include; Person-only regex
-        // means other generated types (if any) keep accessors — schema.xsd is Person-centric.
+        testExecute(args, ORDER, (source, clazz) -> {
+            assertThat(source).doesNotContain("@Data");
+            assertThat(hasPropertyGetterInSource(source)).isTrue();
+        });
     }
 
     @Test
     void testEqualsAndHashCodeCallSuperOnSubclass() throws Exception {
-        schemaIncludes = List.of("normalize-class.xsd");
-        testExecute(List.of("-Xlombok"), ".*EmptyChild", (source, clazz) -> {
+        testExecute(List.of("-Xlombok"), EMPTY_CHILD, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(source).contains("@EqualsAndHashCode");
             assertThat(source).contains("callSuper");
@@ -113,7 +126,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void testNoCallSuperOnRootType() throws Exception {
-        testExecute(List.of("-Xlombok"), ".*Person", (source, clazz) -> {
+        testExecute(List.of("-Xlombok"), PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(source).doesNotContain("@EqualsAndHashCode");
         });

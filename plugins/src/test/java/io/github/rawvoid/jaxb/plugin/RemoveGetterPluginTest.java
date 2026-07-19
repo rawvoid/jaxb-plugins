@@ -17,38 +17,60 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * @author Rawvoid
+ * XJC integration tests for {@link RemoveGetterPlugin}.
+ * Uses dedicated {@code remove-getter.xsd} only.
  */
 class RemoveGetterPluginTest extends AbstractXJCMojoTestCase {
 
-    Option option = RemoveGetterPlugin.class.getAnnotation(Option.class);
+    private static final String PERSON = "com\\.github\\.rawvoid\\.xjc_plugins\\.remove_getter\\.Person";
 
-    @Test
-    public void testDisablePlugin() throws Exception {
-        testExecute(List.of(), ".*Person", ((source, clazz) -> {
-            assertThat(hasGetter(clazz)).isTrue();
-        }));
+    private final String optionCmd = optionCommand(RemoveGetterPlugin.class);
+
+    @BeforeEach
+    void setSchema() {
+        schemaIncludes = List.of("remove-getter.xsd");
     }
 
     @Test
-    public void testPlugin() throws Exception {
-        var optionCmd = option.prefix() + option.name();
-        testExecute(List.of(optionCmd), ".*Person", (source, clazz) -> {
-            assertThat(hasGetter(clazz)).isFalse();
+    void baselineKeepsAccessors() throws Exception {
+        testExecute(List.of(), PERSON, (source, clazz) -> {
+            assertThat(methodNames(clazz)).contains("getName", "isActive", "getTag", "setName", "setActive");
         });
     }
 
-    public boolean hasGetter(Class<?> clazz) {
-        var methods = clazz.getDeclaredMethods();
-        return Arrays.stream(methods)
-            .anyMatch(method -> (method.getName().startsWith("get") || method.getName().startsWith("is")) && method.getParameterCount() == 0);
+    @Test
+    void removesPropertyGettersOnly() throws Exception {
+        testExecute(List.of(optionCmd), PERSON, (source, clazz) -> {
+            var names = methodNames(clazz);
+            assertThat(names).doesNotContain("getName", "isActive", "getTag");
+            // Setters must remain when only getters are removed.
+            assertThat(names).contains("setName", "setActive");
+            // Fields stay for marshalling.
+            assertThat(clazz.getDeclaredField("name")).isNotNull();
+            assertThat(clazz.getDeclaredField("active")).isNotNull();
+        });
+    }
+
+    private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
+        var option = pluginClass.getAnnotation(Option.class);
+        return option.prefix() + option.name();
+    }
+
+    private static Set<String> methodNames(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredMethods())
+            .map(Method::getName)
+            .collect(Collectors.toSet());
     }
 }
