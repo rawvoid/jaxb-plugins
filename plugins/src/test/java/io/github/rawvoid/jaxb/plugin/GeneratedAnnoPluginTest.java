@@ -103,18 +103,18 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void timestampPluginOption() throws Exception {
+    void datePluginOption() throws Exception {
         var args = List.of(
             optionCmd,
-            "-timestamp=true"
+            "-date=true"
         );
         testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|ObjectFactory)", (source, clazz) -> {
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"Xgenerated-anno\"");
             assertThat(source).contains("comments = \"https://github.com/rawvoid/jaxb-plugins\"");
             assertThat(source).contains("date = \"");
-            // Check that the date value matches ISO-8601 offset date time (e.g. 2026-07-20T21:37:29...)
-            var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}";
+            // Check that the date value matches standard ISO date (e.g. 2026-07-20)
+            var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\"";
             assertThat(source).containsPattern(datePattern);
         });
 
@@ -123,7 +123,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
         assertThat(packageInfoSource).contains("value = \"Xgenerated-anno\"");
         assertThat(packageInfoSource).contains("comments = \"https://github.com/rawvoid/jaxb-plugins\"");
         assertThat(packageInfoSource).contains("date = \"");
-        var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}";
+        var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\"";
         assertThat(packageInfoSource).containsPattern(datePattern);
     }
 

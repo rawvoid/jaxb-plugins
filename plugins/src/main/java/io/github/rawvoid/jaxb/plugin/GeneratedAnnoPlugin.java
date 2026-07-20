@@ -24,9 +24,6 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import org.xml.sax.ErrorHandler;
 
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-
 /**
  * JAXB plugin that automatically annotates all generated packages and classes
  * with {@code @jakarta.annotation.Generated}.
@@ -35,7 +32,7 @@ import java.time.format.DateTimeFormatter;
  * <ul>
  *   <li>{@code -value}: The generator name. Defaults to the plugin option name ({@code Xgenerated-anno}).</li>
  *   <li>{@code -comments}: Additional comments, such as repository URL. Defaults to the project URL.</li>
- *   <li>{@code -timestamp}: Whether to include the generation date/timestamp. Defaults to {@code false}.</li>
+ *   <li>{@code -date}: Whether to include the generation date. Defaults to {@code false}.</li>
  * </ul>
  * </p>
  *
@@ -53,8 +50,8 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
     @Option(name = "comments", description = "The comments attribute of @Generated annotation. Defaults to the project URL")
     private String comments;
 
-    @Option(name = "timestamp", defaultValue = "false", description = "Whether to include a timestamp in @Generated annotation")
-    private Boolean timestamp;
+    @Option(name = "date", defaultValue = "false", description = "Whether to include a date in @Generated annotation")
+    private Boolean date;
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {
@@ -65,8 +62,8 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
         var commentsToUse = (comments != null && !comments.isEmpty()) ? comments : DEFAULT_PROJECT_URL;
         String dateToUse = null;
 
-        if (Boolean.TRUE.equals(timestamp)) {
-            dateToUse = ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        if (Boolean.TRUE.equals(date)) {
+            dateToUse = java.time.LocalDate.now().toString();
         }
 
         for (var packageContext : outline.getAllPackageContexts()) {
