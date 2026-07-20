@@ -26,7 +26,10 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -38,10 +41,23 @@ import java.util.regex.Pattern;
  * <p><b>Intentional limitations:</b></p>
  * <ul>
  *   <li>Does not generate bytecode; consumers must provide Lombok and annotation processing at compile time.</li>
- *   <li>When {@code -builder} is enabled, standard {@code @Builder} is used (not {@code @SuperBuilder}).
- *       Abstract classes are skipped. {@code @AllArgsConstructor} is omitted for types with no fields
- *       (it would collide with {@code @NoArgsConstructor}). Hierarchies that need {@code @SuperBuilder}
- *       should pass it via {@code -anno}.</li>
+ *   <li>When {@code -builder} is enabled:
+ *       <ul>
+ *         <li><strong>Standalone</strong> types (superclass is {@code Object}, no generated subclasses)
+ *             get {@code @lombok.Builder}.</li>
+ *         <li>Types that <strong>extend a non-{@code Object} superclass</strong> get
+ *             {@code @lombok.experimental.SuperBuilder}. The superclass may be generated in this
+ *             round, pulled in via episode/classpath, or otherwise external — only the types this
+ *             plugin emits are annotated; external parents are left unchanged. Lombok still accepts
+ *             {@code @SuperBuilder} on a subclass when the parent has no SuperBuilder.</li>
+ *         <li>Types that are <strong>extended by another generated class</strong> also get
+ *             {@code @SuperBuilder} (including abstract bases) so the inheritance chain of builders
+ *             stays consistent within this generation.</li>
+ *         <li>{@code @SuperBuilder} remains under {@code lombok.experimental}.</li>
+ *         <li>{@code @AllArgsConstructor} is omitted when there are no fields (would collide with
+ *             {@code @NoArgsConstructor}).</li>
+ *       </ul>
+ *   </li>
  *   <li>{@code @EqualsAndHashCode(callSuper = true)} is auto-added only when the class has a non-{@code Object}
  *       superclass and the resolved annotation set includes {@code @Data}. If the user already supplies
  *       {@code @EqualsAndHashCode}, it is left unchanged.</li>
@@ -57,6 +73,7 @@ public class LombokPlugin extends AbstractPlugin {
     private static final String LOMBOK_DATA = "lombok.Data";
     private static final String LOMBOK_EQUALS_AND_HASH_CODE = "lombok.EqualsAndHashCode";
     private static final String LOMBOK_BUILDER = "lombok.Builder";
+    private static final String LOMBOK_SUPER_BUILDER = "lombok.experimental.SuperBuilder";
     private static final String LOMBOK_NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
     private static final String LOMBOK_ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
 
@@ -75,7 +92,7 @@ public class LombokPlugin extends AbstractPlugin {
     Boolean removeSetter;
 
     @Option(name = "builder", defaultValue = "false",
-        description = "Add @Builder with @NoArgsConstructor/@AllArgsConstructor for JAXB (default: false)")
+        description = "Add builders: @Builder for standalone types, @SuperBuilder when extending non-Object or having generated subclasses (default: false)")
     Boolean builder;
 
     private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
@@ -87,6 +104,11 @@ public class LombokPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
+        // fullName set: stable identity across CodeModel instances.
+        var superBuilderNames = Boolean.TRUE.equals(builder)
+            ? collectSuperBuilderClassNames(outline)
+            : Set.<String>of();
+
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
             var className = implClass.fullName();
@@ -94,7 +116,7 @@ public class LombokPlugin extends AbstractPlugin {
                 continue;
             }
 
-            var resolved = resolveAnnotations(implClass);
+            var resolved = resolveAnnotations(implClass, superBuilderNames);
             applyAnnotations(implClass, className, resolved);
 
             OutlineUtils.removePropertyAccessors(
@@ -113,10 +135,43 @@ public class LombokPlugin extends AbstractPlugin {
     }
 
     /**
+     * Full names of generated classes that should receive {@code @SuperBuilder}.
+     * <ul>
+     *   <li>Any type whose superclass is not {@code Object} (this-round, episode, or external)</li>
+     *   <li>Any type that is the generated superclass of another type in this outline
+     *       (so abstract bases in a hierarchy get SuperBuilder too)</li>
+     * </ul>
+     */
+    static Set<String> collectSuperBuilderClassNames(Outline outline) {
+        var generated = new LinkedHashMap<String, JDefinedClass>();
+        for (var classOutline : outline.getClasses()) {
+            generated.put(classOutline.implClass.fullName(), classOutline.implClass);
+        }
+
+        var result = new LinkedHashSet<String>();
+        for (var implClass : generated.values()) {
+            // Subclass of anything but Object → SuperBuilder (covers external / episode parents).
+            if (hasNonObjectSuperclass(implClass)) {
+                result.add(implClass.fullName());
+            }
+            // This-round parent of a generated child → SuperBuilder on the parent as well.
+            var superClass = implClass._extends();
+            if (superClass instanceof JDefinedClass parentDef
+                && generated.containsKey(parentDef.fullName())) {
+                result.add(parentDef.fullName());
+            }
+        }
+        return result;
+    }
+
+    /**
      * Builds the final annotation list: user or default {@code @Data}, optional builder trio,
      * and optional {@code @EqualsAndHashCode(callSuper = true)} for subclasses.
+     *
+     * @param superBuilderNames full names that need {@code @SuperBuilder} (see
+     *                          {@link #collectSuperBuilderClassNames(Outline)})
      */
-    List<XAnnotation<?>> resolveAnnotations(JDefinedClass implClass) {
+    List<XAnnotation<?>> resolveAnnotations(JDefinedClass implClass, Set<String> superBuilderNames) {
         var resolved = new ArrayList<XAnnotation<?>>();
         if (annotations == null || annotations.isEmpty()) {
             resolved.add(parseAnnotation("@lombok.Data"));
@@ -124,13 +179,21 @@ public class LombokPlugin extends AbstractPlugin {
             resolved.addAll(annotations);
         }
 
-        if (Boolean.TRUE.equals(builder) && !implClass.isAbstract()) {
-            // Abstract classes cannot use @Builder. Empty types would get identical
-            // no-arg constructors from both @NoArgsConstructor and @AllArgsConstructor.
-            addIfAbsent(resolved, LOMBOK_BUILDER, "@lombok.Builder");
-            addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
-            if (!implClass.fields().isEmpty()) {
-                addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
+        if (Boolean.TRUE.equals(builder)) {
+            if (superBuilderNames.contains(implClass.fullName())) {
+                // Inheritance participant (subclass of non-Object and/or generated base).
+                addIfAbsent(resolved, LOMBOK_SUPER_BUILDER, "@lombok.experimental.SuperBuilder");
+                addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
+                if (!implClass.isAbstract() && !implClass.fields().isEmpty()) {
+                    addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
+                }
+            } else if (!implClass.isAbstract()) {
+                // Standalone concrete type: official @Builder.
+                addIfAbsent(resolved, LOMBOK_BUILDER, "@lombok.Builder");
+                addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
+                if (!implClass.fields().isEmpty()) {
+                    addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
+                }
             }
         }
 
@@ -161,6 +224,10 @@ public class LombokPlugin extends AbstractPlugin {
         return resolved.stream().anyMatch(a -> fqcn.equals(a.getAnnotationClass().getName()));
     }
 
+    /**
+     * True when the class extends something other than {@code java.lang.Object}.
+     * Parent may be a same-round {@link JDefinedClass} or any external/episode {@code JClass}.
+     */
     private static boolean hasNonObjectSuperclass(JDefinedClass implClass) {
         var superClass = implClass._extends();
         return superClass != null && !Object.class.getName().equals(superClass.fullName());
