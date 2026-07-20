@@ -131,7 +131,31 @@ public class PromoteNestedClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(wrapper.getDeclaredField("conflictName").getType()).isEqualTo(nestedConflictBean);
     }
 
+    @Test
+    void skipsPromoteThatWouldCollideOnObjectFactorySqueezedName() throws Exception {
+        // Outer.Inner stays nested (package Inner taken). OfHolder.OuterInner must not
+        // promote to package OuterInner — same squeezed name as Outer.Inner.
+        var classes = testExecute(List.of("-Xpromote-nested-class"), ".*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKeys("Outer", "Inner", "OfHolder", "OuterInner");
+
+        var outer = byName.get("Outer").getFirst();
+        var nestedInner = byName.get("Inner").stream()
+            .filter(Class::isMemberClass)
+            .findFirst()
+            .orElseThrow();
+        assertThat(nestedInner.getEnclosingClass()).isEqualTo(outer);
+
+        var outerInner = byName.get("OuterInner").getFirst();
+        assertThat(outerInner.isMemberClass())
+            .as("OuterInner must stay nested to avoid ObjectFactory createOuterInner clash")
+            .isTrue();
+        assertThat(outerInner.getEnclosingClass()).isEqualTo(byName.get("OfHolder").getFirst());
+    }
+
     private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
         return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
     }
 }
+

@@ -22,6 +22,7 @@ import com.sun.tools.xjc.model.CClassInfoParent;
 import com.sun.tools.xjc.model.CEnumLeafInfo;
 import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
@@ -34,7 +35,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
 
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CCLASSINFO_PARENT_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
@@ -53,10 +53,18 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * <p>
  * <strong>Algorithm.</strong> Each pass every nested type (parent is a
  * {@link CClassInfo}) proposes a one-level move to its grandparent. A proposal
- * is applied only when the simple name is free under the target <em>and</em>
- * no other type claims the same slot in that pass. Passes repeat until none
- * move. Name checks are case-insensitive so they stay aligned with CodeModel's
- * nested-class maps and case-insensitive filesystems.
+ * is applied only when:
+ * </p>
+ * <ul>
+ *   <li>the simple name is free under the target</li>
+ *   <li>no other type claims the same slot in that pass (symmetric stop)</li>
+ *   <li>for beans: the move does not introduce a duplicate
+ *       {@link CClassInfo#getSqueezedName()} in the owner package (ObjectFactory
+ *       value-factory methods use that name)</li>
+ * </ul>
+ * <p>
+ * Passes repeat until none move. Name checks are case-insensitive so they stay
+ * aligned with CodeModel's nested-class maps and case-insensitive filesystems.
  * </p>
  * <p>
  * <strong>Beans and enums share one namespace</strong> under each parent: a bean
@@ -74,7 +82,9 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * <p>
  * <strong>Side effect.</strong> {@link CClassInfo#getSqueezedName()} follows the
  * parent chain, so ObjectFactory method names become shorter after a successful
- * lift (for example {@code createFlattenRootGroup} → {@code createGroup}).
+ * lift (for example {@code createFlattenRootGroup} → {@code createGroup}). That
+ * is also why a lift can collide with another type whose squeezed name already
+ * equals the shortened form — those lifts are undone.
  * </p>
  *
  * @author Rawvoid
@@ -127,23 +137,22 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
         // Proposal key: (target parent, normalized name). Only unique free slots apply.
         // Simultaneous evaluation: if two types would land on the same name, both stop
         // rather than letting traversal order pick a winner.
-        Map<ProposalKey, List<Consumer<CClassInfoParent>>> proposals = new LinkedHashMap<>();
+        Map<ProposalKey, List<Move>> proposals = new LinkedHashMap<>();
         for (var bean : model.beans().values()) {
             if (bean.parent() instanceof CClassInfo outer) {
                 var target = canonicalParent(model, outer.parent());
-                propose(proposals, target, bean.shortName,
-                    newParent -> setFieldValue(CCLASSINFO_PARENT_FIELD, bean, newParent));
+                propose(proposals, target, bean.shortName, Move.bean(bean, target));
             }
         }
         for (var enumInfo : model.enums().values()) {
             if (enumInfo.parent instanceof CClassInfo outer) {
                 var target = canonicalParent(model, outer.parent());
-                propose(proposals, target, enumInfo.shortName,
-                    newParent -> setFieldValue(CENUMLEAFINFO_PARENT_FIELD, enumInfo, newParent));
+                propose(proposals, target, enumInfo.shortName, Move.enumInfo(enumInfo, target));
             }
         }
 
-        var moved = 0;
+        // Short-name filter first (unique free slot under the target parent).
+        var shortNameOk = new ArrayList<Move>();
         for (var entry : proposals.entrySet()) {
             var key = entry.getKey();
             var candidates = entry.getValue();
@@ -155,11 +164,30 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
             if (occupied.getOrDefault(key.target(), Set.of()).contains(key.name())) {
                 continue;
             }
-
-            candidates.getFirst().accept(key.target());
-            // Mark the slot taken for later proposals in this same pass.
+            shortNameOk.add(candidates.getFirst());
+            // Reserve the slot for later short-name proposals in this same pass.
             // (The old parent slot is left occupied until the next pass rebuilds the map.)
             occupy(occupied, key.target(), key.name());
+        }
+
+        // ObjectFactory filter: apply each bean move, undo if squeezed names collide.
+        // Enums have no ObjectFactory value-factory entry from CClassInfo#getSqueezedName.
+        var moved = 0;
+        for (var move : shortNameOk) {
+            if (move.bean != null) {
+                var previous = move.bean.parent();
+                setFieldValue(CCLASSINFO_PARENT_FIELD, move.bean, move.target);
+                if (ModelUtils.hasObjectFactorySqueezedCollision(model)) {
+                    setFieldValue(CCLASSINFO_PARENT_FIELD, move.bean, previous);
+                    log.debug(
+                        "Skip promoting {} — ObjectFactory squeezed name collision",
+                        move.bean.fullName()
+                    );
+                    continue;
+                }
+            } else {
+                setFieldValue(CENUMLEAFINFO_PARENT_FIELD, move.enumInfo, move.target);
+            }
             moved++;
         }
         return moved;
@@ -181,13 +209,13 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
     }
 
     private static void propose(
-        Map<ProposalKey, List<Consumer<CClassInfoParent>>> proposals,
+        Map<ProposalKey, List<Move>> proposals,
         CClassInfoParent target,
         String shortName,
-        Consumer<CClassInfoParent> reparent
+        Move move
     ) {
         var key = new ProposalKey(target, normalize(shortName));
-        proposals.computeIfAbsent(key, k -> new ArrayList<>()).add(reparent);
+        proposals.computeIfAbsent(key, k -> new ArrayList<>()).add(move);
     }
 
     /** Case-insensitive key so collisions match CodeModel / case-folding filesystems. */
@@ -196,5 +224,16 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
     }
 
     private record ProposalKey(CClassInfoParent target, String name) {
+    }
+
+    /** One candidate reparent: exactly one of {@link #bean} / {@link #enumInfo} is non-null. */
+    private record Move(CClassInfo bean, CEnumLeafInfo enumInfo, CClassInfoParent target) {
+        static Move bean(CClassInfo bean, CClassInfoParent target) {
+            return new Move(bean, null, target);
+        }
+
+        static Move enumInfo(CEnumLeafInfo enumInfo, CClassInfoParent target) {
+            return new Move(null, enumInfo, target);
+        }
     }
 }
