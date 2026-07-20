@@ -25,3 +25,4 @@ io.github.rawvoid.jaxb.plugin.NsPrefixPlugin
 io.github.rawvoid.jaxb.plugin.PromoteNestedClassPlugin
 io.github.rawvoid.jaxb.plugin.LombokPlugin
 io.github.rawvoid.jaxb.plugin.RenameClassPlugin
+io.github.rawvoid.jaxb.plugin.RenameMultiElementPropPlugin
