@@ -16,14 +16,13 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.JPackage;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.CClassInfo;
 import com.sun.tools.xjc.model.CClassInfoParent;
-import com.sun.tools.xjc.model.CElementInfo;
 import com.sun.tools.xjc.model.CEnumLeafInfo;
 import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
@@ -54,36 +53,14 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * <p>
  * <strong>Algorithm.</strong> Each pass every nested type (parent is a
  * {@link CClassInfo}) proposes a one-level move to its grandparent. A proposal
- * is applied only when:
- * </p>
- * <ul>
- *   <li>the simple name is free under the target</li>
- *   <li>no other type claims the same slot in that pass</li>
- *   <li>for beans: the move would not introduce a duplicate
- *       {@link CClassInfo#getSqueezedName()} in the owner package (ObjectFactory
- *       value-factory methods use that name)</li>
- * </ul>
- * <p>
- * Passes repeat until none move. Name checks are case-insensitive so they stay
- * aligned with CodeModel's nested-class maps and case-insensitive filesystems.
+ * is applied only when the simple name is free under the target, no other type
+ * claims the same slot in that pass, and (for beans) the move does not create a
+ * duplicate {@link CClassInfo#getSqueezedName()} in the package (ObjectFactory
+ * value-factory methods). Passes repeat until none move.
  * </p>
  * <p>
- * <strong>Beans and enums share one namespace</strong> under each parent: a bean
- * named {@code Status} and an enum named {@code Status} block each other.
- * Types whose parent is already a package (or a {@code CElementInfo}) are left
- * alone.
- * </p>
- * <p>
- * <strong>Package identity.</strong> XJC sometimes builds
- * {@link CClassInfoParent.Package} via {@code new Package(jPackage)} (e.g. global
- * enums) instead of {@link Model#getPackage}. Occupancy and promotion always
- * canonicalize package parents through {@code model.getPackage} so those wrappers
- * compare as the same parent.
- * </p>
- * <p>
- * <strong>Side effect.</strong> {@link CClassInfo#getSqueezedName()} follows the
- * parent chain, so ObjectFactory method names become shorter after a successful
- * lift (for example {@code createFlattenRootGroup} → {@code createGroup}).
+ * Beans and enums share one simple-name namespace under each parent. Package
+ * parents are canonicalized via {@link Model#getPackage}.
  * </p>
  *
  * @author Rawvoid
@@ -93,10 +70,6 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(PromoteNestedClassPlugin.class);
 
-    /**
-     * Nesting is defined on the model; changing parents here is enough for
-     * BeanGenerator to emit the right containers. {@link #run} is a no-op.
-     */
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
         var hops = 0;
@@ -108,7 +81,6 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
             hops += batch;
         }
         if (hops > 0) {
-            // Counts one-level moves, not distinct types (a deep type may hop several times).
             log.info("Promoted {} nested type placement(s) (beans and enums)", hops);
         }
     }
@@ -124,7 +96,6 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
      * @return number of types re-parented in this pass
      */
     private int promoteOneLevel(Model model) {
-        // Occupied simple names under each parent — beans and enums compete together.
         Map<CClassInfoParent, Set<String>> occupied = new HashMap<>();
         for (var bean : model.beans().values()) {
             occupy(occupied, canonicalParent(model, bean.parent()), bean.shortName);
@@ -133,9 +104,7 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
             occupy(occupied, canonicalParent(model, enumInfo.parent), enumInfo.shortName);
         }
 
-        // Proposal key: (target parent, normalized name). Only unique free slots apply.
-        // Simultaneous evaluation: if two types would land on the same name, both stop
-        // rather than letting traversal order pick a winner.
+        // Simultaneous short-name proposals: only unique free slots proceed.
         Map<ProposalKey, List<Move>> proposals = new LinkedHashMap<>();
         for (var bean : model.beans().values()) {
             if (bean.parent() instanceof CClassInfo outer) {
@@ -150,7 +119,6 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
             }
         }
 
-        // Short-name filter first (unique free slot).
         var shortNameOk = new ArrayList<Move>();
         for (var entry : proposals.entrySet()) {
             var key = entry.getKey();
@@ -162,96 +130,31 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
                 continue;
             }
             shortNameOk.add(candidates.getFirst());
-            // Reserve the slot for later short-name proposals in this same pass.
             occupy(occupied, key.target(), key.name());
         }
 
-        // ObjectFactory squeezed-name filter for beans (enums have no value factories).
-        // Apply greedily so multi-move batches stay collision-free.
-        Map<CClassInfo, CClassInfoParent> parentOverrides = new HashMap<>();
-        var accepted = new ArrayList<Move>();
+        // Apply each move; undo bean moves that break ObjectFactory squeezed names.
+        var moved = 0;
         for (var move : shortNameOk) {
             if (move.bean != null) {
-                var trial = new HashMap<>(parentOverrides);
-                trial.put(move.bean, move.target);
-                if (hasSqueezedCollision(model, trial)) {
+                var previous = move.bean.parent();
+                setFieldValue(CCLASSINFO_PARENT_FIELD, move.bean, move.target);
+                if (ModelUtils.hasObjectFactorySqueezedCollision(model)) {
+                    setFieldValue(CCLASSINFO_PARENT_FIELD, move.bean, previous);
                     log.debug(
-                        "Skip promoting {} — would collide on ObjectFactory squeezed name",
+                        "Skip promoting {} — ObjectFactory squeezed name collision",
                         move.bean.fullName()
                     );
                     continue;
                 }
-                parentOverrides.put(move.bean, move.target);
-            }
-            accepted.add(move);
-        }
-
-        for (var move : accepted) {
-            if (move.bean != null) {
-                setFieldValue(CCLASSINFO_PARENT_FIELD, move.bean, move.target);
             } else {
                 setFieldValue(CENUMLEAFINFO_PARENT_FIELD, move.enumInfo, move.target);
             }
+            moved++;
         }
-        return accepted.size();
+        return moved;
     }
 
-    /**
-     * Whether non-abstract beans would register duplicate ObjectFactory create methods
-     * under the given parent overrides (plus current model parents for unmoved types).
-     */
-    private static boolean hasSqueezedCollision(Model model, Map<CClassInfo, CClassInfoParent> parentOverrides) {
-        Map<SqueezedSlot, CClassInfo> seen = new HashMap<>();
-        for (var bean : model.beans().values()) {
-            if (bean.isAbstract()) {
-                continue;
-            }
-            var squeezed = squeezedWithOverrides(bean, parentOverrides);
-            var slot = new SqueezedSlot(bean.getOwnerPackage(), squeezed);
-            var previous = seen.put(slot, bean);
-            if (previous != null) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static String squeezedWithOverrides(
-        CClassInfo bean,
-        Map<CClassInfo, CClassInfoParent> parentOverrides
-    ) {
-        return appendSqueezed(parentOf(bean, parentOverrides), parentOverrides) + bean.shortName;
-    }
-
-    private static CClassInfoParent parentOf(
-        CClassInfo bean,
-        Map<CClassInfo, CClassInfoParent> parentOverrides
-    ) {
-        return parentOverrides.getOrDefault(bean, bean.parent());
-    }
-
-    /**
-     * Mirrors XJC {@code CClassInfo} squeezed-name visitor with optional parent overrides.
-     */
-    private static String appendSqueezed(
-        CClassInfoParent parent,
-        Map<CClassInfo, CClassInfoParent> parentOverrides
-    ) {
-        return switch (parent) {
-            case CClassInfo bean -> appendSqueezed(parentOf(bean, parentOverrides), parentOverrides)
-                + bean.shortName;
-            case CElementInfo element -> appendSqueezed(element.parent, parentOverrides)
-                + element.shortName();
-            case CClassInfoParent.Package ignored -> "";
-            case null -> "";
-            default -> "";
-        };
-    }
-
-    /**
-     * XJC may attach the same {@link com.sun.codemodel.JPackage} through distinct
-     * {@link CClassInfoParent.Package} instances. Normalize to the model cache.
-     */
     private static CClassInfoParent canonicalParent(Model model, CClassInfoParent parent) {
         if (parent instanceof CClassInfoParent.Package pkgParent) {
             return model.getPackage(pkgParent.pkg);
@@ -269,19 +172,14 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
         String shortName,
         Move move
     ) {
-        var key = new ProposalKey(target, normalize(shortName));
-        proposals.computeIfAbsent(key, k -> new ArrayList<>()).add(move);
+        proposals.computeIfAbsent(new ProposalKey(target, normalize(shortName)), k -> new ArrayList<>()).add(move);
     }
 
-    /** Case-insensitive key so collisions match CodeModel / case-folding filesystems. */
     private static String normalize(String name) {
         return name.toLowerCase(Locale.ROOT);
     }
 
     private record ProposalKey(CClassInfoParent target, String name) {
-    }
-
-    private record SqueezedSlot(JPackage pkg, String squeezed) {
     }
 
     private record Move(CClassInfo bean, CEnumLeafInfo enumInfo, CClassInfoParent target) {

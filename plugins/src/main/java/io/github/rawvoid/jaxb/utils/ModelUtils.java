@@ -146,6 +146,37 @@ public final class ModelUtils {
     }
 
     /**
+     * Whether two non-abstract beans would emit the same ObjectFactory value-factory method.
+     * Uses XJC's own {@link CClassInfo#getSqueezedName()} (package-local uniqueness).
+     */
+    public static boolean hasObjectFactorySqueezedCollision(Model model) {
+        return !objectFactorySqueezedCollisions(model).isEmpty();
+    }
+
+    /**
+     * Non-abstract bean groups that share {@code package + getSqueezedName()}.
+     * Empty when ObjectFactory would not see a name clash.
+     */
+    public static List<List<CClassInfo>> objectFactorySqueezedCollisions(Model model) {
+        Map<String, List<CClassInfo>> byKey = new LinkedHashMap<>();
+        for (var bean : model.beans().values()) {
+            if (bean.isAbstract()) {
+                continue;
+            }
+            // Package name + squeezed name is what ObjectFactory uses for createXxx uniqueness.
+            var key = bean.getOwnerPackage().name() + '\0' + bean.getSqueezedName();
+            byKey.computeIfAbsent(key, k -> new ArrayList<>()).add(bean);
+        }
+        var collisions = new ArrayList<List<CClassInfo>>();
+        for (var group : byKey.values()) {
+            if (group.size() > 1) {
+                collisions.add(group);
+            }
+        }
+        return collisions;
+    }
+
+    /**
      * Finds all nested classes of a given parent class from the model.
      *
      * @param model  the JAXB model containing all beans
