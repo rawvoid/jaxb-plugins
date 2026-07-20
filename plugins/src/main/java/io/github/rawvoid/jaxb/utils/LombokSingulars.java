@@ -16,115 +16,84 @@
 
 package io.github.rawvoid.jaxb.utils;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
- * Field-name singularization aligned with Project Lombok's
- * {@code lombok.core.handlers.Singulars#autoSingularize(String)}.
+ * Thin reflective access to Lombok's {@code lombok.core.handlers.Singulars#autoSingularize}.
  * <p>
- * Lombok ships that class only inside its internal SCL packaging, so it is not a
- * normal classpath type. The matching rules and {@code singulars.txt} table are the
- * same; we load Lombok's resource when present, otherwise our bundled copy.
+ * That class is packaged only inside Lombok's SCL shadow jar (not a normal classpath type).
+ * We load it via {@code lombok.launch.Main#getShadowClassLoader()} so singularization stays
+ * identical to what annotation processing uses — no local copy of the rules table.
  * </p>
- *
- * @see <a href="https://projectlombok.org/features/Builder">Lombok @Builder / @Singular</a>
+ * <p>
+ * If Lombok is missing or the reflective bootstrap fails, {@link #autoSingularize(String)}
+ * returns {@code null} (callers should set an explicit {@code @Singular} value).
+ * </p>
  */
 public final class LombokSingulars {
 
-    private static final List<String> SINGULAR_STORE = loadStore();
+    private static final Logger log = LoggerFactory.getLogger(LombokSingulars.class);
+
+    /** Cached {@code Singulars.autoSingularize(String)}; {@code null} if resolve failed. */
+    private static final Method AUTO_SINGULARIZE = resolveAutoSingularize();
+
+    private static volatile boolean failureLogged;
 
     private LombokSingulars() {
     }
 
     /**
-     * @return singular form, or {@code null} when Lombok would refuse auto-singularization
-     *         (caller should pass an explicit {@code @Singular} value)
+     * @return singular form from Lombok, or {@code null} when auto-singularization is refused
+     *         or Lombok cannot be reached
      */
-    public static String autoSingularize(String in) {
-        if (in == null || in.isEmpty()) {
+    public static String autoSingularize(String name) {
+        if (name == null || name.isEmpty() || AUTO_SINGULARIZE == null) {
             return null;
         }
-        final int inLen = in.length();
-        for (int i = 0; i < SINGULAR_STORE.size(); i += 2) {
-            final var lastPart = SINGULAR_STORE.get(i);
-            final boolean wholeWord = Character.isUpperCase(lastPart.charAt(0));
-            final int endingOnly = lastPart.charAt(0) == '-' ? 1 : 0;
-            final int len = lastPart.length();
-            if (inLen < len) {
-                continue;
-            }
-            if (!in.regionMatches(true, inLen - len + endingOnly, lastPart, endingOnly, len - endingOnly)) {
-                continue;
-            }
-            if (wholeWord && inLen != len && !Character.isUpperCase(in.charAt(inLen - len))) {
-                continue;
-            }
-
-            var replacement = SINGULAR_STORE.get(i + 1);
-            if (replacement.equals("!")) {
-                return null;
-            }
-
-            boolean capitalizeFirst = !replacement.isEmpty()
-                && Character.isUpperCase(in.charAt(inLen - len + endingOnly));
-            var pre = in.substring(0, inLen - len + endingOnly);
-            var post = capitalizeFirst
-                ? Character.toUpperCase(replacement.charAt(0)) + replacement.substring(1)
-                : replacement;
-            return pre + post;
+        try {
+            return (String) AUTO_SINGULARIZE.invoke(null, name);
+        } catch (InvocationTargetException e) {
+            logOnce("Lombok Singulars.autoSingularize failed", e.getCause() != null ? e.getCause() : e);
+            return null;
+        } catch (ReflectiveOperationException e) {
+            logOnce("Lombok Singulars.autoSingularize invoke failed", e);
+            return null;
         }
-        return null;
-    }
-
-    private static List<String> loadStore() {
-        var store = new ArrayList<String>();
-        try (var in = openSingularsTable();
-             var br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
-            for (var line = br.readLine(); line != null; line = br.readLine()) {
-                line = line.trim();
-                if (line.startsWith("#") || line.isEmpty()) {
-                    continue;
-                }
-                if (line.endsWith(" =")) {
-                    store.add(line.substring(0, line.length() - 2));
-                    store.add("");
-                    continue;
-                }
-                var idx = line.indexOf(" = ");
-                if (idx < 0) {
-                    continue;
-                }
-                store.add(line.substring(0, idx));
-                store.add(line.substring(idx + 3));
-            }
-        } catch (Exception e) {
-            store.clear();
-        }
-        return List.copyOf(store);
     }
 
     /**
-     * Prefer Lombok's own jar resource so a newer Lombok on the XJC classpath updates the table;
-     * fall back to the copy shipped with this plugin.
+     * Bootstrap: {@code Main.getShadowClassLoader().loadClass("…Singulars").getMethod(…)}.
      */
-    private static InputStream openSingularsTable() {
-        var cl = Thread.currentThread().getContextClassLoader();
-        if (cl != null) {
-            var fromLombok = cl.getResourceAsStream("lombok/core/handlers/singulars.txt");
-            if (fromLombok != null) {
-                return fromLombok;
+    private static Method resolveAutoSingularize() {
+        try {
+            var main = Class.forName("lombok.launch.Main");
+            var getShadow = main.getDeclaredMethod("getShadowClassLoader");
+            getShadow.setAccessible(true);
+            var shadow = (ClassLoader) getShadow.invoke(null);
+            var singulars = shadow.loadClass("lombok.core.handlers.Singulars");
+            return singulars.getMethod("autoSingularize", String.class);
+        } catch (ReflectiveOperationException | LinkageError e) {
+            logOnce(
+                "Cannot load lombok.core.handlers.Singulars via ShadowClassLoader; "
+                    + "@Singular will use explicit field names",
+                e
+            );
+            return null;
+        }
+    }
+
+    private static void logOnce(String message, Throwable t) {
+        if (!failureLogged) {
+            synchronized (LombokSingulars.class) {
+                if (!failureLogged) {
+                    failureLogged = true;
+                    log.warn(message, t);
+                }
             }
         }
-        var fromPlugin = LombokSingulars.class.getResourceAsStream(
-            "/io/github/rawvoid/jaxb/internal/singulars.txt");
-        if (fromPlugin == null) {
-            throw new IllegalStateException("singulars.txt not found on classpath");
-        }
-        return fromPlugin;
     }
 }
