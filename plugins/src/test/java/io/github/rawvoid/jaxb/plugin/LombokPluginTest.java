@@ -89,15 +89,37 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testBuilder() throws Exception {
+    void testBuilderOnStandaloneType() throws Exception {
+        // Person: superclass Object, no generated subclasses → official @Builder.
         var args = List.of("-Xlombok", "-builder");
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(source).contains("@Builder");
+            assertThat(source).doesNotContain("@SuperBuilder");
             assertThat(source).contains("@NoArgsConstructor");
             assertThat(source).contains("@AllArgsConstructor");
             assertThat(hasPropertyGetterInSource(source)).isFalse();
             assertThat(hasPropertySetterInSource(source)).isFalse();
+        });
+    }
+
+    @Test
+    void testSuperBuilderOnInheritanceChain() throws Exception {
+        // EmptyChild extends BaseType (both generated this round) → SuperBuilder on the whole chain.
+        var args = List.of("-Xlombok", "-builder");
+        testExecute(args, EMPTY_CHILD, (source, clazz) -> {
+            assertThat(source).contains("@SuperBuilder");
+            assertThat(source).doesNotContain("@lombok.Builder");
+            assertThat(source).contains("@NoArgsConstructor");
+            // EmptyChild has no declared fields → no @AllArgsConstructor.
+            assertThat(source).doesNotContain("@AllArgsConstructor");
+        });
+        testExecute(args, PKG + "\\.BaseType", (source, clazz) -> {
+            // Abstract base still gets SuperBuilder so the child builder can chain.
+            assertThat(source).contains("@SuperBuilder");
+            assertThat(source).doesNotContain("@lombok.Builder");
+            assertThat(source).contains("@NoArgsConstructor");
+            assertThat(java.lang.reflect.Modifier.isAbstract(clazz.getModifiers())).isTrue();
         });
     }
 
