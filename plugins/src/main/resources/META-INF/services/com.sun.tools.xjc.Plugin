@@ -26,3 +26,4 @@ io.github.rawvoid.jaxb.plugin.PromoteNestedClassPlugin
 io.github.rawvoid.jaxb.plugin.LombokPlugin
 io.github.rawvoid.jaxb.plugin.RenameClassPlugin
 io.github.rawvoid.jaxb.plugin.RenameMultiElementPropPlugin
+io.github.rawvoid.jaxb.plugin.GeneratedAnnoPlugin
