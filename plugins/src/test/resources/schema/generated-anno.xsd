@@ -24,6 +24,7 @@
         <xs:sequence>
             <xs:element name="value" type="xs:string"/>
             <xs:element name="nested" type="tns:Nested"/>
+            <xs:element name="status" type="tns:Status"/>
         </xs:sequence>
     </xs:complexType>
 
@@ -32,6 +33,13 @@
             <xs:element name="nestedValue" type="xs:string"/>
         </xs:sequence>
     </xs:complexType>
+
+    <xs:simpleType name="Status">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="ACTIVE"/>
+            <xs:enumeration value="INACTIVE"/>
+        </xs:restriction>
+    </xs:simpleType>
 
     <xs:element name="root" type="tns:Root"/>
 </xs:schema>

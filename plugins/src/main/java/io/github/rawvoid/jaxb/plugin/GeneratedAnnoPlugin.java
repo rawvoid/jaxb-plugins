@@ -24,6 +24,10 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import org.xml.sax.ErrorHandler;
 
+import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.Queue;
+
 /**
  * JAXB plugin that automatically annotates all generated packages and classes
  * with {@code @jakarta.annotation.Generated}.
@@ -63,7 +67,7 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
         String dateToUse = null;
 
         if (Boolean.TRUE.equals(date)) {
-            dateToUse = java.time.LocalDate.now().toString();
+            dateToUse = LocalDate.now().toString();
         }
 
         for (var packageContext : outline.getAllPackageContexts()) {
@@ -71,23 +75,25 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
             // Annotate package-info.java
             addGeneratedAnnotation(jPackage, generatedClass, valueToUse, commentsToUse, dateToUse);
 
-            // Annotate all top-level classes and recursively their nested classes
+            // Annotate all classes in this package (including nested classes) iteratively using a queue
+            Queue<JDefinedClass> queue = new ArrayDeque<>();
             var classesIt = jPackage.classes();
             while (classesIt.hasNext()) {
-                var clazz = classesIt.next();
-                annotateClass(clazz, generatedClass, valueToUse, commentsToUse, dateToUse);
+                queue.add(classesIt.next());
+            }
+
+            while (!queue.isEmpty()) {
+                var clazz = queue.poll();
+                addGeneratedAnnotation(clazz, generatedClass, valueToUse, commentsToUse, dateToUse);
+
+                var nestedIt = clazz.classes();
+                while (nestedIt.hasNext()) {
+                    queue.add(nestedIt.next());
+                }
             }
         }
 
         return true;
-    }
-
-    private void annotateClass(JDefinedClass clazz, JClass annotationClass, String value, String comments, String date) {
-        addGeneratedAnnotation(clazz, annotationClass, value, comments, date);
-        var nestedIt = clazz.classes();
-        while (nestedIt.hasNext()) {
-            annotateClass(nestedIt.next(), annotationClass, value, comments, date);
-        }
     }
 
     private void addGeneratedAnnotation(JAnnotatable target, JClass annotationClass, String value, String comments, String date) {
@@ -105,3 +111,4 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
         }
     }
 }
+

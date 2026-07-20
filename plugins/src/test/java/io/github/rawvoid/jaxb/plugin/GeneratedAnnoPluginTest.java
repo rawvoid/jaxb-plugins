@@ -35,6 +35,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     private static final String PACKAGE_NAME = "com.github.rawvoid.xjc_plugins.generated_anno";
     private static final String ROOT_CLASS = PACKAGE_NAME + ".Root";
     private static final String NESTED_CLASS = PACKAGE_NAME + ".Nested";
+    private static final String STATUS_CLASS = PACKAGE_NAME + ".Status";
     private static final String OBJECT_FACTORY_CLASS = PACKAGE_NAME + ".ObjectFactory";
 
     private final String optionCmd = optionCommand(GeneratedAnnoPlugin.class);
@@ -61,11 +62,16 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).doesNotContain("@Generated");
             assertThat(source).doesNotContain("jakarta.annotation.Generated");
         });
+
+        testExecute(List.of(), STATUS_CLASS, (source, clazz) -> {
+            assertThat(source).doesNotContain("@Generated");
+            assertThat(source).doesNotContain("jakarta.annotation.Generated");
+        });
     }
 
     @Test
     void defaultPluginOptions() throws Exception {
-        testExecute(List.of(optionCmd), PACKAGE_NAME + "\\.(Root|Nested|ObjectFactory)", (source, clazz) -> {
+        testExecute(List.of(optionCmd), PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
             // Verify all generated classes (Root, Nested, ObjectFactory) contain the annotation
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"Xgenerated-anno\"");
@@ -88,7 +94,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             "-value=CustomGenerator",
             "-comments=CustomComments"
         );
-        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|ObjectFactory)", (source, clazz) -> {
+        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"CustomGenerator\"");
             assertThat(source).contains("comments = \"CustomComments\"");
@@ -108,7 +114,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             optionCmd,
             "-date=true"
         );
-        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|ObjectFactory)", (source, clazz) -> {
+        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"Xgenerated-anno\"");
             assertThat(source).contains("comments = \"https://github.com/rawvoid/jaxb-plugins\"");
