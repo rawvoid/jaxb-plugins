@@ -20,6 +20,7 @@ import com.sun.codemodel.JClass;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.codemodel.JFieldVar;
 import com.sun.codemodel.JMod;
+import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import io.github.rawvoid.jaxb.utils.LombokSingulars;
@@ -47,26 +48,20 @@ import java.util.regex.Pattern;
  * <p><b>Intentional limitations:</b></p>
  * <ul>
  *   <li>Does not generate bytecode; consumers must provide Lombok and annotation processing at compile time.</li>
- *   <li>When {@code -builder} is enabled:
+ *   <li>Builder modes (mutually exclusive):
  *       <ul>
- *         <li><strong>Standalone</strong> types (superclass is {@code Object}, no generated subclasses)
- *             get {@code @lombok.Builder(toBuilder = true)}.</li>
- *         <li>Types that <strong>extend a non-{@code Object} superclass</strong> get
- *             {@code @lombok.experimental.SuperBuilder(toBuilder = true)}. The superclass may be
- *             generated this round, from episode/classpath, or otherwise external — only types this
- *             plugin emits are annotated. Lombok still accepts SuperBuilder on a subclass when the
- *             parent has no SuperBuilder.</li>
- *         <li>Types that are <strong>extended by another generated class</strong> also get
- *             SuperBuilder (including abstract bases).</li>
- *         <li>Fields whose erasure is assignable to {@link java.util.Collection} or
- *             {@link java.util.Map} get {@code @Singular(ignoreNullCollections = true)} (covers
- *             List/Set/Map and subtypes). Singular names use Lombok
- *             {@code Singulars.autoSingularize} via reflection: auto when possible, otherwise
- *             explicit {@code value = field name}. Slightly broader than Lombok's documented
- *             interface list; stock XJC uses collection interfaces so this is safe in practice.</li>
+ *         <li>{@code -builder}: smart mix — standalone concrete types get
+ *             {@code @Builder(toBuilder = true)}; types in an inheritance chain (non-{@code Object}
+ *             super, including episode/external parents, or having generated subclasses) get
+ *             {@code @SuperBuilder(toBuilder = true)}.</li>
+ *         <li>{@code -super-builder}: every matched class gets
+ *             {@code @SuperBuilder(toBuilder = true)} (including abstract types). No inheritance
+ *             heuristic.</li>
+ *         <li>Either mode also adds NoArgs/AllArgs constructors as appropriate, and annotates
+ *             {@link Collection}/{@link Map} fields with {@code @Singular(ignoreNullCollections = true)}
+ *             (singular names via Lombok {@code Singulars.autoSingularize}; explicit field name when
+ *             auto fails).</li>
  *         <li>{@code @SuperBuilder} remains under {@code lombok.experimental}.</li>
- *         <li>{@code @AllArgsConstructor} is omitted when there are no fields (would collide with
- *             {@code @NoArgsConstructor}).</li>
  *       </ul>
  *   </li>
  *   <li>{@code @EqualsAndHashCode(callSuper = true)} is auto-added only when the class has a non-{@code Object}
@@ -104,8 +99,12 @@ public class LombokPlugin extends AbstractPlugin {
     Boolean removeSetter;
 
     @Option(name = "builder", defaultValue = "false",
-        description = "Add builders (toBuilder=true), SuperBuilder on inheritance, and @Singular on Collection/Map fields (default: false)")
+        description = "Smart builders: @Builder or @SuperBuilder by inheritance; @Singular on collections (exclusive with -super-builder)")
     Boolean builder;
+
+    @Option(name = "super-builder", defaultValue = "false",
+        description = "Add @SuperBuilder(toBuilder=true) on every matched class; @Singular on collections (exclusive with -builder)")
+    Boolean superBuilder;
 
     private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
 
@@ -115,8 +114,17 @@ public class LombokPlugin extends AbstractPlugin {
     }
 
     @Override
+    protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+        if (Boolean.TRUE.equals(builder) && Boolean.TRUE.equals(superBuilder)) {
+            throw new BadCommandLineException(
+                "-builder and -super-builder are mutually exclusive; enable only one");
+        }
+    }
+
+    @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
-        // fullName set: stable identity across CodeModel instances.
+        var buildersEnabled = Boolean.TRUE.equals(builder) || Boolean.TRUE.equals(superBuilder);
+        // Only -builder needs inheritance detection; -super-builder annotates every class.
         var superBuilderNames = Boolean.TRUE.equals(builder)
             ? collectSuperBuilderClassNames(outline)
             : Set.<String>of();
@@ -131,7 +139,7 @@ public class LombokPlugin extends AbstractPlugin {
             var resolved = resolveAnnotations(implClass, superBuilderNames);
             applyAnnotations(implClass, className, resolved);
 
-            if (Boolean.TRUE.equals(builder)) {
+            if (buildersEnabled) {
                 annotateSingularOnCollectionFields(implClass);
             }
 
@@ -184,8 +192,8 @@ public class LombokPlugin extends AbstractPlugin {
      * Builds the final class-level annotation list: user or default {@code @Data}, optional builder
      * trio ({@code toBuilder = true}), and optional {@code @EqualsAndHashCode(callSuper = true)}.
      *
-     * @param superBuilderNames full names that need {@code @SuperBuilder} (see
-     *                          {@link #collectSuperBuilderClassNames(Outline)})
+     * @param superBuilderNames used only for {@code -builder}: full names that need SuperBuilder
+     *                          (see {@link #collectSuperBuilderClassNames(Outline)})
      */
     List<XAnnotation<?>> resolveAnnotations(JDefinedClass implClass, Set<String> superBuilderNames) {
         var resolved = new ArrayList<XAnnotation<?>>();
@@ -195,7 +203,12 @@ public class LombokPlugin extends AbstractPlugin {
             resolved.addAll(annotations);
         }
 
-        if (Boolean.TRUE.equals(builder)) {
+        if (Boolean.TRUE.equals(superBuilder)) {
+            // Force SuperBuilder on every matched class (including abstract).
+            addIfAbsent(resolved, LOMBOK_SUPER_BUILDER,
+                "@lombok.experimental.SuperBuilder(toBuilder = true)");
+            addBuilderConstructors(resolved, implClass);
+        } else if (Boolean.TRUE.equals(builder)) {
             if (superBuilderNames.contains(implClass.fullName())) {
                 // Inheritance participant (subclass of non-Object and/or generated base).
                 addIfAbsent(resolved, LOMBOK_SUPER_BUILDER,

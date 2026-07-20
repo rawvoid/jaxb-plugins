@@ -16,6 +16,8 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.tools.xjc.BadCommandLineException;
+import com.sun.tools.xjc.Options;
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * XJC integration tests for {@link LombokPlugin}.
@@ -130,6 +133,33 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).contains("@NoArgsConstructor");
             assertThat(java.lang.reflect.Modifier.isAbstract(clazz.getModifiers())).isTrue();
         });
+    }
+
+    @Test
+    void testSuperBuilderFlagOnEveryClass() throws Exception {
+        // -super-builder: no inheritance heuristic — Person and abstract BaseType both get SuperBuilder.
+        var args = List.of("-Xlombok", "-super-builder");
+        testExecute(args, PERSON, (source, clazz) -> {
+            assertThat(source).contains("@SuperBuilder");
+            assertThat(source).contains("toBuilder = true");
+            assertThat(source).doesNotContain("@lombok.Builder");
+            assertThat(source).contains("@NoArgsConstructor");
+            assertThat(source).contains("@Singular");
+        });
+        testExecute(args, PKG + "\\.BaseType", (source, clazz) -> {
+            assertThat(source).contains("@SuperBuilder");
+            assertThat(source).contains("toBuilder = true");
+            assertThat(java.lang.reflect.Modifier.isAbstract(clazz.getModifiers())).isTrue();
+        });
+    }
+
+    @Test
+    void testBuilderAndSuperBuilderAreMutuallyExclusive() {
+        var plugin = new LombokPlugin();
+        var args = new String[]{"-Xlombok", "-builder", "-super-builder"};
+        assertThatThrownBy(() -> plugin.parseArgument(new Options(), args, 0))
+            .isInstanceOf(BadCommandLineException.class)
+            .hasMessageContaining("mutually exclusive");
     }
 
     @Test
