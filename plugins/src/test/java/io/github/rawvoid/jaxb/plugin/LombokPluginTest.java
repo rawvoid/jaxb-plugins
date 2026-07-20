@@ -90,16 +90,23 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void testBuilderOnStandaloneType() throws Exception {
-        // Person: superclass Object, no generated subclasses → official @Builder.
+        // Person: superclass Object, no generated subclasses → official @Builder(toBuilder = true).
         var args = List.of("-Xlombok", "-builder");
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(source).contains("@Builder");
+            assertThat(source).contains("toBuilder = true");
             assertThat(source).doesNotContain("@SuperBuilder");
             assertThat(source).contains("@NoArgsConstructor");
             assertThat(source).contains("@AllArgsConstructor");
             assertThat(hasPropertyGetterInSource(source)).isFalse();
             assertThat(hasPropertySetterInSource(source)).isFalse();
+            // Plural list: auto-singularize works → @Singular without value=…
+            assertThat(source).contains("nicknames");
+            assertThat(source).contains("@Singular");
+            assertThat(source).contains("ignoreNullCollections = true");
+            // Singular-looking list name: auto fails → value = field name.
+            assertThat(source).contains("value = \"tag\"");
         });
     }
 
@@ -109,6 +116,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
         var args = List.of("-Xlombok", "-builder");
         testExecute(args, EMPTY_CHILD, (source, clazz) -> {
             assertThat(source).contains("@SuperBuilder");
+            assertThat(source).contains("toBuilder = true");
             assertThat(source).doesNotContain("@lombok.Builder");
             assertThat(source).contains("@NoArgsConstructor");
             // EmptyChild has no declared fields → no @AllArgsConstructor.
@@ -117,6 +125,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
         testExecute(args, PKG + "\\.BaseType", (source, clazz) -> {
             // Abstract base still gets SuperBuilder so the child builder can chain.
             assertThat(source).contains("@SuperBuilder");
+            assertThat(source).contains("toBuilder = true");
             assertThat(source).doesNotContain("@lombok.Builder");
             assertThat(source).contains("@NoArgsConstructor");
             assertThat(java.lang.reflect.Modifier.isAbstract(clazz.getModifiers())).isTrue();

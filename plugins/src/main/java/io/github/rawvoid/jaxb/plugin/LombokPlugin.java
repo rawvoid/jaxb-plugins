@@ -16,9 +16,13 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.codemodel.JClass;
 import com.sun.codemodel.JDefinedClass;
+import com.sun.codemodel.JFieldVar;
+import com.sun.codemodel.JMod;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.LombokSingulars;
 import io.github.rawvoid.jaxb.utils.OutlineUtils;
 import org.jvnet.jaxb.annox.model.XAnnotation;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
@@ -26,9 +30,11 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -44,15 +50,20 @@ import java.util.regex.Pattern;
  *   <li>When {@code -builder} is enabled:
  *       <ul>
  *         <li><strong>Standalone</strong> types (superclass is {@code Object}, no generated subclasses)
- *             get {@code @lombok.Builder}.</li>
+ *             get {@code @lombok.Builder(toBuilder = true)}.</li>
  *         <li>Types that <strong>extend a non-{@code Object} superclass</strong> get
- *             {@code @lombok.experimental.SuperBuilder}. The superclass may be generated in this
- *             round, pulled in via episode/classpath, or otherwise external — only the types this
- *             plugin emits are annotated; external parents are left unchanged. Lombok still accepts
- *             {@code @SuperBuilder} on a subclass when the parent has no SuperBuilder.</li>
+ *             {@code @lombok.experimental.SuperBuilder(toBuilder = true)}. The superclass may be
+ *             generated this round, from episode/classpath, or otherwise external — only types this
+ *             plugin emits are annotated. Lombok still accepts SuperBuilder on a subclass when the
+ *             parent has no SuperBuilder.</li>
  *         <li>Types that are <strong>extended by another generated class</strong> also get
- *             {@code @SuperBuilder} (including abstract bases) so the inheritance chain of builders
- *             stays consistent within this generation.</li>
+ *             SuperBuilder (including abstract bases).</li>
+ *         <li>Fields whose erasure is assignable to {@link java.util.Collection} or
+ *             {@link java.util.Map} get {@code @Singular(ignoreNullCollections = true)} (covers
+ *             List/Set/Map and subtypes). Singular names use Lombok
+ *             {@code Singulars.autoSingularize} via reflection: auto when possible, otherwise
+ *             explicit {@code value = field name}. Slightly broader than Lombok's documented
+ *             interface list; stock XJC uses collection interfaces so this is safe in practice.</li>
  *         <li>{@code @SuperBuilder} remains under {@code lombok.experimental}.</li>
  *         <li>{@code @AllArgsConstructor} is omitted when there are no fields (would collide with
  *             {@code @NoArgsConstructor}).</li>
@@ -74,6 +85,7 @@ public class LombokPlugin extends AbstractPlugin {
     private static final String LOMBOK_EQUALS_AND_HASH_CODE = "lombok.EqualsAndHashCode";
     private static final String LOMBOK_BUILDER = "lombok.Builder";
     private static final String LOMBOK_SUPER_BUILDER = "lombok.experimental.SuperBuilder";
+    private static final String LOMBOK_SINGULAR = "lombok.Singular";
     private static final String LOMBOK_NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
     private static final String LOMBOK_ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
 
@@ -92,7 +104,7 @@ public class LombokPlugin extends AbstractPlugin {
     Boolean removeSetter;
 
     @Option(name = "builder", defaultValue = "false",
-        description = "Add builders: @Builder for standalone types, @SuperBuilder when extending non-Object or having generated subclasses (default: false)")
+        description = "Add builders (toBuilder=true), SuperBuilder on inheritance, and @Singular on Collection/Map fields (default: false)")
     Boolean builder;
 
     private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
@@ -118,6 +130,10 @@ public class LombokPlugin extends AbstractPlugin {
 
             var resolved = resolveAnnotations(implClass, superBuilderNames);
             applyAnnotations(implClass, className, resolved);
+
+            if (Boolean.TRUE.equals(builder)) {
+                annotateSingularOnCollectionFields(implClass);
+            }
 
             OutlineUtils.removePropertyAccessors(
                 classOutline,
@@ -165,8 +181,8 @@ public class LombokPlugin extends AbstractPlugin {
     }
 
     /**
-     * Builds the final annotation list: user or default {@code @Data}, optional builder trio,
-     * and optional {@code @EqualsAndHashCode(callSuper = true)} for subclasses.
+     * Builds the final class-level annotation list: user or default {@code @Data}, optional builder
+     * trio ({@code toBuilder = true}), and optional {@code @EqualsAndHashCode(callSuper = true)}.
      *
      * @param superBuilderNames full names that need {@code @SuperBuilder} (see
      *                          {@link #collectSuperBuilderClassNames(Outline)})
@@ -182,18 +198,13 @@ public class LombokPlugin extends AbstractPlugin {
         if (Boolean.TRUE.equals(builder)) {
             if (superBuilderNames.contains(implClass.fullName())) {
                 // Inheritance participant (subclass of non-Object and/or generated base).
-                addIfAbsent(resolved, LOMBOK_SUPER_BUILDER, "@lombok.experimental.SuperBuilder");
-                addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
-                if (!implClass.isAbstract() && !implClass.fields().isEmpty()) {
-                    addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
-                }
+                addIfAbsent(resolved, LOMBOK_SUPER_BUILDER,
+                    "@lombok.experimental.SuperBuilder(toBuilder = true)");
+                addBuilderConstructors(resolved, implClass);
             } else if (!implClass.isAbstract()) {
                 // Standalone concrete type: official @Builder.
-                addIfAbsent(resolved, LOMBOK_BUILDER, "@lombok.Builder");
-                addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
-                if (!implClass.fields().isEmpty()) {
-                    addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
-                }
+                addIfAbsent(resolved, LOMBOK_BUILDER, "@lombok.Builder(toBuilder = true)");
+                addBuilderConstructors(resolved, implClass);
             }
         }
 
@@ -202,6 +213,68 @@ public class LombokPlugin extends AbstractPlugin {
             resolved.add(parseAnnotation("@lombok.EqualsAndHashCode(callSuper = true)"));
         }
         return resolved;
+    }
+
+    /**
+     * Annotates {@link Collection}/{@link Map} (and subtype) fields with
+     * {@code @Singular(ignoreNullCollections = true)}.
+     * <p>
+     * Naming: {@link LombokSingulars#autoSingularize(String)}; if {@code null}, use field name
+     * as explicit {@code value}.
+     * </p>
+     */
+    private void annotateSingularOnCollectionFields(JDefinedClass implClass) {
+        for (var field : implClass.fields().values()) {
+            if ((field.mods().getValue() & JMod.STATIC) != 0) {
+                continue;
+            }
+            if (!isSingularCollectionField(implClass, field)) {
+                continue;
+            }
+            if (hasAnnotation(field, LOMBOK_SINGULAR)) {
+                continue;
+            }
+
+            // Auto path: omit value. If autoSingularize is null, value = field name (explicit singular).
+            var use = field.annotate(implClass.owner().ref(LOMBOK_SINGULAR));
+            use.param("ignoreNullCollections", true);
+            if (LombokSingulars.autoSingularize(field.name()) == null) {
+                use.param("value", field.name());
+            }
+        }
+    }
+
+    /**
+     * JAXB needs a no-arg ctor; AllArgs only when there are fields (else it duplicates NoArgs).
+     * Abstract SuperBuilder bases still get NoArgs so subclasses can chain.
+     */
+    private static void addBuilderConstructors(List<XAnnotation<?>> resolved, JDefinedClass implClass) {
+        addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
+        if (!implClass.isAbstract() && !implClass.fields().isEmpty()) {
+            addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
+        }
+    }
+
+    /**
+     * {@code Collection} or {@code Map} (including subtypes such as List/Set/SortedMap).
+     * Simpler than a fixed FQCN allow-list; matches typical XJC field types.
+     */
+    static boolean isSingularCollectionField(JDefinedClass implClass, JFieldVar field) {
+        if (!(field.type().erasure() instanceof JClass erasure)) {
+            return false;
+        }
+        var cm = implClass.owner();
+        return cm.ref(Collection.class).isAssignableFrom(erasure)
+            || cm.ref(Map.class).isAssignableFrom(erasure);
+    }
+
+    private static boolean hasAnnotation(JFieldVar field, String fqcn) {
+        for (var annotation : field.annotations()) {
+            if (fqcn.equals(annotation.getAnnotationClass().fullName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void applyAnnotations(JDefinedClass implClass, String className, List<XAnnotation<?>> resolved) {
