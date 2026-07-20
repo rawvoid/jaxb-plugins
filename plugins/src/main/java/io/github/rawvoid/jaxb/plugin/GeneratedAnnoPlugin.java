@@ -19,7 +19,6 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.codemodel.JAnnotatable;
 import com.sun.codemodel.JClass;
 import com.sun.codemodel.JDefinedClass;
-import com.sun.codemodel.JPackage;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import org.xml.sax.ErrorHandler;
@@ -35,7 +34,7 @@ import java.util.Queue;
  * Configuration options:
  * <ul>
  *   <li>{@code -value}: The generator name. Defaults to the plugin option name ({@code Xgenerated-anno}).</li>
- *   <li>{@code -comments}: Additional comments, such as repository URL. Defaults to the project URL.</li>
+ *   <li>{@code -comments}: Additional comments, such as repository URL. Defaults to a description with the project URL.</li>
  *   <li>{@code -date}: Whether to include the generation date. Defaults to {@code false}.</li>
  * </ul>
  * </p>
@@ -46,12 +45,11 @@ import java.util.Queue;
 public class GeneratedAnnoPlugin extends AbstractPlugin {
 
     private static final String GENERATED_ANNOTATION_FQCN = "jakarta.annotation.Generated";
-    private static final String DEFAULT_PROJECT_URL = "https://github.com/rawvoid/jaxb-plugins";
 
     @Option(name = "value", description = "The value attribute of @Generated annotation. Defaults to the plugin option name")
     private String value;
 
-    @Option(name = "comments", description = "The comments attribute of @Generated annotation. Defaults to the project URL")
+    @Option(name = "comments", description = "The comments attribute of @Generated annotation. Defaults to JAXB RI version and project URL")
     private String comments;
 
     @Option(name = "date", defaultValue = "false", description = "Whether to include a date in @Generated annotation")
@@ -63,7 +61,8 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
         var generatedClass = codeModel.ref(GENERATED_ANNOTATION_FQCN);
 
         var valueToUse = (value != null && !value.isEmpty()) ? value : getOptionName();
-        var commentsToUse = (comments != null && !comments.isEmpty()) ? comments : DEFAULT_PROJECT_URL;
+        var commentsToUse = (comments != null && !comments.isEmpty()) ? comments
+            : "JAXB RI v" + Options.getBuildID() + " via github.com/rawvoid/jaxb-plugins";
         String dateToUse = null;
 
         if (Boolean.TRUE.equals(date)) {
@@ -102,11 +101,11 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
         if (!alreadyAnnotated) {
             var annotationUse = target.annotate(annotationClass);
             annotationUse.param("value", value);
-            if (comments != null && !comments.isEmpty()) {
-                annotationUse.param("comments", comments);
-            }
             if (date != null && !date.isEmpty()) {
                 annotationUse.param("date", date);
+            }
+            if (comments != null && !comments.isEmpty()) {
+                annotationUse.param("comments", comments);
             }
         }
     }

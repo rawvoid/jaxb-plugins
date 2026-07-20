@@ -39,6 +39,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     private static final String OBJECT_FACTORY_CLASS = PACKAGE_NAME + ".ObjectFactory";
 
     private final String optionCmd = optionCommand(GeneratedAnnoPlugin.class);
+    private final String expectedComments = "JAXB RI v" + com.sun.tools.xjc.Options.getBuildID() + " via github.com/rawvoid/jaxb-plugins";
 
     @BeforeEach
     void setSchema() {
@@ -75,7 +76,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             // Verify all generated classes (Root, Nested, ObjectFactory) contain the annotation
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"Xgenerated-anno\"");
-            assertThat(source).contains("comments = \"https://github.com/rawvoid/jaxb-plugins\"");
+            assertThat(source).contains("comments = \"" + expectedComments + "\"");
             assertThat(source).doesNotContain("date =");
         });
 
@@ -83,7 +84,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
         var packageInfoSource = getPackageInfoSource();
         assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
         assertThat(packageInfoSource).contains("value = \"Xgenerated-anno\"");
-        assertThat(packageInfoSource).contains("comments = \"https://github.com/rawvoid/jaxb-plugins\"");
+        assertThat(packageInfoSource).contains("comments = \"" + expectedComments + "\"");
         assertThat(packageInfoSource).doesNotContain("date =");
     }
 
@@ -117,19 +118,15 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
         testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"Xgenerated-anno\"");
-            assertThat(source).contains("comments = \"https://github.com/rawvoid/jaxb-plugins\"");
-            assertThat(source).contains("date = \"");
-            // Check that the date value matches standard ISO date (e.g. 2026-07-20)
-            var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\"";
+            // Check that the date value matches standard ISO date and comes before comments
+            var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\",\\s*comments = \"" + java.util.regex.Pattern.quote(expectedComments) + "\"";
             assertThat(source).containsPattern(datePattern);
         });
 
         var packageInfoSource = getPackageInfoSource();
         assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
         assertThat(packageInfoSource).contains("value = \"Xgenerated-anno\"");
-        assertThat(packageInfoSource).contains("comments = \"https://github.com/rawvoid/jaxb-plugins\"");
-        assertThat(packageInfoSource).contains("date = \"");
-        var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\"";
+        var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\",\\s*comments = \"" + java.util.regex.Pattern.quote(expectedComments) + "\"";
         assertThat(packageInfoSource).containsPattern(datePattern);
     }
 
