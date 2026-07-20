@@ -200,17 +200,11 @@ public class LombokPlugin extends AbstractPlugin {
                 // Inheritance participant (subclass of non-Object and/or generated base).
                 addIfAbsent(resolved, LOMBOK_SUPER_BUILDER,
                     "@lombok.experimental.SuperBuilder(toBuilder = true)");
-                addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
-                if (!implClass.isAbstract() && !implClass.fields().isEmpty()) {
-                    addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
-                }
+                addBuilderConstructors(resolved, implClass);
             } else if (!implClass.isAbstract()) {
                 // Standalone concrete type: official @Builder.
                 addIfAbsent(resolved, LOMBOK_BUILDER, "@lombok.Builder(toBuilder = true)");
-                addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
-                if (!implClass.fields().isEmpty()) {
-                    addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
-                }
+                addBuilderConstructors(resolved, implClass);
             }
         }
 
@@ -241,17 +235,23 @@ public class LombokPlugin extends AbstractPlugin {
                 continue;
             }
 
-            var singularClass = implClass.owner().ref(LOMBOK_SINGULAR);
-            var auto = LombokSingulars.autoSingularize(field.name());
-            if (auto != null) {
-                // Auto path matches Lombok APT; only set ignoreNullCollections.
-                field.annotate(singularClass).param("ignoreNullCollections", true);
-            } else {
-                // Cannot auto-singularize (already singular / non-English / banned) → value = field name.
-                var use = field.annotate(singularClass);
+            // Auto path: omit value. If autoSingularize is null, value = field name (explicit singular).
+            var use = field.annotate(implClass.owner().ref(LOMBOK_SINGULAR));
+            use.param("ignoreNullCollections", true);
+            if (LombokSingulars.autoSingularize(field.name()) == null) {
                 use.param("value", field.name());
-                use.param("ignoreNullCollections", true);
             }
+        }
+    }
+
+    /**
+     * JAXB needs a no-arg ctor; AllArgs only when there are fields (else it duplicates NoArgs).
+     * Abstract SuperBuilder bases still get NoArgs so subclasses can chain.
+     */
+    private static void addBuilderConstructors(List<XAnnotation<?>> resolved, JDefinedClass implClass) {
+        addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
+        if (!implClass.isAbstract() && !implClass.fields().isEmpty()) {
+            addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
         }
     }
 
