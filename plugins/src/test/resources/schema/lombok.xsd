@@ -26,6 +26,10 @@
             <xs:element name="name" type="xs:string"/>
             <xs:element name="age" type="xs:int"/>
             <xs:element name="active" type="xs:boolean"/>
+            <!-- Plural list name → @Singular without value (Lombok auto-singularize). -->
+            <xs:element name="nicknames" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+            <!-- Singular-looking list name → @Singular(value = "tag"). -->
+            <xs:element name="tag" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>
 

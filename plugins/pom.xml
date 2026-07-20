@@ -47,11 +47,15 @@
             <artifactId>slf4j-api</artifactId>
             <version>2.0.18</version>
         </dependency>
+        <!--
+          provided: XJC/user supplies Lombok at generation and compile time.
+          Needed so generated @Data/@Builder/@Singular resolve; not shaded into this jar.
+        -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.46</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
 
         <!-- test dependencies -->
