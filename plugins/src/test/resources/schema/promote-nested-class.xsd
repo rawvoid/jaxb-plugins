@@ -143,8 +143,46 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      ObjectFactory squeezed-name guard:
+      - package-level Inner blocks Outer.Inner from promoting
+      - nested OfHolder.OuterInner must NOT promote to package OuterInner
+        (would share createOuterInner with Outer.Inner)
+    -->
+    <xs:complexType name="Inner">
+        <xs:sequence>
+            <xs:element name="x" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Outer">
+        <xs:sequence>
+            <xs:element name="Inner">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="y" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="OfHolder">
+        <xs:sequence>
+            <xs:element name="OuterInner">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="z" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="flattenRoot" type="tns:FlattenRoot"/>
     <xs:element name="deepRoot" type="tns:DeepRoot"/>
     <xs:element name="enumHolder" type="tns:EnumHolder"/>
     <xs:element name="conflictRoot" type="tns:ConflictRoot"/>
+    <xs:element name="outer" type="tns:Outer"/>
+    <xs:element name="ofHolder" type="tns:OfHolder"/>
 </xs:schema>

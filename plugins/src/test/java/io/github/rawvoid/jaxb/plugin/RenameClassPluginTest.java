@@ -133,6 +133,51 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(byName.get("Person")).hasSize(1);
     }
 
+    @Test
+    void parentChildSameNameKeepsOuterOriginal() throws Exception {
+        // NamedAssocType → NamedAssoc would match nested NamedAssoc; outer rename blocked.
+        var args = List.of(
+            "-Xrename-class",
+            "-mapping",
+            "-regex=^(.+)Type$",
+            "-to=$1"
+        );
+        var classes = testExecute(args, ".*NamedAssoc.*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("NamedAssocType");
+        assertThat(byName).containsKey("NamedAssoc");
+        var outer = byName.get("NamedAssocType").getFirst();
+        var nested = byName.get("NamedAssoc").getFirst();
+        assertThat(nested.getEnclosingClass()).isEqualTo(outer);
+    }
+
+    @Test
+    void promoteThenRenameAvoidsObjectFactoryCollision() throws Exception {
+        // NDC-like: package Address blocks nested Address; EmailAddress promotes;
+        // EmailType must not become Email (would yield squeezed EmailAddress).
+        var args = List.of(
+            "-Xpromote-nested-class",
+            "-Xrename-class",
+            "-mapping",
+            "-regex=^(.+)Type$",
+            "-to=$1"
+        );
+        var classes = testExecute(args, ".*(Email|Address|Holder).*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("EmailType");
+        assertThat(byName).containsKey("EmailAddress");
+        assertThat(byName).containsKey("Address");
+        // Nested Address under EmailType stays a member (package Address occupied).
+        var emailType = byName.get("EmailType").getFirst();
+        assertThat(emailType.getDeclaredClasses())
+            .extracting(Class::getSimpleName)
+            .contains("Address");
+        // Promoted EmailAddress is top-level.
+        assertThat(byName.get("EmailAddress").getFirst().isMemberClass()).isFalse();
+    }
+
     private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
         return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
     }

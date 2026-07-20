@@ -82,7 +82,69 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      Parent-child same simple name after Type-suffix strip:
+      NamedAssocType → NamedAssoc would clash with nested NamedAssoc.
+    -->
+    <xs:complexType name="NamedAssocType">
+        <xs:sequence>
+            <xs:element name="NamedAssoc">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="value" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      ObjectFactory squeezed-name fixture (use with -Xpromote-nested-class):
+      - package Address blocks nested Address promotion under EmailType
+      - HolderType.EmailAddress promotes to package EmailAddress
+      - EmailType → Email would make nested Address squeezed name "EmailAddress"
+    -->
+    <xs:complexType name="BlockAddress">
+        <xs:sequence>
+            <xs:element name="Address">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="line" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderType">
+        <xs:sequence>
+            <xs:element name="EmailAddress">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="value" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="EmailType">
+        <xs:sequence>
+            <xs:element name="Address">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="value" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="person" type="tns:Person"/>
     <xs:element name="address" type="tns:AddressType"/>
     <xs:element name="holder" type="tns:Holder"/>
+    <xs:element name="namedAssoc" type="tns:NamedAssocType"/>
+    <xs:element name="blockAddress" type="tns:BlockAddress"/>
+    <xs:element name="holderType" type="tns:HolderType"/>
+    <xs:element name="email" type="tns:EmailType"/>
 </xs:schema>

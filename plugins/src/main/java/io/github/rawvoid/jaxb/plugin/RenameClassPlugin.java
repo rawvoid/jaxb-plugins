@@ -17,6 +17,7 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.JJavaName;
+import com.sun.codemodel.JPackage;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.CClassInfo;
 import com.sun.tools.xjc.model.CClassInfoParent;
@@ -59,13 +60,22 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * Scope: {@link CClassInfo} beans, {@link CEnumLeafInfo} enums, and {@link CElementInfo}
  * instances with {@link CElementInfo#hasClass()}. Beans, enums, and element classes share
  * one simple-name namespace under each parent (package or outer class), matching XJC code
- * generation. Name checks are case-insensitive.
+ * generation. Name checks are case-insensitive for short names.
  * </p>
  * <p>
  * <strong>Conflict policy.</strong> Conflicting types keep their original names; non-conflicting
- * renames still apply. Conflicts are reported as warnings (build does not fail). Prefer
- * running plugins that re-parent types (for example {@link PromoteNestedClassPlugin}) before
- * this plugin when both are active.
+ * renames still apply. Conflicts are reported as warnings (build does not fail). Checks cover:
+ * </p>
+ * <ul>
+ *   <li>Same simple name under one parent (beans / enums / element classes)</li>
+ *   <li>Parent and nested child sharing the same simple name after rename</li>
+ *   <li>Duplicate {@link CClassInfo#getSqueezedName()} values in a package (ObjectFactory
+ *       value-factory methods). Parent renames that would change a nested type's squeezed
+ *       name are rolled back when they collide</li>
+ * </ul>
+ * <p>
+ * Prefer running plugins that re-parent types (for example {@link PromoteNestedClassPlugin})
+ * before this plugin when both are active.
  * </p>
  *
  * @author Rawvoid
@@ -90,46 +100,228 @@ public class RenameClassPlugin extends AbstractPlugin {
             desired.put(candidate, mapName(candidate));
         }
 
-        // Slot: (parent, case-insensitive desired name). size > 1 → conflict group.
-        Map<Slot, List<Candidate>> bySlot = new LinkedHashMap<>();
-        for (var candidate : candidates) {
-            var name = desired.get(candidate);
-            var slot = new Slot(canonicalParent(model, candidate.parent), normalize(name));
-            bySlot.computeIfAbsent(slot, k -> new ArrayList<>()).add(candidate);
-        }
+        // Provisional short names start as desired, then conflict resolution reverts some.
+        Map<Candidate, String> provisional = new LinkedHashMap<>(desired);
+        var reports = new ArrayList<ConflictReport>();
 
-        var conflictGroups = new ArrayList<List<Candidate>>();
-        Set<Candidate> blocked = new LinkedHashSet<>();
-        for (var entry : bySlot.entrySet()) {
-            var group = entry.getValue();
-            if (group.size() > 1) {
-                conflictGroups.add(group);
-                blocked.addAll(group);
-            }
-        }
+        blockShortNameCollisions(model, candidates, provisional, reports);
+        blockParentChildCollisions(model, candidates, provisional, reports);
+        blockSqueezedNameCollisions(model, candidates, provisional, reports);
 
         var renamed = 0;
         for (var candidate : candidates) {
-            if (blocked.contains(candidate)) {
-                continue;
-            }
-            var next = desired.get(candidate);
+            var next = provisional.get(candidate);
             if (!next.equals(candidate.shortName)) {
                 candidate.apply.accept(next);
                 renamed++;
             }
         }
 
-        reportConflicts(conflictGroups, desired, errorHandler);
+        for (var report : reports) {
+            log.warn(report.message());
+            warn(errorHandler, report.locator(), report.message());
+        }
 
-        if (renamed > 0 || !conflictGroups.isEmpty()) {
-            log.info("Renamed {} type(s), skipped {} conflict group(s)", renamed, conflictGroups.size());
+        if (renamed > 0 || !reports.isEmpty()) {
+            log.info("Renamed {} type(s), reported {} conflict group(s)", renamed, reports.size());
         }
     }
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
         return true;
+    }
+
+    /**
+     * Two or more types would share the same simple name under one parent → keep originals.
+     */
+    private static void blockShortNameCollisions(
+        Model model,
+        List<Candidate> candidates,
+        Map<Candidate, String> provisional,
+        List<ConflictReport> reports
+    ) {
+        Map<Slot, List<Candidate>> bySlot = new LinkedHashMap<>();
+        for (var candidate : candidates) {
+            var slot = new Slot(canonicalParent(model, candidate.parent), normalize(provisional.get(candidate)));
+            bySlot.computeIfAbsent(slot, k -> new ArrayList<>()).add(candidate);
+        }
+
+        for (var entry : bySlot.entrySet()) {
+            var group = entry.getValue();
+            if (group.size() <= 1) {
+                continue;
+            }
+            // Only report / revert groups that still contain at least one pending rename.
+            if (!anyPendingRename(group, provisional)) {
+                continue;
+            }
+            revertAll(group, provisional);
+            reports.add(shortNameReport(group, provisional, entry.getKey()));
+        }
+    }
+
+    /**
+     * Outer type and nested member must not share a simple name (BeanGenerator rejects that).
+     */
+    private static void blockParentChildCollisions(
+        Model model,
+        List<Candidate> candidates,
+        Map<Candidate, String> provisional,
+        List<ConflictReport> reports
+    ) {
+        Map<Object, Candidate> bySource = indexBySource(candidates);
+        boolean changed;
+        do {
+            changed = false;
+            for (var candidate : candidates) {
+                if (!(candidate.parent instanceof CClassInfo parentBean)) {
+                    continue;
+                }
+                var parentCandidate = bySource.get(parentBean);
+                if (parentCandidate == null) {
+                    continue;
+                }
+                var childName = normalize(provisional.get(candidate));
+                var parentName = normalize(provisional.get(parentCandidate));
+                if (!childName.equals(parentName)) {
+                    continue;
+                }
+
+                // Prefer undoing the parent's rename; otherwise undo the child's.
+                Candidate undo = isPending(parentCandidate, provisional) ? parentCandidate
+                    : isPending(candidate, provisional) ? candidate
+                    : null;
+                if (undo == null) {
+                    continue;
+                }
+                provisional.put(undo, undo.shortName);
+                reports.add(new ConflictReport(
+                    undo.locator,
+                    "Parent-child class name conflict after rename: parent '"
+                        + parentCandidate.fullName
+                        + "' and nested '"
+                        + candidate.fullName
+                        + "' would both be '"
+                        + parentName
+                        + "'; keeping original name for "
+                        + undo.fullName
+                ));
+                changed = true;
+            }
+        } while (changed);
+    }
+
+    /**
+     * ObjectFactory value factories use {@link CClassInfo#getSqueezedName()} (parent-chain
+     * concatenation). A parent rename can collide a nested type with an unrelated top-level type.
+     */
+    private static void blockSqueezedNameCollisions(
+        Model model,
+        List<Candidate> candidates,
+        Map<Candidate, String> provisional,
+        List<ConflictReport> reports
+    ) {
+        Map<CClassInfo, Candidate> beanCandidates = new LinkedHashMap<>();
+        for (var candidate : candidates) {
+            if (candidate.bean != null) {
+                beanCandidates.put(candidate.bean, candidate);
+            }
+        }
+        if (beanCandidates.isEmpty()) {
+            return;
+        }
+
+        boolean changed;
+        do {
+            changed = false;
+            Map<CClassInfo, String> nameByBean = new LinkedHashMap<>();
+            for (var entry : beanCandidates.entrySet()) {
+                nameByBean.put(entry.getKey(), provisional.get(entry.getValue()));
+            }
+
+            // (package, squeezedName) → beans that would register the same ObjectFactory method.
+            Map<SqueezedSlot, List<CClassInfo>> bySqueezed = new LinkedHashMap<>();
+            for (var bean : beanCandidates.keySet()) {
+                if (bean.isAbstract()) {
+                    // Abstract types do not get value factory methods, but still affect children.
+                    // Include them only as parents via chain walk; skip as factory registrants.
+                }
+                var squeezed = provisionalSqueezedName(bean, nameByBean);
+                var slot = new SqueezedSlot(bean.getOwnerPackage(), squeezed);
+                bySqueezed.computeIfAbsent(slot, k -> new ArrayList<>()).add(bean);
+            }
+
+            // Filter to beans that actually emit createXxx() (non-abstract).
+            for (var entry : bySqueezed.entrySet()) {
+                var group = entry.getValue().stream().filter(b -> !b.isAbstract()).toList();
+                if (group.size() <= 1) {
+                    continue;
+                }
+
+                // Undo renames on members and their ancestors — parent rename is the usual cause.
+                Set<Candidate> toRevert = new LinkedHashSet<>();
+                for (var bean : group) {
+                    collectRenamedAncestors(bean, beanCandidates, provisional, toRevert);
+                }
+                if (toRevert.isEmpty()) {
+                    // Pre-existing squeezed clash with original names only: report once, cannot fix.
+                    if (reports.stream().noneMatch(r -> r.message().contains(entry.getKey().squeezed()))) {
+                        reports.add(new ConflictReport(
+                            beanCandidates.get(group.getFirst()).locator,
+                            "ObjectFactory name conflict (unrelated to rename): '"
+                                + entry.getKey().squeezed()
+                                + "' under package '"
+                                + packageLabel(entry.getKey().pkg())
+                                + "'"
+                        ));
+                    }
+                    continue;
+                }
+
+                for (var candidate : toRevert) {
+                    provisional.put(candidate, candidate.shortName);
+                }
+                reports.add(squeezedReport(group, entry.getKey(), toRevert, beanCandidates));
+                changed = true;
+            }
+        } while (changed);
+    }
+
+    private static void collectRenamedAncestors(
+        CClassInfo bean,
+        Map<CClassInfo, Candidate> beanCandidates,
+        Map<Candidate, String> provisional,
+        Set<Candidate> out
+    ) {
+        CClassInfoParent parent = bean;
+        while (parent instanceof CClassInfo current) {
+            var candidate = beanCandidates.get(current);
+            if (candidate != null && isPending(candidate, provisional)) {
+                out.add(candidate);
+            }
+            parent = current.parent();
+        }
+    }
+
+    private static String provisionalSqueezedName(CClassInfo bean, Map<CClassInfo, String> nameByBean) {
+        return appendSqueezed(bean.parent(), nameByBean) + nameByBean.getOrDefault(bean, bean.shortName);
+    }
+
+    /**
+     * Mirrors XJC {@code CClassInfo} squeezed-name visitor: package → empty, bean → chain + shortName,
+     * element parent → chain + element short name.
+     */
+    private static String appendSqueezed(CClassInfoParent parent, Map<CClassInfo, String> nameByBean) {
+        return switch (parent) {
+            case CClassInfo bean -> appendSqueezed(bean.parent(), nameByBean)
+                + nameByBean.getOrDefault(bean, bean.shortName);
+            case CElementInfo element -> appendSqueezed(element.parent, nameByBean)
+                + element.shortName();
+            case CClassInfoParent.Package ignored -> "";
+            case null -> "";
+            default -> "";
+        };
     }
 
     private String mapName(Candidate candidate) {
@@ -168,7 +360,8 @@ public class RenameClassPlugin extends AbstractPlugin {
                 bean.parent(),
                 bean.getOwnerPackage().name(),
                 bean.getLocator(),
-                name -> setFieldValue(CCLASSINFO_SHORTNAME_FIELD, bean, name)
+                name -> setFieldValue(CCLASSINFO_SHORTNAME_FIELD, bean, name),
+                bean
             ));
         }
         for (var enumInfo : model.enums().values()) {
@@ -179,7 +372,8 @@ public class RenameClassPlugin extends AbstractPlugin {
                 enumInfo.parent,
                 enumInfo.parent.getOwnerPackage().name(),
                 enumInfo.getLocator(),
-                name -> setFieldValue(CENUMLEAFINFO_SHORTNAME_FIELD, enumInfo, name)
+                name -> setFieldValue(CENUMLEAFINFO_SHORTNAME_FIELD, enumInfo, name),
+                null
             ));
         }
         for (var element : model.getAllElements()) {
@@ -193,10 +387,21 @@ public class RenameClassPlugin extends AbstractPlugin {
                 element.parent,
                 element.getOwnerPackage().name(),
                 element.getLocator(),
-                name -> setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, element, name)
+                name -> setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, element, name),
+                null
             ));
         }
         return result;
+    }
+
+    private static Map<Object, Candidate> indexBySource(List<Candidate> candidates) {
+        Map<Object, Candidate> bySource = new LinkedHashMap<>();
+        for (var candidate : candidates) {
+            if (candidate.bean != null) {
+                bySource.put(candidate.bean, candidate);
+            }
+        }
+        return bySource;
     }
 
     private static CClassInfoParent canonicalParent(Model model, CClassInfoParent parent) {
@@ -210,39 +415,84 @@ public class RenameClassPlugin extends AbstractPlugin {
         return name.toLowerCase(Locale.ROOT);
     }
 
-    private void reportConflicts(
-        List<List<Candidate>> conflictGroups,
-        Map<Candidate, String> desired,
-        ErrorHandler errorHandler
-    ) {
-        for (var group : conflictGroups) {
-            var first = group.getFirst();
-            var desiredName = desired.get(first);
-            var parentLabel = first.parent.fullName();
-            if (parentLabel == null || parentLabel.isEmpty()) {
-                parentLabel = "(default package)";
-            }
+    private static boolean isPending(Candidate candidate, Map<Candidate, String> provisional) {
+        return !provisional.get(candidate).equals(candidate.shortName);
+    }
 
-            var lines = new StringBuilder();
-            lines.append("Class name conflict after rename under '")
-                .append(parentLabel)
-                .append("': '")
-                .append(desiredName)
-                .append('\'');
-            for (var candidate : group) {
-                lines.append(System.lineSeparator())
-                    .append("  - ")
-                    .append(candidate.kind)
-                    .append(' ')
-                    .append(candidate.fullName)
-                    .append(" (desired ")
-                    .append(desired.get(candidate))
-                    .append(')');
+    private static boolean anyPendingRename(List<Candidate> group, Map<Candidate, String> provisional) {
+        for (var candidate : group) {
+            if (isPending(candidate, provisional)) {
+                return true;
             }
-            var message = lines.toString();
-            log.warn(message);
-            warn(errorHandler, first.locator, message);
         }
+        return false;
+    }
+
+    private static void revertAll(List<Candidate> group, Map<Candidate, String> provisional) {
+        for (var candidate : group) {
+            provisional.put(candidate, candidate.shortName);
+        }
+    }
+
+    private static ConflictReport shortNameReport(
+        List<Candidate> group,
+        Map<Candidate, String> provisional,
+        Slot slot
+    ) {
+        var first = group.getFirst();
+        var parentLabel = first.parent.fullName();
+        if (parentLabel == null || parentLabel.isEmpty()) {
+            parentLabel = "(default package)";
+        }
+        var lines = new StringBuilder();
+        lines.append("Class name conflict after rename under '")
+            .append(parentLabel)
+            .append("': '")
+            .append(slot.name())
+            .append('\'');
+        for (var candidate : group) {
+            lines.append(System.lineSeparator())
+                .append("  - ")
+                .append(candidate.kind)
+                .append(' ')
+                .append(candidate.fullName)
+                .append(" (kept ")
+                .append(provisional.get(candidate))
+                .append(')');
+        }
+        return new ConflictReport(first.locator, lines.toString());
+    }
+
+    private static ConflictReport squeezedReport(
+        List<CClassInfo> group,
+        SqueezedSlot slot,
+        Set<Candidate> reverted,
+        Map<CClassInfo, Candidate> beanCandidates
+    ) {
+        var lines = new StringBuilder();
+        lines.append("ObjectFactory name conflict after rename under package '")
+            .append(packageLabel(slot.pkg()))
+            .append("': '")
+            .append(slot.squeezed())
+            .append('\'');
+        for (var bean : group) {
+            lines.append(System.lineSeparator())
+                .append("  - bean ")
+                .append(bean.fullName());
+        }
+        lines.append(System.lineSeparator()).append("  reverted rename(s):");
+        for (var candidate : reverted) {
+            lines.append(System.lineSeparator())
+                .append("  - ")
+                .append(candidate.fullName);
+        }
+        var locator = beanCandidates.get(group.getFirst()).locator;
+        return new ConflictReport(locator, lines.toString());
+    }
+
+    private static String packageLabel(JPackage pkg) {
+        var name = pkg.name();
+        return name == null || name.isEmpty() ? "(default package)" : name;
     }
 
     private static void warn(ErrorHandler errorHandler, Locator locator, String message) {
@@ -288,10 +538,17 @@ public class RenameClassPlugin extends AbstractPlugin {
         CClassInfoParent parent,
         String packageName,
         Locator locator,
-        Consumer<String> apply
+        Consumer<String> apply,
+        CClassInfo bean
     ) {
     }
 
     private record Slot(CClassInfoParent parent, String name) {
+    }
+
+    private record SqueezedSlot(JPackage pkg, String squeezed) {
+    }
+
+    private record ConflictReport(Locator locator, String message) {
     }
 }
