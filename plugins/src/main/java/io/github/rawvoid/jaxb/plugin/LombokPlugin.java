@@ -29,10 +29,16 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.NavigableSet;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
 import java.util.regex.Pattern;
 
 /**
@@ -55,10 +61,14 @@ import java.util.regex.Pattern;
  *             parent has no SuperBuilder.</li>
  *         <li>Types that are <strong>extended by another generated class</strong> also get
  *             SuperBuilder (including abstract bases).</li>
- *         <li>{@code java.util.List} fields get {@code @Singular(ignoreNullCollections = true)}.
- *             Singular method names use Lombok's singularization table (same rules as APT): when
- *             auto-singularize succeeds the value is omitted; when it fails the field name is
- *             used as the explicit {@code value} so generation still compiles.</li>
+ *         <li>Collection fields known to Lombok {@code @Singular} get
+ *             {@code @Singular(ignoreNullCollections = true)}: {@code List}/{@code Collection}/
+ *             {@code Iterable}, {@code Set}/{@code SortedSet}/{@code NavigableSet}, and
+ *             {@code Map}/{@code SortedMap}/{@code NavigableMap} (by type erasure). Singular method
+ *             names use Lombok's {@code Singulars.autoSingularize} (via reflection): when auto
+ *             succeeds the value is omitted; when it fails the field name is used as explicit
+ *             {@code value} so generation still compiles. Stock XJC mostly emits {@code List};
+ *             Set/Map cover custom bindings.</li>
  *         <li>{@code @SuperBuilder} remains under {@code lombok.experimental}.</li>
  *         <li>{@code @AllArgsConstructor} is omitted when there are no fields (would collide with
  *             {@code @NoArgsConstructor}).</li>
@@ -84,7 +94,21 @@ public class LombokPlugin extends AbstractPlugin {
     private static final String LOMBOK_NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
     private static final String LOMBOK_ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
 
-    private static final String LIST = List.class.getName();
+    /**
+     * Erasure FQCNs that Lombok {@code @Singular} accepts for {@code java.util}
+     * (see Lombok Builder docs). Implementation classes are not listed; XJC emits interfaces.
+     */
+    private static final Set<String> SINGULAR_COLLECTION_TYPES = Set.of(
+        Iterable.class.getName(),
+        Collection.class.getName(),
+        List.class.getName(),
+        Set.class.getName(),
+        SortedSet.class.getName(),
+        NavigableSet.class.getName(),
+        Map.class.getName(),
+        SortedMap.class.getName(),
+        NavigableMap.class.getName()
+    );
 
     @Option(name = "anno", description = "Lombok annotation to add (repeatable). Defaults to @lombok.Data when omitted")
     List<XAnnotation<?>> annotations;
@@ -101,7 +125,7 @@ public class LombokPlugin extends AbstractPlugin {
     Boolean removeSetter;
 
     @Option(name = "builder", defaultValue = "false",
-        description = "Add builders (toBuilder=true), SuperBuilder on inheritance, and @Singular on List fields (default: false)")
+        description = "Add builders (toBuilder=true), SuperBuilder on inheritance, and @Singular on List/Set/Map fields (default: false)")
     Boolean builder;
 
     private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
@@ -129,7 +153,7 @@ public class LombokPlugin extends AbstractPlugin {
             applyAnnotations(implClass, className, resolved);
 
             if (Boolean.TRUE.equals(builder)) {
-                annotateSingularOnListFields(implClass);
+                annotateSingularOnCollectionFields(implClass);
             }
 
             OutlineUtils.removePropertyAccessors(
@@ -219,19 +243,20 @@ public class LombokPlugin extends AbstractPlugin {
     }
 
     /**
-     * Annotates {@code java.util.List} fields with {@code @Singular(ignoreNullCollections = true)}.
+     * Annotates Lombok-supported collection fields with
+     * {@code @Singular(ignoreNullCollections = true)}.
      * <p>
-     * Naming follows Lombok: if {@link LombokSingulars#autoSingularize(String)} returns a form,
-     * leave {@code value} unset so APT uses the same auto path; if it returns {@code null}, set
-     * {@code value} to the field name (explicit singular required by Lombok).
+     * Types: {@link #SINGULAR_COLLECTION_TYPES} (List/Set/Map families). Naming follows Lombok:
+     * if {@link LombokSingulars#autoSingularize(String)} returns a form, leave {@code value}
+     * unset; if {@code null}, set {@code value} to the field name.
      * </p>
      */
-    private void annotateSingularOnListFields(JDefinedClass implClass) {
+    private void annotateSingularOnCollectionFields(JDefinedClass implClass) {
         for (var field : implClass.fields().values()) {
             if ((field.mods().getValue() & JMod.STATIC) != 0) {
                 continue;
             }
-            if (!isListField(field)) {
+            if (!isSingularCollectionField(field)) {
                 continue;
             }
             if (hasAnnotation(field, LOMBOK_SINGULAR)) {
@@ -252,8 +277,9 @@ public class LombokPlugin extends AbstractPlugin {
         }
     }
 
-    private static boolean isListField(JFieldVar field) {
-        return LIST.equals(field.type().erasure().fullName());
+    /** Whether field erasure is a java.util type Lombok {@code @Singular} accepts. */
+    static boolean isSingularCollectionField(JFieldVar field) {
+        return SINGULAR_COLLECTION_TYPES.contains(field.type().erasure().fullName());
     }
 
     private static boolean hasAnnotation(JFieldVar field, String fqcn) {
