@@ -145,7 +145,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                     elementProp.id(),
                     elementProp.getExpectedMimeType(),
                     elementProp.getSchemaComponent(),
-                    new CCustomizations(),
+                    new CCustomizations(elementProp.getCustomizations()),
                     elementProp.getLocator(),
                     false
                 );
@@ -160,6 +160,10 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             }
         } else if (original instanceof CReferencePropertyInfo refProp) {
             for (var element : refProp.getElements()) {
+                if (element.getElementName() == null) {
+                    // Abort flattening of this property if any element cannot be named
+                    return List.of();
+                }
                 var xmlName = element.getElementName().getLocalPart();
                 var privateName = allocateName(xmlName, occupied);
                 var publicName = NAMES.toPropertyName(privateName);
@@ -204,7 +208,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 innerProp.id(),
                 innerProp.getExpectedMimeType(),
                 original.getSchemaComponent(),
-                new CCustomizations(),
+                new CCustomizations(original.getCustomizations()),
                 original.getLocator(),
                 false
             );
@@ -231,7 +235,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 null,
                 null,
                 original.getSchemaComponent(),
-                new CCustomizations(),
+                new CCustomizations(original.getCustomizations()),
                 original.getLocator(),
                 false
             );
@@ -264,7 +268,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             false,
             false,
             original.getSchemaComponent(),
-            new CCustomizations(),
+            new CCustomizations(original.getCustomizations()),
             original.getLocator(),
             false, false, false
         );
@@ -312,14 +316,10 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         properties.remove(index);
 
         // 3. Move the `added` properties from the tail to index.
-        //    They are currently at positions [properties.size()-added .. properties.size()-1].
-        var tail = new ArrayList<CPropertyInfo>(added);
+        //    Since removeLast() retrieves the last added property first, inserting
+        //    them successively at `index` naturally restores their original order.
         for (int j = 0; j < added; j++) {
-            tail.add(properties.removeLast());
-        }
-        // tail is in reverse order, so insert in reverse.
-        for (int j = tail.size() - 1; j >= 0; j--) {
-            properties.add(index, tail.get(j));
+            properties.add(index, properties.removeLast());
         }
 
         return true;
