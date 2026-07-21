@@ -147,7 +147,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                     elementProp.getSchemaComponent(),
                     new CCustomizations(elementProp.getCustomizations()),
                     elementProp.getLocator(),
-                    isRequired(original)
+                    isRequired(original, bean, privateName)
                 );
                 newProp.setName(false, privateName);
                 newProp.setName(true, publicName);
@@ -214,7 +214,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 original.getSchemaComponent(),
                 new CCustomizations(original.getCustomizations()),
                 original.getLocator(),
-                isRequired(original)
+                isRequired(original, bean, privateName)
             );
             newProp.setName(false, privateName);
             newProp.setName(true, publicName);
@@ -245,7 +245,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 original.getSchemaComponent(),
                 new CCustomizations(original.getCustomizations()),
                 original.getLocator(),
-                isRequired(original)
+                isRequired(original, bean, privateName)
             );
             newProp.setName(false, privateName);
             newProp.setName(true, publicName);
@@ -277,7 +277,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         var newProp = new CReferencePropertyInfo(
             publicName,
             isCollection(original, bean, privateName),
-            isRequired(original),
+            isRequired(original, bean, privateName),
             original.isMixed(),
             original.getSchemaComponent(),
             new CCustomizations(original.getCustomizations()),
@@ -308,6 +308,20 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             parent = parentClass.getBaseClass();
         }
         return original.isCollection();
+    }
+
+    private static boolean isRequired(CPropertyInfo original, CClassInfo bean, String privateName) {
+        // Search base classes for a property with the same name.
+        var parent = bean.getBaseClass();
+        while (parent instanceof CClassInfo parentClass) {
+            for (var prop : parentClass.getProperties()) {
+                if (normalize(prop.getName(false)).equals(normalize(privateName))) {
+                    return isRequired(prop);
+                }
+            }
+            parent = parentClass.getBaseClass();
+        }
+        return isRequired(original);
     }
 
     private static boolean isRequired(CPropertyInfo prop) {
