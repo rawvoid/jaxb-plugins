@@ -26,7 +26,8 @@ import org.xml.sax.SAXException;
 
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Repeatable;
-import java.util.Arrays;
+import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -175,12 +176,26 @@ public class AnnotatePlugin extends AbstractPlugin {
             case JEnumConstant enumConstant -> annotationUse.param(paramName, enumConstant);
             case JExpression expression -> annotationUse.param(paramName, expression);
             case JType type -> annotationUse.param(paramName, type);
+            case XAnnotation<?> xAnno -> {
+                var nestedUse = annotationUse.annotationParam(paramName, xAnno.getAnnotationClass());
+                xAnno.getFieldsList().forEach(field ->
+                    fillAnnotationParam(nestedUse, field.getName(), field.getValue()));
+            }
+            case Annotation anno -> {
+                var nestedUse = annotationUse.annotationParam(paramName, anno.annotationType());
+                fillAnnotationFromObject(nestedUse, anno);
+            }
             default -> {
                 Iterable<?> iterable;
                 if (paramValue instanceof Iterable<?>) {
                     iterable = (Iterable<?>) paramValue;
                 } else if (paramValue.getClass().isArray()) {
-                    iterable = Arrays.asList((Object[]) paramValue);
+                    int length = Array.getLength(paramValue);
+                    var list = new ArrayList<>(length);
+                    for (int i = 0; i < length; i++) {
+                        list.add(Array.get(paramValue, i));
+                    }
+                    iterable = list;
                 } else {
                     throw new IllegalStateException("Unexpected value: " + paramValue);
                 }
@@ -212,7 +227,27 @@ public class AnnotatePlugin extends AbstractPlugin {
             case JEnumConstant enumConstant -> array.param(enumConstant);
             case JExpression expression -> array.param(expression);
             case JType type -> array.param(type);
+            case XAnnotation<?> xAnno -> {
+                var nestedUse = array.annotate(xAnno.getAnnotationClass());
+                xAnno.getFieldsList().forEach(field ->
+                    fillAnnotationParam(nestedUse, field.getName(), field.getValue()));
+            }
+            case Annotation anno -> {
+                var nestedUse = array.annotate(anno.annotationType());
+                fillAnnotationFromObject(nestedUse, anno);
+            }
             default -> throw new IllegalStateException("Unexpected value: " + value);
+        }
+    }
+
+    private void fillAnnotationFromObject(JAnnotationUse annotationUse, Annotation anno) {
+        for (var method : anno.annotationType().getDeclaredMethods()) {
+            try {
+                var val = method.invoke(anno);
+                fillAnnotationParam(annotationUse, method.getName(), val);
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to invoke annotation method: " + method.getName(), e);
+            }
         }
     }
 

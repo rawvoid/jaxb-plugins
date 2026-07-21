@@ -290,4 +290,21 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
         });
     }
 
+    @Test
+    void testNestedAnnotation() throws Exception {
+        var args = List.of(
+            "-Xannotate",
+            "-add-to-package",
+            "-anno=@jakarta.xml.bind.annotation.XmlSchema(xmlns={@jakarta.xml.bind.annotation.XmlNs(prefix=\"p\", namespaceURI=\"http://example.com\")})",
+            "-regex=com\\.github\\.rawvoid\\.xjc_plugins\\.annotate"
+        );
+        testExecute(args, PERSON, (source, clazz) -> {
+            var schema = clazz.getPackage().getDeclaredAnnotation(XmlSchema.class);
+            assertThat(schema).isNotNull();
+            assertThat(schema.xmlns()).hasSize(1);
+            assertThat(schema.xmlns()[0].prefix()).isEqualTo("p");
+            assertThat(schema.xmlns()[0].namespaceURI()).isEqualTo("http://example.com");
+        });
+    }
+
 }
