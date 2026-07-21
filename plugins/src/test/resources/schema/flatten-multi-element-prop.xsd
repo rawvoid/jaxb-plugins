@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<!--
+  Fixtures for FlattenMultiElementPropPlugin:
+  - Unbounded multi-element choice → flattened to individual fields
+  - Two multi choices on one type → both flattened
+  - Plain single-element list must keep its natural name
+  - Base + extension element name collision → multi-member rest → flattened
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/flatten-multi-element-prop"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/flatten-multi-element-prop"
+           elementFormDefault="qualified">
+
+    <!-- One unbounded choice → single merged property without the plugin. -->
+    <xs:complexType name="Flight">
+        <xs:choice maxOccurs="unbounded">
+            <xs:element name="AirportCode" type="xs:string"/>
+            <xs:element name="Date" type="xs:string"/>
+            <xs:element name="Time" type="xs:string"/>
+        </xs:choice>
+    </xs:complexType>
+
+    <!-- Two multi-element choices on one type → both flattened. -->
+    <xs:complexType name="DualChoice">
+        <xs:sequence>
+            <xs:choice maxOccurs="unbounded">
+                <xs:element name="One" type="xs:string"/>
+                <xs:element name="Two" type="xs:string"/>
+            </xs:choice>
+            <xs:choice maxOccurs="unbounded">
+                <xs:element name="Red" type="xs:string"/>
+                <xs:element name="Green" type="xs:string"/>
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Plain single-element list must keep its natural name. -->
+    <xs:complexType name="PlainList">
+        <xs:sequence>
+            <xs:element name="Tag" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="GlobalItemClass" nillable="true">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="value" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="ChoiceWithClass">
+        <xs:choice maxOccurs="unbounded">
+            <xs:element ref="tns:GlobalItemClass"/>
+            <xs:element name="PlainString" type="xs:string"/>
+        </xs:choice>
+    </xs:complexType>
+
+    <xs:complexType name="ConflictBase">
+        <xs:sequence>
+            <xs:element name="Time" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ConflictDerived">
+        <xs:complexContent>
+            <xs:extension base="tns:ConflictBase">
+                <xs:choice maxOccurs="unbounded">
+                    <xs:element name="Time" type="xs:string"/>
+                    <xs:element name="Note" type="xs:string"/>
+                </xs:choice>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:element name="flight" type="tns:Flight"/>
+    <xs:element name="dual" type="tns:DualChoice"/>
+    <xs:element name="plain" type="tns:PlainList"/>
+    <xs:element name="choiceWithClass" type="tns:ChoiceWithClass"/>
+    <xs:element name="conflictDerived" type="tns:ConflictDerived"/>
+</xs:schema>
