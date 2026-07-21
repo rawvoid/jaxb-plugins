@@ -147,7 +147,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                     elementProp.getSchemaComponent(),
                     new CCustomizations(elementProp.getCustomizations()),
                     elementProp.getLocator(),
-                    false
+                    isRequired(original)
                 );
                 newProp.setName(false, privateName);
                 newProp.setName(true, publicName);
@@ -156,6 +156,10 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 if (elementProp.getAdapter() != null) {
                     newProp.setAdapter(elementProp.getAdapter());
                 }
+                newProp.javadoc = original.javadoc;
+                newProp.inlineBinaryData = original.inlineBinaryData;
+                newProp.realization = original.realization;
+                newProp.baseType = original.baseType;
                 replacements.add(newProp);
             }
         } else if (original instanceof CReferencePropertyInfo refProp) {
@@ -210,7 +214,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 original.getSchemaComponent(),
                 new CCustomizations(original.getCustomizations()),
                 original.getLocator(),
-                false
+                isRequired(original)
             );
             newProp.setName(false, privateName);
             newProp.setName(true, publicName);
@@ -225,6 +229,10 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             if (innerProp.getAdapter() != null) {
                 newProp.setAdapter(innerProp.getAdapter());
             }
+            newProp.javadoc = original.javadoc;
+            newProp.inlineBinaryData = original.inlineBinaryData;
+            newProp.realization = original.realization;
+            newProp.baseType = original.baseType;
             return newProp;
 
         } else if (element instanceof CClassInfo classInfo) {
@@ -237,7 +245,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 original.getSchemaComponent(),
                 new CCustomizations(original.getCustomizations()),
                 original.getLocator(),
-                false
+                isRequired(original)
             );
             newProp.setName(false, privateName);
             newProp.setName(true, publicName);
@@ -248,6 +256,10 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 false,
                 null
             ));
+            newProp.javadoc = original.javadoc;
+            newProp.inlineBinaryData = original.inlineBinaryData;
+            newProp.realization = original.realization;
+            newProp.baseType = original.baseType;
             return newProp;
         }
 
@@ -265,17 +277,33 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         var newProp = new CReferencePropertyInfo(
             publicName,
             false,
-            false,
-            false,
+            isRequired(original),
+            original.isMixed(),
             original.getSchemaComponent(),
             new CCustomizations(original.getCustomizations()),
             original.getLocator(),
-            false, false, false
+            original.isDummy(),
+            original.isContent(),
+            original.isMixedExtendedCust()
         );
         newProp.setName(false, privateName);
         newProp.setName(true, publicName);
         newProp.getElements().add(element);
+        newProp.javadoc = original.javadoc;
+        newProp.inlineBinaryData = original.inlineBinaryData;
+        newProp.realization = original.realization;
+        newProp.baseType = original.baseType;
         return newProp;
+    }
+
+    private static boolean isRequired(CPropertyInfo prop) {
+        if (prop instanceof CElementPropertyInfo ep) {
+            return ep.isRequired();
+        }
+        if (prop instanceof CReferencePropertyInfo rp) {
+            return rp.isRequired();
+        }
+        return false;
     }
 
     /**
