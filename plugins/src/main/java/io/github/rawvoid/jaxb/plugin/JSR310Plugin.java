@@ -34,6 +34,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
+import java.time.zone.ZoneRules;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -267,9 +268,9 @@ public class JSR310Plugin extends AbstractPlugin {
 
         // Offset types need TemporalAccessor-based timezone fallback.
         if (OffsetDateTime.class.equals(targetClass)) {
-            implementOffsetDateTimeAdapter(cm, unmarshal, marshal, str, target);
+            implementOffsetDateTimeAdapter(adapterClass, unmarshal, marshal, str, target);
         } else if (OffsetTime.class.equals(targetClass)) {
-            implementOffsetTimeAdapter(cm, unmarshal, marshal, str, target);
+            implementOffsetTimeAdapter(adapterClass, unmarshal, marshal, str, target);
         } else if (LocalDate.class.equals(targetClass)) {
             // xs:date allows optional timezone suffix; ISO_DATE handles both gracefully.
             unmarshal.body()._return(
@@ -287,15 +288,25 @@ public class JSR310Plugin extends AbstractPlugin {
     /**
      * Generates unmarshal/marshal for {@link OffsetDateTime} with timezone fallback:
      * <pre>{@code
+     * private static final ZoneRules ZONE_RULES = ZoneId.systemDefault().getRules();
+     * ...
      * TemporalAccessor temporal = DateTimeFormatter.ISO_DATE_TIME.parse(v);
      * if (temporal.isSupported(ChronoField.OFFSET_SECONDS)) {
      *     return OffsetDateTime.from(temporal);
      * }
-     * return LocalDateTime.from(temporal).atOffset(OffsetDateTime.now().getOffset());
+     * return LocalDateTime.from(temporal).atOffset(ZONE_RULES.getOffset(Instant.now()));
      * }</pre>
      */
-    private void implementOffsetDateTimeAdapter(JCodeModel cm, JMethod unmarshal, JMethod marshal,
+    private void implementOffsetDateTimeAdapter(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
                                                 JVar str, JVar target) {
+        var cm = adapterClass.owner();
+
+        var zoneRules = adapterClass.field(
+            JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
+            ZoneRules.class, "ZONE_RULES");
+        zoneRules.init(
+            cm.ref(ZoneId.class).staticInvoke("systemDefault").invoke("getRules"));
+
         var body = unmarshal.body();
         var temporal = body.decl(cm.ref(TemporalAccessor.class), "temporal",
             cm.ref(DateTimeFormatter.class).staticRef("ISO_DATE_TIME").invoke("parse").arg(str));
@@ -305,11 +316,12 @@ public class JSR310Plugin extends AbstractPlugin {
         ifCond._then()._return(
             cm.ref(OffsetDateTime.class).staticInvoke("from").arg(temporal));
 
-        // Fallback: parse as LocalDateTime, attach system default offset.
+        // Fallback: parse as LocalDateTime, attach system default offset dynamically via ZONE_RULES.
+        var currentOffset = zoneRules.invoke("getOffset").arg(cm.ref(Instant.class).staticInvoke("now"));
         body._return(
             cm.ref(LocalDateTime.class).staticInvoke("from").arg(temporal)
                 .invoke("atOffset")
-                .arg(cm.ref(OffsetDateTime.class).staticInvoke("now").invoke("getOffset")));
+                .arg(currentOffset));
 
         marshal.body()._return(target.invoke("toString"));
     }
@@ -317,15 +329,25 @@ public class JSR310Plugin extends AbstractPlugin {
     /**
      * Generates unmarshal/marshal for {@link OffsetTime} with timezone fallback:
      * <pre>{@code
+     * private static final ZoneRules ZONE_RULES = ZoneId.systemDefault().getRules();
+     * ...
      * TemporalAccessor temporal = DateTimeFormatter.ISO_TIME.parse(v);
      * if (temporal.isSupported(ChronoField.OFFSET_SECONDS)) {
      *     return OffsetTime.from(temporal);
      * }
-     * return LocalTime.from(temporal).atOffset(OffsetDateTime.now().getOffset());
+     * return LocalTime.from(temporal).atOffset(ZONE_RULES.getOffset(Instant.now()));
      * }</pre>
      */
-    private void implementOffsetTimeAdapter(JCodeModel cm, JMethod unmarshal, JMethod marshal,
+    private void implementOffsetTimeAdapter(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
                                             JVar str, JVar target) {
+        var cm = adapterClass.owner();
+
+        var zoneRules = adapterClass.field(
+            JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
+            ZoneRules.class, "ZONE_RULES");
+        zoneRules.init(
+            cm.ref(ZoneId.class).staticInvoke("systemDefault").invoke("getRules"));
+
         var body = unmarshal.body();
         var temporal = body.decl(cm.ref(TemporalAccessor.class), "temporal",
             cm.ref(DateTimeFormatter.class).staticRef("ISO_TIME").invoke("parse").arg(str));
@@ -335,11 +357,12 @@ public class JSR310Plugin extends AbstractPlugin {
         ifCond._then()._return(
             cm.ref(OffsetTime.class).staticInvoke("from").arg(temporal));
 
-        // Fallback: parse as LocalTime, attach system default offset.
+        // Fallback: parse as LocalTime, attach system default offset dynamically via ZONE_RULES.
+        var currentOffset = zoneRules.invoke("getOffset").arg(cm.ref(Instant.class).staticInvoke("now"));
         body._return(
             cm.ref(LocalTime.class).staticInvoke("from").arg(temporal)
                 .invoke("atOffset")
-                .arg(cm.ref(OffsetDateTime.class).staticInvoke("now").invoke("getOffset")));
+                .arg(currentOffset));
 
         marshal.body()._return(target.invoke("toString"));
     }

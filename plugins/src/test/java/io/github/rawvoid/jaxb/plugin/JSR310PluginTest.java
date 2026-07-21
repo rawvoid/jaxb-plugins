@@ -70,7 +70,7 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             assertThat(clazz.getDeclaredField("duration").getType()).isEqualTo(Duration.class);
             assertThat(clazz.getDeclaredField("created").getType()).isEqualTo(LocalDate.class);
 
-            // Verify OffsetDateTime adapter uses TemporalAccessor-based timezone fallback
+            // Verify OffsetDateTime adapter uses TemporalAccessor-based timezone fallback with cached ZoneRules
             var dateTimeAdapter = dateTimeField.getAnnotation(XmlJavaTypeAdapter.class);
             assertThat(dateTimeAdapter).isNotNull();
             var adapterSource = getJavaSource(dateTimeAdapter.value());
@@ -78,6 +78,8 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             assertThat(adapterSource).contains("OFFSET_SECONDS");
             assertThat(adapterSource).contains("OffsetDateTime.from");
             assertThat(adapterSource).contains("LocalDateTime.from");
+            assertThat(adapterSource).contains("ZONE_RULES");
+            assertThat(adapterSource).contains("Instant.now()");
 
             // Verify LocalDate adapter uses ISO_DATE formatter
             var dateAdapter = clazz.getDeclaredField("date").getAnnotation(XmlJavaTypeAdapter.class);
