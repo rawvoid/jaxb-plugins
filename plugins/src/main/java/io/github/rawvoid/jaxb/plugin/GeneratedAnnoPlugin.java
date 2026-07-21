@@ -33,8 +33,8 @@ import java.util.Queue;
  * <p>
  * Configuration options:
  * <ul>
- *   <li>{@code -value}: The generator name. Defaults to the plugin option name ({@code Xgenerated-anno}).</li>
- *   <li>{@code -comments}: Additional comments, such as repository URL. Defaults to a description with the project URL.</li>
+ *   <li>{@code -value}: The generator name. Defaults to {@code "JAXB RI v[BuildID]"}.</li>
+ *   <li>{@code -comments}: Additional comments. Defaults to none.</li>
  *   <li>{@code -date}: Whether to include the generation date. Defaults to {@code false}.</li>
  * </ul>
  * </p>
@@ -46,10 +46,10 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
 
     private static final String GENERATED_ANNOTATION_FQCN = "jakarta.annotation.Generated";
 
-    @Option(name = "value", description = "The value attribute of @Generated annotation. Defaults to the plugin option name")
+    @Option(name = "value", description = "The value attribute of @Generated annotation. Defaults to 'JAXB RI v[BuildID]'")
     private String value;
 
-    @Option(name = "comments", description = "The comments attribute of @Generated annotation. Defaults to JAXB RI version and project URL")
+    @Option(name = "comments", description = "The comments attribute of @Generated annotation. Defaults to none")
     private String comments;
 
     @Option(name = "date", defaultValue = "false", description = "Whether to include a date in @Generated annotation")
@@ -60,9 +60,8 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
         var codeModel = outline.getCodeModel();
         var generatedClass = codeModel.ref(GENERATED_ANNOTATION_FQCN);
 
-        var valueToUse = (value != null && !value.isEmpty()) ? value : getOptionName();
-        var commentsToUse = (comments != null && !comments.isEmpty()) ? comments
-            : "JAXB RI v" + Options.getBuildID() + " via github.com/rawvoid/jaxb-plugins";
+        var valueToUse = (value != null) ? value : "JAXB RI v" + Options.getBuildID();
+        var commentsToUse = comments;
         String dateToUse = null;
 
         if (Boolean.TRUE.equals(date)) {
@@ -104,7 +103,7 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
             if (date != null && !date.isEmpty()) {
                 annotationUse.param("date", date);
             }
-            if (comments != null && !comments.isEmpty()) {
+            if (comments != null) {
                 annotationUse.param("comments", comments);
             }
         }

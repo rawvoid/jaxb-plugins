@@ -16,6 +16,7 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.tools.xjc.Options;
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,10 +37,8 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     private static final String ROOT_CLASS = PACKAGE_NAME + ".Root";
     private static final String NESTED_CLASS = PACKAGE_NAME + ".Nested";
     private static final String STATUS_CLASS = PACKAGE_NAME + ".Status";
-    private static final String OBJECT_FACTORY_CLASS = PACKAGE_NAME + ".ObjectFactory";
 
     private final String optionCmd = optionCommand(GeneratedAnnoPlugin.class);
-    private final String expectedComments = "JAXB RI v" + com.sun.tools.xjc.Options.getBuildID() + " via github.com/rawvoid/jaxb-plugins";
 
     @BeforeEach
     void setSchema() {
@@ -72,19 +71,18 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void defaultPluginOptions() throws Exception {
+        var expectedValue = "JAXB RI v" + Options.getBuildID();
         testExecute(List.of(optionCmd), PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
-            // Verify all generated classes (Root, Nested, ObjectFactory) contain the annotation
-            assertThat(source).contains("Generated(");
-            assertThat(source).contains("value = \"Xgenerated-anno\"");
-            assertThat(source).contains("comments = \"" + expectedComments + "\"");
+            // Verify all generated classes contain the annotation with only the value attribute
+            assertThat(source).contains("Generated(\"" + expectedValue + "\")");
+            assertThat(source).doesNotContain("comments =");
             assertThat(source).doesNotContain("date =");
         });
 
-        // Verify package-info.java also contains the annotation
+        // Verify package-info.java also contains the annotation with only the value attribute
         var packageInfoSource = getPackageInfoSource();
-        assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
-        assertThat(packageInfoSource).contains("value = \"Xgenerated-anno\"");
-        assertThat(packageInfoSource).contains("comments = \"" + expectedComments + "\"");
+        assertThat(packageInfoSource).contains("Generated(\"" + expectedValue + "\")");
+        assertThat(packageInfoSource).doesNotContain("comments =");
         assertThat(packageInfoSource).doesNotContain("date =");
     }
 
@@ -115,19 +113,41 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             optionCmd,
             "-date=true"
         );
+        var expectedValue = "JAXB RI v" + Options.getBuildID();
         testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
             assertThat(source).contains("Generated(");
-            assertThat(source).contains("value = \"Xgenerated-anno\"");
-            // Check that the date value matches standard ISO date and comes before comments
-            var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\",\\s*comments = \"" + java.util.regex.Pattern.quote(expectedComments) + "\"";
+            // Verify value and date attributes only, with date placed right after value
+            var datePattern = "value = \"" + java.util.regex.Pattern.quote(expectedValue) + "\",\\s*date = \"\\d{4}-\\d{2}-\\d{2}\"";
             assertThat(source).containsPattern(datePattern);
+            assertThat(source).doesNotContain("comments =");
         });
 
         var packageInfoSource = getPackageInfoSource();
         assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
-        assertThat(packageInfoSource).contains("value = \"Xgenerated-anno\"");
-        var datePattern = "date = \"\\d{4}-\\d{2}-\\d{2}\",\\s*comments = \"" + java.util.regex.Pattern.quote(expectedComments) + "\"";
+        var datePattern = "value = \"" + java.util.regex.Pattern.quote(expectedValue) + "\",\\s*date = \"\\d{4}-\\d{2}-\\d{2}\"";
         assertThat(packageInfoSource).containsPattern(datePattern);
+        assertThat(packageInfoSource).doesNotContain("comments =");
+    }
+
+    @Test
+    void emptyStringOptions() throws Exception {
+        var args = List.of(
+            optionCmd,
+            "-value=",
+            "-comments="
+        );
+        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
+            assertThat(source).contains("Generated(");
+            assertThat(source).contains("value = \"\"");
+            assertThat(source).contains("comments = \"\"");
+            assertThat(source).doesNotContain("date =");
+        });
+
+        var packageInfoSource = getPackageInfoSource();
+        assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
+        assertThat(packageInfoSource).contains("value = \"\"");
+        assertThat(packageInfoSource).contains("comments = \"\"");
+        assertThat(packageInfoSource).doesNotContain("date =");
     }
 
     private String getPackageInfoSource() throws IOException {
