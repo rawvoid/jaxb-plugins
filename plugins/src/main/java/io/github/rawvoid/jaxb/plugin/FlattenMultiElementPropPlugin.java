@@ -254,7 +254,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 classInfo,
                 element.getElementName(),
                 null,
-                false,
+                isNillable(element, null),
                 null
             ));
             newProp.javadoc = original.javadoc;
@@ -403,9 +403,22 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
     }
 
     private static boolean isNillable(CElement element, CTypeRef sourceTypeRef) {
-        if (element.getSchemaComponent() instanceof XSElementDecl decl) {
+        var schemaComponent = element.getSchemaComponent();
+        if (schemaComponent instanceof XSElementDecl decl) {
             return decl.isNillable();
         }
-        return sourceTypeRef.isNillable();
+        if (element instanceof CClassInfo classInfo) {
+            var elementName = classInfo.getElementName();
+            if (elementName != null && classInfo.model != null && classInfo.model.schemaComponent != null) {
+                var elementDecl = classInfo.model.schemaComponent.getElementDecl(
+                    elementName.getNamespaceURI(),
+                    elementName.getLocalPart()
+                );
+                if (elementDecl != null) {
+                    return elementDecl.isNillable();
+                }
+            }
+        }
+        return sourceTypeRef != null && sourceTypeRef.isNillable();
     }
 }

@@ -78,8 +78,24 @@
         </xs:complexContent>
     </xs:complexType>
 
+    <xs:element name="GlobalItemClass" nillable="true">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="value" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="ChoiceWithClass">
+        <xs:choice maxOccurs="unbounded">
+            <xs:element ref="tns:GlobalItemClass"/>
+            <xs:element name="PlainString" type="xs:string"/>
+        </xs:choice>
+    </xs:complexType>
+
     <xs:element name="flight" type="tns:Flight"/>
     <xs:element name="dual" type="tns:DualChoice"/>
     <xs:element name="plain" type="tns:PlainList"/>
     <xs:element name="timed" type="tns:TimedDerived"/>
+    <xs:element name="choiceWithClass" type="tns:ChoiceWithClass"/>
 </xs:schema>

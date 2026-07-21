@@ -38,6 +38,7 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
     private static final String DUAL = PKG + "\\.DualChoice";
     private static final String PLAIN = PKG + "\\.PlainList";
     private static final String TIMED = PKG + "\\.TimedDerived";
+    private static final String CHOICE_WITH_CLASS = PKG + "\\.ChoiceWithClass";
 
     private static final String OPTION = "-Xflatten-multi-element-prop";
 
@@ -130,6 +131,26 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
             var noteXml = noteField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
             assertThat(noteXml).isNotNull();
             assertThat(noteXml.required()).isFalse();
+        });
+    }
+
+    @Test
+    void flattensChoiceWithClassPreservesNillable() throws Exception {
+        testExecute(List.of(OPTION), CHOICE_WITH_CLASS, (source, clazz) -> {
+            var names = fieldNames(clazz);
+            assertThat(names).containsExactlyInAnyOrder("globalItemClass", "plainString");
+
+            // Verify that 'globalItemClass' has nillable = true from schema (since GlobalItemClass has nillable="true")
+            var itemField = clazz.getDeclaredField("globalItemClass");
+            var itemXml = itemField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
+            assertThat(itemXml).isNotNull();
+            assertThat(itemXml.nillable()).isTrue();
+
+            // Verify that 'plainString' has default nillable = false
+            var stringField = clazz.getDeclaredField("plainString");
+            var stringXml = stringField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
+            assertThat(stringXml).isNotNull();
+            assertThat(stringXml.nillable()).isFalse();
         });
     }
 
