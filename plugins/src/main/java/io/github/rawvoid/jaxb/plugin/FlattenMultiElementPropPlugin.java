@@ -76,7 +76,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
     private static final Logger log = LoggerFactory.getLogger(FlattenMultiElementPropPlugin.class);
 
     private static final NameConverter NAMES = NameConverter.standard;
-    
+
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
         var flattened = 0;
@@ -168,7 +168,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 var privateName = allocateName(xmlName, occupied);
                 var publicName = NAMES.toPropertyName(privateName);
 
-                var newProp = convertToElementProperty(element, xmlName, privateName, publicName, refProp);
+                var newProp = convertToElementProperty(element, privateName, publicName, refProp);
                 if (newProp != null) {
                     replacements.add(newProp);
                 } else {
@@ -189,7 +189,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
      * @return the converted property, or {@code null} if conversion is not possible
      */
     private CElementPropertyInfo convertToElementProperty(
-        CElement element, String xmlName, String privateName, String publicName,
+        CElement element, String privateName, String publicName,
         CReferencePropertyInfo original
     ) {
         if (element instanceof CElementInfo elementInfo) {
@@ -292,7 +292,6 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         return newProp;
     }
 
-
     private static boolean isRequired(CPropertyInfo prop) {
         if (prop instanceof CElementPropertyInfo ep) {
             return ep.isRequired();
@@ -301,6 +300,26 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             return rp.isRequired();
         }
         return false;
+    }
+
+    private static boolean isNillable(CElement element, CTypeRef sourceTypeRef) {
+        var schemaComponent = element.getSchemaComponent();
+        if (schemaComponent instanceof XSElementDecl decl) {
+            return decl.isNillable();
+        }
+        if (element instanceof CClassInfo classInfo) {
+            var elementName = classInfo.getElementName();
+            if (elementName != null && classInfo.model != null && classInfo.model.schemaComponent != null) {
+                var elementDecl = classInfo.model.schemaComponent.getElementDecl(
+                    elementName.getNamespaceURI(),
+                    elementName.getLocalPart()
+                );
+                if (elementDecl != null) {
+                    return elementDecl.isNillable();
+                }
+            }
+        }
+        return sourceTypeRef != null && sourceTypeRef.isNillable();
     }
 
     /**
@@ -385,25 +404,5 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             parent = parentClass.getBaseClass();
         }
         return occupied;
-    }
-
-    private static boolean isNillable(CElement element, CTypeRef sourceTypeRef) {
-        var schemaComponent = element.getSchemaComponent();
-        if (schemaComponent instanceof XSElementDecl decl) {
-            return decl.isNillable();
-        }
-        if (element instanceof CClassInfo classInfo) {
-            var elementName = classInfo.getElementName();
-            if (elementName != null && classInfo.model != null && classInfo.model.schemaComponent != null) {
-                var elementDecl = classInfo.model.schemaComponent.getElementDecl(
-                    elementName.getNamespaceURI(),
-                    elementName.getLocalPart()
-                );
-                if (elementDecl != null) {
-                    return elementDecl.isNillable();
-                }
-            }
-        }
-        return sourceTypeRef != null && sourceTypeRef.isNillable();
     }
 }
