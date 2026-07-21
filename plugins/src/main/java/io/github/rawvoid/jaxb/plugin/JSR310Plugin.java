@@ -207,18 +207,10 @@ public class JSR310Plugin extends AbstractPlugin {
             earlyReturnIfNull(marshal, target.eq(JExpr._null()));
             marshal.annotate(Override.class);
 
-            if (Duration.class.equals(targetClass) || Instant.class.equals(targetClass) || Period.class.equals(targetClass)) {
-                implementDurationAdapter(adapterClass, unmarshal, marshal, str, target);
-            } else if (LocalDate.class.equals(targetClass) || LocalDateTime.class.equals(targetClass)
-                || OffsetDateTime.class.equals(targetClass) || ZonedDateTime.class.equals(targetClass)
-                || LocalTime.class.equals(targetClass) || YearMonth.class.equals(targetClass)
-                || Year.class.equals(targetClass) || MonthDay.class.equals(targetClass) || OffsetTime.class.equals(targetClass)) {
-                implementDateTimeAdapter(adapterClass, unmarshal, marshal, str, target, targetClass, pattern);
-            } else if (Month.class.equals(targetClass)) {
-                implementGMonthAdapter(adapterClass, unmarshal, marshal, str, target);
-            } else if (DayOfWeek.class.equals(targetClass)) {
-                implementDayOfWeekAdapter(adapterClass, unmarshal, marshal, str, target);
-            } else if (Integer.class.equals(targetClass) && "gDay".equals(schemaType.getLocalPart())) {
+            var generator = adapterGeneratorMapping().get(targetClass);
+            if (generator != null) {
+                generator.generate(adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern);
+            } else if (Integer.class.equals(targetClass) && isGDay(schemaType)) {
                 implementGDayAdapter(adapterClass, unmarshal, marshal, str, target);
             } else {
                 throw new IllegalArgumentException("%s does not support class: %s"
@@ -433,6 +425,57 @@ public class JSR310Plugin extends AbstractPlugin {
             ._if(expr)
             ._then()
             ._return(JExpr._null());
+    }
+
+    @FunctionalInterface
+    public interface AdapterGenerator {
+        void generate(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
+                      JVar str, JVar target, Class<?> targetClass, QName schemaType, String pattern);
+    }
+
+    /**
+     * Returns a map that maps target Java classes to their corresponding XmlAdapter code generators.
+     *
+     * @return a map of Java classes to adapter generators
+     */
+    public Map<Class<?>, AdapterGenerator> adapterGeneratorMapping() {
+        Map<Class<?>, AdapterGenerator> mapping = new HashMap<>();
+
+        AdapterGenerator durationGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
+            implementDurationAdapter(adapterClass, unmarshal, marshal, str, target);
+
+        AdapterGenerator dateTimeGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
+            implementDateTimeAdapter(adapterClass, unmarshal, marshal, str, target, targetClass, pattern);
+
+        AdapterGenerator monthGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
+            implementGMonthAdapter(adapterClass, unmarshal, marshal, str, target);
+
+        AdapterGenerator dayOfWeekGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
+            implementDayOfWeekAdapter(adapterClass, unmarshal, marshal, str, target);
+
+        mapping.put(Duration.class, durationGen);
+        mapping.put(Instant.class, durationGen);
+        mapping.put(Period.class, durationGen);
+
+        mapping.put(LocalDate.class, dateTimeGen);
+        mapping.put(LocalDateTime.class, dateTimeGen);
+        mapping.put(OffsetDateTime.class, dateTimeGen);
+        mapping.put(ZonedDateTime.class, dateTimeGen);
+        mapping.put(LocalTime.class, dateTimeGen);
+        mapping.put(OffsetTime.class, dateTimeGen);
+        mapping.put(YearMonth.class, dateTimeGen);
+        mapping.put(Year.class, dateTimeGen);
+        mapping.put(MonthDay.class, dateTimeGen);
+
+        mapping.put(Month.class, monthGen);
+
+        mapping.put(DayOfWeek.class, dayOfWeekGen);
+
+        return mapping;
+    }
+
+    private static boolean isGDay(QName schemaType) {
+        return schemaType != null && "gDay".equals(schemaType.getLocalPart());
     }
 
     /**
