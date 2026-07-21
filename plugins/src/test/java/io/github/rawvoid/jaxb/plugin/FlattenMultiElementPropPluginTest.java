@@ -87,6 +87,13 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
         testExecute(List.of(OPTION), DUAL, (source, clazz) -> {
             var names = fieldNames(clazz);
             assertThat(names).contains("one", "two", "red", "green");
+
+            // Verify that 'one' has @XmlElement with correct nillable/required defaults (false)
+            var oneField = clazz.getDeclaredField("one");
+            var oneXml = oneField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
+            assertThat(oneXml).isNotNull();
+            assertThat(oneXml.required()).isFalse();
+            assertThat(oneXml.nillable()).isFalse();
         });
     }
 
@@ -111,6 +118,18 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
 
             // Verify that time in TimedDerived is String (not List) to override TimedBase.time
             assertThat(clazz.getDeclaredField("time").getType()).isEqualTo(String.class);
+
+            // Verify that 'time' in TimedDerived inherited required = true from TimedBase.time
+            var timeField = clazz.getDeclaredField("time");
+            var timeXml = timeField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
+            assertThat(timeXml).isNotNull();
+            assertThat(timeXml.required()).isTrue();
+
+            // Verify that optional field 'note' maintains required = false
+            var noteField = clazz.getDeclaredField("note");
+            var noteXml = noteField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
+            assertThat(noteXml).isNotNull();
+            assertThat(noteXml.required()).isFalse();
         });
     }
 

@@ -28,6 +28,7 @@ import com.sun.tools.xjc.model.CReferencePropertyInfo;
 import com.sun.tools.xjc.model.CTypeRef;
 import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.outline.Outline;
+import com.sun.xml.xsom.XSElementDecl;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -222,7 +223,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 sourceTypeRef.getTarget(),
                 element.getElementName(),
                 sourceTypeRef.getTypeName(),
-                sourceTypeRef.isNillable(),
+                isNillable(element, sourceTypeRef),
                 sourceTypeRef.defaultValue
             ));
 
@@ -399,5 +400,12 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
 
     private static String normalize(String n) {
         return n.toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isNillable(CElement element, CTypeRef sourceTypeRef) {
+        if (element.getSchemaComponent() instanceof XSElementDecl decl) {
+            return decl.isNillable();
+        }
+        return sourceTypeRef.isNillable();
     }
 }
