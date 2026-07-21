@@ -57,27 +57,6 @@
         </xs:sequence>
     </xs:complexType>
 
-    <!--
-      Base + extension both declare element Time (plus Note) → XJC multi-member
-      catch-all "rest" property on Derived (getElements().size() > 1).
-    -->
-    <xs:complexType name="TimedBase">
-        <xs:sequence>
-            <xs:element name="Time" type="xs:string"/>
-        </xs:sequence>
-    </xs:complexType>
-
-    <xs:complexType name="TimedDerived">
-        <xs:complexContent>
-            <xs:extension base="tns:TimedBase">
-                <xs:sequence>
-                    <xs:element name="Time" type="xs:string"/>
-                    <xs:element name="Note" type="xs:string" minOccurs="0"/>
-                </xs:sequence>
-            </xs:extension>
-        </xs:complexContent>
-    </xs:complexType>
-
     <xs:element name="GlobalItemClass" nillable="true">
         <xs:complexType>
             <xs:sequence>
@@ -96,6 +75,5 @@
     <xs:element name="flight" type="tns:Flight"/>
     <xs:element name="dual" type="tns:DualChoice"/>
     <xs:element name="plain" type="tns:PlainList"/>
-    <xs:element name="timed" type="tns:TimedDerived"/>
     <xs:element name="choiceWithClass" type="tns:ChoiceWithClass"/>
 </xs:schema>

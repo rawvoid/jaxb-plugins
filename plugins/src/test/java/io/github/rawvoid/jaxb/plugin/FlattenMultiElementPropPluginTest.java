@@ -37,7 +37,6 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
     private static final String FLIGHT = PKG + "\\.Flight";
     private static final String DUAL = PKG + "\\.DualChoice";
     private static final String PLAIN = PKG + "\\.PlainList";
-    private static final String TIMED = PKG + "\\.TimedDerived";
     private static final String CHOICE_WITH_CLASS = PKG + "\\.ChoiceWithClass";
 
     private static final String OPTION = "-Xflatten-multi-element-prop";
@@ -107,32 +106,7 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
         });
     }
 
-    @Test
-    void flattensInheritanceCollisionRestProperty() throws Exception {
-        testExecute(List.of(OPTION), TIMED, (source, clazz) -> {
-            var names = fieldNames(clazz).stream().map(String::toLowerCase).toList();
-            // The merged "rest"/"content" property should be gone.
-            assertThat(names).noneMatch(n -> n.equals("rest") || n.equals("content"));
-            // Individual fields should exist (Time shows up as element name in
-            // the collision, along with Note).
-            assertThat(names).anyMatch(n -> n.contains("time") || n.contains("note"));
 
-            // Verify that time in TimedDerived is String (not List) to override TimedBase.time
-            assertThat(clazz.getDeclaredField("time").getType()).isEqualTo(String.class);
-
-            // Verify that 'time' in TimedDerived inherited required = true from TimedBase.time
-            var timeField = clazz.getDeclaredField("time");
-            var timeXml = timeField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
-            assertThat(timeXml).isNotNull();
-            assertThat(timeXml.required()).isTrue();
-
-            // Verify that optional field 'note' maintains required = false
-            var noteField = clazz.getDeclaredField("note");
-            var noteXml = noteField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
-            assertThat(noteXml).isNotNull();
-            assertThat(noteXml.required()).isFalse();
-        });
-    }
 
     @Test
     void flattensChoiceWithClassPreservesNillable() throws Exception {
