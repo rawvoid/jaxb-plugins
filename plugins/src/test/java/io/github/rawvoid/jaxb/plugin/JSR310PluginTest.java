@@ -81,6 +81,10 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             assertThat(adapterSource).contains("ZONE_RULES");
             assertThat(adapterSource).contains("Instant.now()");
 
+            // Verify auto-derived adapter package is <common_package>.adapter
+            assertThat(dateTimeAdapter.value().getPackageName())
+                .isEqualTo("com.github.rawvoid.xjc_plugins.jsr310.adapter");
+
             // Verify LocalDate adapter uses ISO_DATE formatter
             var dateAdapter = clazz.getDeclaredField("date").getAnnotation(XmlJavaTypeAdapter.class);
             assertThat(dateAdapter).isNotNull();
@@ -138,5 +142,17 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             assertThat(annotation.value().getPackageName())
                 .isEqualTo("io.github.rawvoid.jaxb.test.adapters");
         });
+    }
+
+    @Test
+    void testFindCommonPackage() {
+        assertThat(JSR310Plugin.findCommonPackage(List.of("com.example.project.order", "com.example.project.user")))
+            .isEqualTo("com.example.project");
+
+        assertThat(JSR310Plugin.findCommonPackage(List.of("com.example.project.order")))
+            .isEqualTo("com.example.project.order");
+
+        assertThat(JSR310Plugin.findCommonPackage(List.of("com.example.a", "org.sample.b")))
+            .isEmpty();
     }
 }
