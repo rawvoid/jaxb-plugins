@@ -141,7 +141,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
 
                 var newProp = new CElementPropertyInfo(
                     publicName,
-                    CollectionMode.NOT_REPEATED,
+                    isCollection(original, bean, privateName) ? CollectionMode.REPEATED_ELEMENT : CollectionMode.NOT_REPEATED,
                     elementProp.id(),
                     elementProp.getExpectedMimeType(),
                     elementProp.getSchemaComponent(),
@@ -172,12 +172,12 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 var privateName = allocateName(xmlName, occupied);
                 var publicName = NAMES.toPropertyName(privateName);
 
-                var newProp = convertToElementProperty(element, xmlName, privateName, publicName, refProp);
+                var newProp = convertToElementProperty(element, xmlName, privateName, publicName, refProp, bean);
                 if (newProp != null) {
                     replacements.add(newProp);
                 } else {
                     // Fallback: keep as single-element CReferencePropertyInfo.
-                    var fallback = createSingleRefProperty(element, privateName, publicName, refProp);
+                    var fallback = createSingleRefProperty(element, privateName, publicName, refProp, bean);
                     replacements.add(fallback);
                 }
             }
@@ -194,7 +194,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
      */
     private CElementPropertyInfo convertToElementProperty(
         CElement element, String xmlName, String privateName, String publicName,
-        CReferencePropertyInfo original
+        CReferencePropertyInfo original, CClassInfo bean
     ) {
         if (element instanceof CElementInfo elementInfo) {
             var innerProp = elementInfo.getProperty();
@@ -208,7 +208,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
 
             var newProp = new CElementPropertyInfo(
                 publicName,
-                CollectionMode.NOT_REPEATED,
+                isCollection(original, bean, privateName) ? CollectionMode.REPEATED_ELEMENT : CollectionMode.NOT_REPEATED,
                 innerProp.id(),
                 innerProp.getExpectedMimeType(),
                 original.getSchemaComponent(),
@@ -239,7 +239,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             // CClassInfo is itself a CNonElement — can serve as a CTypeRef target.
             var newProp = new CElementPropertyInfo(
                 publicName,
-                CollectionMode.NOT_REPEATED,
+                isCollection(original, bean, privateName) ? CollectionMode.REPEATED_ELEMENT : CollectionMode.NOT_REPEATED,
                 null,
                 null,
                 original.getSchemaComponent(),
@@ -272,11 +272,11 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
      */
     private CReferencePropertyInfo createSingleRefProperty(
         CElement element, String privateName, String publicName,
-        CReferencePropertyInfo original
+        CReferencePropertyInfo original, CClassInfo bean
     ) {
         var newProp = new CReferencePropertyInfo(
             publicName,
-            false,
+            isCollection(original, bean, privateName),
             isRequired(original),
             original.isMixed(),
             original.getSchemaComponent(),
@@ -294,6 +294,20 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         newProp.realization = original.realization;
         newProp.baseType = original.baseType;
         return newProp;
+    }
+
+    private static boolean isCollection(CPropertyInfo original, CClassInfo bean, String privateName) {
+        // Search base classes for a property with the same name.
+        var parent = bean.getBaseClass();
+        while (parent instanceof CClassInfo parentClass) {
+            for (var prop : parentClass.getProperties()) {
+                if (normalize(prop.getName(false)).equals(normalize(privateName))) {
+                    return prop.isCollection();
+                }
+            }
+            parent = parentClass.getBaseClass();
+        }
+        return original.isCollection();
     }
 
     private static boolean isRequired(CPropertyInfo prop) {
