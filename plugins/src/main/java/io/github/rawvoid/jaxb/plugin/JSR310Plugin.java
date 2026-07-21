@@ -32,6 +32,8 @@ import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -237,32 +239,109 @@ public class JSR310Plugin extends AbstractPlugin {
     }
 
     /**
-     * LocalDate,LocalDateTime,OffsetDateTime,ZonedDateTime,LocalTime,YearMonth,Year,MonthDay
+     * Generates an adapter for date/time types: LocalDate, LocalDateTime, OffsetDateTime,
+     * ZonedDateTime, LocalTime, OffsetTime, YearMonth, Year, MonthDay.
+     * <p>
+     * For {@link OffsetDateTime} and {@link OffsetTime}, uses {@link TemporalAccessor} to
+     * parse the input string with timezone tolerance — falling back to the system default
+     * offset when the XML value does not include a timezone suffix.
+     * For {@link LocalDate}, uses {@link DateTimeFormatter#ISO_DATE} to tolerate optional
+     * timezone suffixes in {@code xs:date} values.
+     * </p>
      */
     private void implementDateTimeAdapter(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
                                           JVar str, JVar target, Class<?> targetClass, String pattern) {
-        JFieldVar formatter = null;
+        var cm = adapterClass.owner();
+
+        // Custom pattern takes priority — use explicit formatter for both parse and format.
         if (pattern != null && !pattern.isBlank()) {
-            ;
-            formatter = adapterClass.field(JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
+            var formatter = adapterClass.field(JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
                 DateTimeFormatter.class, "formatter");
-            var initInvoke = adapterClass.owner().ref(DateTimeFormatter.class)
-                .staticInvoke("ofPattern")
-                .arg(pattern);
-            formatter.init(initInvoke);
+            formatter.init(cm.ref(DateTimeFormatter.class).staticInvoke("ofPattern").arg(pattern));
+
+            unmarshal.body()._return(
+                cm.ref(targetClass).staticInvoke("parse").arg(str).arg(formatter));
+            marshal.body()._return(target.invoke("format").arg(formatter));
+            return;
         }
 
-        var invoke = adapterClass.owner().ref(targetClass)
-            .staticInvoke("parse");
-
-        if (formatter == null) {
-            invoke.arg(str);
+        // Offset types need TemporalAccessor-based timezone fallback.
+        if (OffsetDateTime.class.equals(targetClass)) {
+            implementOffsetDateTimeAdapter(cm, unmarshal, marshal, str, target);
+        } else if (OffsetTime.class.equals(targetClass)) {
+            implementOffsetTimeAdapter(cm, unmarshal, marshal, str, target);
+        } else if (LocalDate.class.equals(targetClass)) {
+            // xs:date allows optional timezone suffix; ISO_DATE handles both gracefully.
+            unmarshal.body()._return(
+                cm.ref(LocalDate.class).staticInvoke("parse")
+                    .arg(str)
+                    .arg(cm.ref(DateTimeFormatter.class).staticRef("ISO_DATE")));
             marshal.body()._return(target.invoke("toString"));
         } else {
-            invoke.arg(str).arg(formatter);
-            marshal.body()._return(target.invoke("format").arg(formatter));
+            // All other types (LocalDateTime, ZonedDateTime, LocalTime, YearMonth, Year, MonthDay)
+            unmarshal.body()._return(cm.ref(targetClass).staticInvoke("parse").arg(str));
+            marshal.body()._return(target.invoke("toString"));
         }
-        unmarshal.body()._return(invoke);
+    }
+
+    /**
+     * Generates unmarshal/marshal for {@link OffsetDateTime} with timezone fallback:
+     * <pre>{@code
+     * TemporalAccessor temporal = DateTimeFormatter.ISO_DATE_TIME.parse(v);
+     * if (temporal.isSupported(ChronoField.OFFSET_SECONDS)) {
+     *     return OffsetDateTime.from(temporal);
+     * }
+     * return LocalDateTime.from(temporal).atOffset(OffsetDateTime.now().getOffset());
+     * }</pre>
+     */
+    private void implementOffsetDateTimeAdapter(JCodeModel cm, JMethod unmarshal, JMethod marshal,
+                                                JVar str, JVar target) {
+        var body = unmarshal.body();
+        var temporal = body.decl(cm.ref(TemporalAccessor.class), "temporal",
+            cm.ref(DateTimeFormatter.class).staticRef("ISO_DATE_TIME").invoke("parse").arg(str));
+
+        var ifCond = body._if(temporal.invoke("isSupported")
+            .arg(cm.ref(ChronoField.class).staticRef("OFFSET_SECONDS")));
+        ifCond._then()._return(
+            cm.ref(OffsetDateTime.class).staticInvoke("from").arg(temporal));
+
+        // Fallback: parse as LocalDateTime, attach system default offset.
+        body._return(
+            cm.ref(LocalDateTime.class).staticInvoke("from").arg(temporal)
+                .invoke("atOffset")
+                .arg(cm.ref(OffsetDateTime.class).staticInvoke("now").invoke("getOffset")));
+
+        marshal.body()._return(target.invoke("toString"));
+    }
+
+    /**
+     * Generates unmarshal/marshal for {@link OffsetTime} with timezone fallback:
+     * <pre>{@code
+     * TemporalAccessor temporal = DateTimeFormatter.ISO_TIME.parse(v);
+     * if (temporal.isSupported(ChronoField.OFFSET_SECONDS)) {
+     *     return OffsetTime.from(temporal);
+     * }
+     * return LocalTime.from(temporal).atOffset(OffsetDateTime.now().getOffset());
+     * }</pre>
+     */
+    private void implementOffsetTimeAdapter(JCodeModel cm, JMethod unmarshal, JMethod marshal,
+                                            JVar str, JVar target) {
+        var body = unmarshal.body();
+        var temporal = body.decl(cm.ref(TemporalAccessor.class), "temporal",
+            cm.ref(DateTimeFormatter.class).staticRef("ISO_TIME").invoke("parse").arg(str));
+
+        var ifCond = body._if(temporal.invoke("isSupported")
+            .arg(cm.ref(ChronoField.class).staticRef("OFFSET_SECONDS")));
+        ifCond._then()._return(
+            cm.ref(OffsetTime.class).staticInvoke("from").arg(temporal));
+
+        // Fallback: parse as LocalTime, attach system default offset.
+        body._return(
+            cm.ref(LocalTime.class).staticInvoke("from").arg(temporal)
+                .invoke("atOffset")
+                .arg(cm.ref(OffsetDateTime.class).staticInvoke("now").invoke("getOffset")));
+
+        marshal.body()._return(target.invoke("toString"));
     }
 
     private void implementGDayAdapter(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
@@ -341,9 +420,9 @@ public class JSR310Plugin extends AbstractPlugin {
         Map<QName, Class<?>> mapping = new HashMap<>();
         var namespaceURI = XMLConstants.W3C_XML_SCHEMA_NS_URI;
         mapping.put(new QName(namespaceURI, "duration"), Duration.class); // PnYnMnDTnHnMnS → Duration
-        mapping.put(new QName(namespaceURI, "dateTime"), LocalDateTime.class); // YYYY-MM-DDThh:mm:ss → LocalDateTime (no timezone)
-        mapping.put(new QName(namespaceURI, "time"), LocalTime.class); // hh:mm:ss → LocalTime
-        mapping.put(new QName(namespaceURI, "date"), LocalDate.class); // YYYY-MM-DD → LocalDate
+        mapping.put(new QName(namespaceURI, "dateTime"), OffsetDateTime.class); // YYYY-MM-DDThh:mm:ss[Z] → OffsetDateTime (timezone-tolerant)
+        mapping.put(new QName(namespaceURI, "time"), OffsetTime.class); // hh:mm:ss[Z] → OffsetTime (timezone-tolerant)
+        mapping.put(new QName(namespaceURI, "date"), LocalDate.class); // YYYY-MM-DD[Z] → LocalDate (timezone stripped via ISO_DATE)
         mapping.put(new QName(namespaceURI, "gYearMonth"), YearMonth.class); // YYYY-MM → YearMonth
         mapping.put(new QName(namespaceURI, "gYear"), Year.class); // YYYY → Year
         mapping.put(new QName(namespaceURI, "gMonthDay"), MonthDay.class); // --MM-DD → MonthDay
