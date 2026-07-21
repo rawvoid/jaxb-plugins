@@ -30,27 +30,25 @@ Bring your JAXB code into the 21st century with full JSR-310 (java.time) support
 
 **🔥 Use Cases:**
 
-- Use `LocalDateTime` instead of `XMLGregorianCalendar`
-- Support `ZonedDateTime` for timezone-aware dates
+- Use `OffsetDateTime` / `OffsetTime` for timezone-aware date/time handling
+- Timezone-tolerant unmarshalling: automatically falls back to system local offset if XML omits timezone suffix
 - Custom date formatting with patterns
-- Auto-generate XmlAdapter classes
+- Auto-generate `XmlAdapter` classes (package automatically derived from common package prefix of generated classes)
 
 **⚡ Quick Start:**
 
 ```bash
 -Xjsr310 \
-  -adapter-package=com.example.adapters \
   -mapping \
   -xsd-type=dateTime \
-  -target-class=java.time.LocalDateTime \
-  -pattern=yyyy-MM-dd HH:mm:ss
+  -target-class=java.time.OffsetDateTime
 ```
 
 **📝 Command Structure:**
 
 ```bash
 -Xjsr310 \
-  -adapter-package=package.name \
+  -adapter-package=package.name \      # Optional: defaults to auto-derived package (<common_package>.adapter)
   -mapping \
   -xsd-type=xsdType \
   -target-class=java.time.Class \
@@ -61,9 +59,9 @@ Bring your JAXB code into the 21st century with full JSR-310 (java.time) support
 
 **🎯 Default Mappings:**
 
-- `xs:dateTime` → `LocalDateTime`
-- `xs:date` → `LocalDate`
-- `xs:time` → `LocalTime`
+- `xs:dateTime` → `OffsetDateTime` *(timezone-tolerant)*
+- `xs:date` → `LocalDate` *(ISO_DATE)*
+- `xs:time` → `OffsetTime` *(timezone-tolerant)*
 - `xs:gYearMonth` → `YearMonth`
 - `xs:gYear` → `Year`
 - `xs:gMonthDay` → `MonthDay`
@@ -388,7 +386,7 @@ Add this to your Maven `pom.xml`:
 <dependency>
   <groupId>io.github.rawvoid</groupId>
   <artifactId>jaxb-plugins</artifactId>
-  <version>2.0.0-beta.1</version>
+  <version>${latest-version}</version>
 </dependency>
 ```
 
@@ -405,7 +403,7 @@ Add this to your Maven `pom.xml`:
       <plugin>
         <groupId>io.github.rawvoid</groupId>
         <artifactId>jaxb-plugins</artifactId>
-        <version>2.0.0-beta.1</version>
+        <version>${latest-version}</version>
       </plugin>
     </plugins>
     <args>
