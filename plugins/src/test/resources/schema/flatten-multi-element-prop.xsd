@@ -72,8 +72,26 @@
         </xs:choice>
     </xs:complexType>
 
+    <xs:complexType name="ConflictBase">
+        <xs:sequence>
+            <xs:element name="Time" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ConflictDerived">
+        <xs:complexContent>
+            <xs:extension base="tns:ConflictBase">
+                <xs:choice maxOccurs="unbounded">
+                    <xs:element name="Time" type="xs:string"/>
+                    <xs:element name="Note" type="xs:string"/>
+                </xs:choice>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
     <xs:element name="flight" type="tns:Flight"/>
     <xs:element name="dual" type="tns:DualChoice"/>
     <xs:element name="plain" type="tns:PlainList"/>
     <xs:element name="choiceWithClass" type="tns:ChoiceWithClass"/>
+    <xs:element name="conflictDerived" type="tns:ConflictDerived"/>
 </xs:schema>

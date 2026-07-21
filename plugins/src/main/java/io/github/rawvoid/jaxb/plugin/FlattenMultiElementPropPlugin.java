@@ -76,7 +76,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
     private static final Logger log = LoggerFactory.getLogger(FlattenMultiElementPropPlugin.class);
 
     private static final NameConverter NAMES = NameConverter.standard;
-
+    
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
         var flattened = 0;
@@ -124,14 +124,9 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
      * Builds individual single-element properties from a multi-element property.
      */
     private List<CPropertyInfo> buildReplacements(CPropertyInfo original, CClassInfo bean) {
-        // Collect existing property names to detect conflicts.
-        Set<String> occupied = new HashSet<>();
-        for (var prop : bean.getProperties()) {
-            if (prop != original) {
-                occupied.add(normalize(prop.getName(false)));
-            }
-        }
+        var preExisting = getPreExistingOccupied(original, bean);
 
+        Set<String> occupied = new HashSet<>(preExisting);
         var replacements = new ArrayList<CPropertyInfo>();
 
         if (original instanceof CElementPropertyInfo elementProp) {
@@ -298,7 +293,6 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
     }
 
 
-
     private static boolean isRequired(CPropertyInfo prop) {
         if (prop instanceof CElementPropertyInfo ep) {
             return ep.isRequired();
@@ -374,6 +368,23 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
 
     private static String normalize(String n) {
         return n.toLowerCase(Locale.ROOT);
+    }
+
+    private Set<String> getPreExistingOccupied(CPropertyInfo original, CClassInfo bean) {
+        Set<String> occupied = new HashSet<>();
+        for (var prop : bean.getProperties()) {
+            if (prop != original) {
+                occupied.add(normalize(prop.getName(false)));
+            }
+        }
+        var parent = bean.getBaseClass();
+        while (parent instanceof CClassInfo parentClass) {
+            for (var prop : parentClass.getProperties()) {
+                occupied.add(normalize(prop.getName(false)));
+            }
+            parent = parentClass.getBaseClass();
+        }
+        return occupied;
     }
 
     private static boolean isNillable(CElement element, CTypeRef sourceTypeRef) {

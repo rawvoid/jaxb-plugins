@@ -38,6 +38,7 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
     private static final String DUAL = PKG + "\\.DualChoice";
     private static final String PLAIN = PKG + "\\.PlainList";
     private static final String CHOICE_WITH_CLASS = PKG + "\\.ChoiceWithClass";
+    private static final String CONFLICT = PKG + "\\.ConflictDerived";
 
     private static final String OPTION = "-Xflatten-multi-element-prop";
 
@@ -125,6 +126,16 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
             var stringXml = stringField.getAnnotation(jakarta.xml.bind.annotation.XmlElement.class);
             assertThat(stringXml).isNotNull();
             assertThat(stringXml.nillable()).isFalse();
+        });
+    }
+
+    @Test
+    void flattensChoiceConflictRename() throws Exception {
+        // Subclass should automatically rename 'time' to 'time2' if parent has 'time'
+        testExecute(List.of(OPTION), CONFLICT, (source, clazz) -> {
+            var names = fieldNames(clazz);
+            assertThat(names).containsExactlyInAnyOrder("time2", "note");
+            assertThat(clazz.getDeclaredField("time2").getType()).isEqualTo(java.util.List.class);
         });
     }
 
