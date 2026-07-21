@@ -60,6 +60,8 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
         testExecute(List.of(OPTION), FLIGHT, (source, clazz) -> {
             var names = fieldNames(clazz);
             assertThat(names).containsExactly("airportCode", "date", "time");
+            // Verify that the split fields are collection Lists (since original choice repeats)
+            assertThat(clazz.getDeclaredField("airportCode").getType()).isEqualTo(java.util.List.class);
             // No merged annotation should remain.
             assertThat(source).doesNotContain("@XmlElements");
             assertThat(source).doesNotContain("@XmlElementRefs");
@@ -106,6 +108,9 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
             // Individual fields should exist (Time shows up as element name in
             // the collision, along with Note).
             assertThat(names).anyMatch(n -> n.contains("time") || n.contains("note"));
+
+            // Verify that time in TimedDerived is String (not List) to override TimedBase.time
+            assertThat(clazz.getDeclaredField("time").getType()).isEqualTo(String.class);
         });
     }
 
