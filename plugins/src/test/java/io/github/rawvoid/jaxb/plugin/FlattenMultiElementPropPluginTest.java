@@ -59,7 +59,7 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
     void flattensSingleChoiceIntoIndividualFields() throws Exception {
         testExecute(List.of(OPTION), FLIGHT, (source, clazz) -> {
             var names = fieldNames(clazz);
-            assertThat(names).contains("airportCode", "date", "time");
+            assertThat(names).containsExactly("airportCode", "date", "time");
             // No merged annotation should remain.
             assertThat(source).doesNotContain("@XmlElements");
             assertThat(source).doesNotContain("@XmlElementRefs");
