@@ -32,12 +32,12 @@ import java.util.Queue;
  * with {@code @jakarta.annotation.Generated}.
  * <p>
  * Configuration options:
+ * </p>
  * <ul>
  *   <li>{@code -value}: The generator name. Defaults to {@code "JAXB RI v[BuildID]"}.</li>
  *   <li>{@code -comments}: Additional comments. Defaults to none.</li>
  *   <li>{@code -date}: Whether to include the generation date. Defaults to {@code false}.</li>
  * </ul>
- * </p>
  *
  * @author Rawvoid
  */
