@@ -53,8 +53,8 @@ import java.util.regex.Pattern;
 @Option(name = "Xjsr310", description = "Enable JSR-310 date/time API support in generated JAXB classes")
 public class JSR310Plugin extends AbstractPlugin {
 
-    @Option(name = "adapter-package", defaultValue = "io.github.rawvoid.jaxb.adapter",
-        description = "Package name for auto-generated XmlAdapter classes (default: io.github.rawvoid.jaxb.adapter)")
+    @Option(name = "adapter-package",
+        description = "Package name for auto-generated XmlAdapter classes (default: derived from common package of generated classes)")
     String adapterPackage;
 
     @Option(name = "mapping", description = "Define a type mapping rule (XSD type → Java class + adapter)")
@@ -63,6 +63,8 @@ public class JSR310Plugin extends AbstractPlugin {
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
         var defaultXsdTypeMapping = xsdBuiltInTypeToJavaMapping();
+        var targetAdapterPackage = resolveAdapterPackage(outline);
+
         outline.getClasses().forEach(classOutline -> {
             var fieldOutlines = classOutline.getDeclaredFields();
             var jDefinedClass = classOutline.implClass;
@@ -81,7 +83,7 @@ public class JSR310Plugin extends AbstractPlugin {
                 }
                 if (targetType == null) continue;
 
-                applyMapping(jDefinedClass, propertyInfo, targetType, mapping);
+                applyMapping(jDefinedClass, propertyInfo, targetType, mapping, targetAdapterPackage);
             }
         });
         return true;
@@ -135,7 +137,7 @@ public class JSR310Plugin extends AbstractPlugin {
      * @param targetType   the target Java class to map the property to
      * @param mapping      the type mapping configuration to apply
      */
-    public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType, TypeMappingConfig mapping) {
+    public void applyMapping(JDefinedClass beanClass, CPropertyInfo propertyInfo, Class<?> targetType, TypeMappingConfig mapping, String targetAdapterPackage) {
         // Handle fields
         var fieldName = propertyInfo.getName(false);
         var field = beanClass.fields().get(fieldName);
@@ -156,7 +158,7 @@ public class JSR310Plugin extends AbstractPlugin {
             field.annotate(XmlJavaTypeAdapter.class).param("value", mapping.adapterClass);
         } else {
             var adapterClass = generateAdapterClass(beanClass.owner(), targetType,
-                propertyInfo.getSchemaType(), mapping == null ? null : mapping.pattern);
+                propertyInfo.getSchemaType(), mapping == null ? null : mapping.pattern, targetAdapterPackage);
             field.annotate(XmlJavaTypeAdapter.class).param("value", adapterClass);
         }
 
@@ -177,7 +179,7 @@ public class JSR310Plugin extends AbstractPlugin {
         }
     }
 
-    JClass generateAdapterClass(JCodeModel codeModel, Class<?> targetClass, QName schemaType, String pattern) {
+    JClass generateAdapterClass(JCodeModel codeModel, Class<?> targetClass, QName schemaType, String pattern, String targetAdapterPackage) {
         var adapterClassName = targetClass.getSimpleName() + "XmlAdapter";
         if (Integer.class.equals(targetClass) && "gDay".equals(schemaType.getLocalPart())) {
             adapterClassName = "IntegerXmlAdapter_gDay";
@@ -189,7 +191,7 @@ public class JSR310Plugin extends AbstractPlugin {
             var hashCode = Integer.toString(pattern.hashCode(), Character.MAX_RADIX).replace('-', '$');
             adapterClassName += "_" + patternPart + "_" + hashCode;
         }
-        adapterClassName = adapterPackage + "." + adapterClassName;
+        adapterClassName = targetAdapterPackage + "." + adapterClassName;
 
         try {
             var adapterClass = codeModel._class(adapterClassName);
@@ -452,6 +454,48 @@ public class JSR310Plugin extends AbstractPlugin {
         mapping.put(new QName(namespaceURI, "gDay"), Integer.class); // ---DD → Integer (day only); plugin auto-generates XmlAdapter for "---DD" format
         mapping.put(new QName(namespaceURI, "gMonth"), Month.class); // --MM → Month (best available match)
         return mapping;
+    }
+
+    /**
+     * Resolves the target package for generated adapter classes.
+     * Uses explicit {@link #adapterPackage} if configured; otherwise derives the longest
+     * common package prefix from all generated classes in the outline.
+     */
+    String resolveAdapterPackage(Outline outline) {
+        if (adapterPackage != null && !adapterPackage.isBlank()) {
+            return adapterPackage;
+        }
+
+        var packages = outline.getClasses().stream()
+            .map(c -> c.implClass._package().name())
+            .filter(p -> p != null && !p.isBlank())
+            .distinct()
+            .toList();
+
+        if (packages.isEmpty()) {
+            return "adapter";
+        }
+
+        var commonPackage = findCommonPackage(packages);
+        return commonPackage.isEmpty() ? packages.getFirst() + ".adapter" : commonPackage + ".adapter";
+    }
+
+    static String findCommonPackage(List<String> packages) {
+        var first = packages.getFirst().split("\\.");
+        var commonLength = first.length;
+
+        for (var pkg : packages.subList(1, packages.size())) {
+            var parts = pkg.split("\\.");
+            commonLength = Math.min(commonLength, parts.length);
+            for (int i = 0; i < commonLength; i++) {
+                if (!first[i].equals(parts[i])) {
+                    commonLength = i;
+                    break;
+                }
+            }
+        }
+
+        return String.join(".", java.util.Arrays.copyOf(first, commonLength));
     }
 
     /**
