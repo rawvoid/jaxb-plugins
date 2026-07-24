@@ -382,40 +382,14 @@ public abstract class AbstractPlugin extends Plugin {
     private int parseNestedObjectCollection(Collection<Object> collection, Class<?> elementType,
                                             String groupName, String[] args, int groupIndex) throws Exception {
         // args[groupIndex] is the group marker that triggered this call.
-        var j = groupIndex;
-        var first = true;
-        while (j < args.length) {
-            int contentStart;
-            if (first) {
-                contentStart = j + 1;
-                first = false;
-            } else if (j + 1 >= args.length) {
-                break;
-            } else {
-                var peek = args[j + 1].trim();
-                if (groupName.equals(peek)) {
-                    // Optional repeated group marker (legacy / explicit separator).
-                    j++;
-                    contentStart = j + 1;
-                } else if (matchOption(getOptionFields(elementType), peek) != null) {
-                    // Next element without repeating the group name.
-                    contentStart = j + 1;
-                } else {
-                    break;
-                }
-            }
-
-            if (contentStart >= args.length) {
+        // lastConsumed advances over each element; findNextElementStart skips optional
+        // repeated group markers and accepts either the first item or scheme-C continuations.
+        var lastConsumed = groupIndex;
+        while (true) {
+            var contentStart = findNextElementStart(args, lastConsumed, groupName, elementType);
+            if (contentStart < 0) {
                 break;
             }
-
-            // Empty marker run: -group -group -field=… → skip and continue.
-            if (groupName.equals(args[contentStart].trim())) {
-                j = contentStart;
-                first = false;
-                continue;
-            }
-
             var element = newInstance(elementType);
             // Nested elements never retain collection options: a repeated child option
             // after other fields closes the current element (same-field → next item).
@@ -424,9 +398,29 @@ public abstract class AbstractPlugin extends Plugin {
                 break;
             }
             collection.add(element);
-            j = contentStart + consumed - 1;
+            lastConsumed = contentStart + consumed - 1;
         }
-        return j - groupIndex;
+        return lastConsumed - groupIndex;
+    }
+
+    /**
+     * Finds the start index of the next nested-list element's fields.
+     *
+     * @param afterIndex last arg index belonging to the previous element, or the opening group marker
+     * @return content start index, or {@code -1} if there is no further element
+     */
+    private int findNextElementStart(String[] args, int afterIndex, String groupName, Class<?> elementType) {
+        var i = afterIndex + 1;
+        while (i < args.length && groupName.equals(args[i].trim())) {
+            i++;
+        }
+        if (i >= args.length) {
+            return -1;
+        }
+        if (matchOption(getOptionFields(elementType), args[i]) != null) {
+            return i;
+        }
+        return -1;
     }
 
     private OptionMatch matchOption(List<Field> fields, String rawArg) {
