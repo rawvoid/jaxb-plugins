@@ -20,12 +20,15 @@ Built on a rock-solid foundation with our `AbstractPlugin` class that makes crea
 
 **Nested list options (e.g. `-package-name`, `-mapping`, `-add-to-class`):**
 
-- **Compact** (when the nested type has `@Compact`, e.g. convert-name mappings):
+- **Compact** (when the nested type has `@Compact(formats=…)`, e.g. convert-name mappings):
 
 ```bash
 -package-name=http://example.com/a->com.example.a \
--package-name=http://example.com/b->com.example.b
+-package-name=http://example.com/b->com.example.b \
+-class-name=/(.*)_ID/->$1Id
 ```
+
+  Templates are tried in order (put more specific first). Field-level `@Compact` can override the type default for one option.
 
 - **Structured** — write the **group marker once**, then list as many items as you need:
 
@@ -166,12 +169,12 @@ Take control of how JAXB converts XML names to Java identifiers. Customize class
 
 ```bash
 -Xconvert-name \
-  # compact (token→name):
+  # compact:
   -class-name=originalName->newName \
-  -class-name=AnotherType->RenamedType \
+  -class-name=/(.*)_ID/->$1Id \
   -package-name=http://example.com/a->com.example.a \
   -package-name=http://example.com/b->com.example.b \
-  # structured (regex or multi-field):
+  # structured still works for the same options:
   -variable-name \
   -regex=(.*)_ID \
   -name=$1Id
@@ -254,13 +257,14 @@ Take control of XML namespace to Java package mappings. Define custom mappings a
 
 ```bash
 -Xnamespace \
-  -mapping \                           # group once
+  # compact (prefix optional via second template):
+  -mapping=namespaceURI->java.package.name \
+  -mapping=namespaceURI->java.package.name:xmlPrefix \
+  # structured:
+  -mapping \
   -ns=namespaceURI \
   -package=java.package.name \
-  -prefix=xmlPrefix \
-  -ns=anotherNamespaceURI \            # same field → next mapping item
-  -package=com.example.other \
-  -prefix=other
+  -prefix=xmlPrefix
 ```
 
 ---
@@ -400,7 +404,8 @@ Take control of XML namespace prefixes in generated @XmlSchema annotations. Defi
 # Package-specific configuration
 -Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex
 
-# Multiple namespaces for a package (one -xmlns; repeated -ns starts the next item)
+# Multiple namespaces for a package (compact or structured)
+-Xns-prefix -config -package=com\.example\.* -xmlns=http://example.com->ex -xmlns=http://test.com->tst
 -Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex -ns=http://test.com -prefix=tst
 
 # Multiple packages (one -config; repeated -package starts the next item)

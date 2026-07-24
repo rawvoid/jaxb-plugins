@@ -87,7 +87,7 @@ Simplest real examples: `RemoveGetterPlugin`, `RemoveSetterPlugin`.
 | `String`, numbers, `Class`, `Pattern` | `-name=value`                   | Built-in text parsers                             |
 | `List<T>` of scalars                  | repeat `-name=value`            | Repeatable; may interleave with other root options |
 | Nested static class / `List<Nested>`  | `-group` then nested `-child=…` | Group marker once; repeated child field starts next item; nested class needs no-arg ctor + `@Option` fields |
-| Nested type with `@Compact(format)`   | `-group={a}->{b}`               | Auto `TextParser`; structured form still works; Phase 1 single template |
+| Nested type / list field `@Compact(formats=…)` | `-group={a}->{b}`        | Auto `TextParser`; try templates in order; field-level overrides type; structured form still works |
 
 Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `delimiter` (default `=`), `prefix` (default `-`).
 
