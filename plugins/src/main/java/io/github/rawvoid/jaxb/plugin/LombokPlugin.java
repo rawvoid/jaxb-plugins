@@ -30,13 +30,7 @@ import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 
 /**
@@ -75,7 +69,9 @@ import java.util.regex.Pattern;
 @Option(name = "Xlombok", description = "Add Lombok annotations to generated classes and optionally remove getters/setters")
 public class LombokPlugin extends AbstractPlugin {
 
-    /** Fully-qualified names of Lombok annotations (distinct from CLI option fields like {@code builder}). */
+    /**
+     * Fully-qualified names of Lombok annotations (distinct from CLI option fields like {@code builder}).
+     */
     private static final String LOMBOK_DATA = "lombok.Data";
     private static final String LOMBOK_EQUALS_AND_HASH_CODE = "lombok.EqualsAndHashCode";
     private static final String LOMBOK_BUILDER = "lombok.Builder";
@@ -83,34 +79,121 @@ public class LombokPlugin extends AbstractPlugin {
     private static final String LOMBOK_SINGULAR = "lombok.Singular";
     private static final String LOMBOK_NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
     private static final String LOMBOK_ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
-
+    private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
     @Option(name = "anno", description = "Lombok annotation to add (repeatable). Defaults to @lombok.Data when omitted")
     List<XAnnotation<?>> annotations;
-
     @Option(name = "regex", description = "Regex to match fully-qualified class names")
     List<Pattern> patterns;
-
     @Option(name = "remove-getter", defaultValue = "true",
         description = "Remove generated getter methods (default: true)")
     Boolean removeGetter;
-
     @Option(name = "remove-setter", defaultValue = "true",
         description = "Remove generated setter methods (default: true)")
     Boolean removeSetter;
-
     @Option(name = "builder", defaultValue = "false",
         description = "Smart builders: @Builder or @SuperBuilder by inheritance; @Singular on collections (exclusive with -super-builder)")
     Boolean builder;
-
     @Option(name = "super-builder", defaultValue = "false",
         description = "Add @SuperBuilder(toBuilder=true) on every matched class; @Singular on collections (exclusive with -builder)")
     Boolean superBuilder;
 
-    private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
-
     public LombokPlugin() {
         registerTextParser(XAnnotation.class, (optionName, text) ->
             XAnnotationParser.INSTANCE.parse(text.toString()));
+    }
+
+    /**
+     * Full names of generated classes that should receive {@code @SuperBuilder}.
+     * <ul>
+     *   <li>Any type whose superclass is not {@code Object} (this-round, episode, or external)</li>
+     *   <li>Any type that is the generated superclass of another type in this outline
+     *       (so abstract bases in a hierarchy get SuperBuilder too)</li>
+     * </ul>
+     */
+    static Set<String> collectSuperBuilderClassNames(Outline outline) {
+        var generated = new LinkedHashMap<String, JDefinedClass>();
+        for (var classOutline : outline.getClasses()) {
+            generated.put(classOutline.implClass.fullName(), classOutline.implClass);
+        }
+
+        var result = new LinkedHashSet<String>();
+        for (var implClass : generated.values()) {
+            // Subclass of anything but Object → SuperBuilder (covers external / episode parents).
+            if (hasNonObjectSuperclass(implClass)) {
+                result.add(implClass.fullName());
+            }
+            // This-round parent of a generated child → SuperBuilder on the parent as well.
+            var superClass = implClass._extends();
+            if (superClass instanceof JDefinedClass parentDef
+                && generated.containsKey(parentDef.fullName())) {
+                result.add(parentDef.fullName());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * JAXB needs a no-arg ctor; AllArgs only when there are fields (else it duplicates NoArgs).
+     * Abstract SuperBuilder bases still get NoArgs so subclasses can chain.
+     */
+    private static void addBuilderConstructors(List<XAnnotation<?>> resolved, JDefinedClass implClass) {
+        addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
+        if (!implClass.isAbstract() && !implClass.fields().isEmpty()) {
+            addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
+        }
+    }
+
+    /**
+     * {@code Collection} or {@code Map} (including subtypes such as List/Set/SortedMap).
+     * Simpler than a fixed FQCN allow-list; matches typical XJC field types.
+     */
+    static boolean isSingularCollectionField(JDefinedClass implClass, JFieldVar field) {
+        if (!(field.type().erasure() instanceof JClass erasure)) {
+            return false;
+        }
+        var cm = implClass.owner();
+        return cm.ref(Collection.class).isAssignableFrom(erasure)
+            || cm.ref(Map.class).isAssignableFrom(erasure);
+    }
+
+    private static boolean hasAnnotation(JFieldVar field, String fqcn) {
+        for (var annotation : field.annotations()) {
+            if (fqcn.equals(annotation.getAnnotationClass().fullName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void addIfAbsent(List<XAnnotation<?>> resolved, String fqcn, String source) {
+        if (!containsAnnotation(resolved, fqcn)) {
+            resolved.add(parseAnnotation(source));
+        }
+    }
+
+    private static boolean hasData(List<XAnnotation<?>> resolved) {
+        return containsAnnotation(resolved, LOMBOK_DATA);
+    }
+
+    private static boolean containsAnnotation(List<XAnnotation<?>> resolved, String fqcn) {
+        return resolved.stream().anyMatch(a -> fqcn.equals(a.getAnnotationClass().getName()));
+    }
+
+    /**
+     * True when the class extends something other than {@code java.lang.Object}.
+     * Parent may be a same-round {@link JDefinedClass} or any external/episode {@code JClass}.
+     */
+    private static boolean hasNonObjectSuperclass(JDefinedClass implClass) {
+        var superClass = implClass._extends();
+        return superClass != null && !Object.class.getName().equals(superClass.fullName());
+    }
+
+    private static XAnnotation<?> parseAnnotation(String source) {
+        try {
+            return XAnnotationParser.INSTANCE.parse(source);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to parse annotation: " + source, e);
+        }
     }
 
     @Override
@@ -156,36 +239,6 @@ public class LombokPlugin extends AbstractPlugin {
             return true;
         }
         return patterns.stream().anyMatch(pattern -> pattern.matcher(className).matches());
-    }
-
-    /**
-     * Full names of generated classes that should receive {@code @SuperBuilder}.
-     * <ul>
-     *   <li>Any type whose superclass is not {@code Object} (this-round, episode, or external)</li>
-     *   <li>Any type that is the generated superclass of another type in this outline
-     *       (so abstract bases in a hierarchy get SuperBuilder too)</li>
-     * </ul>
-     */
-    static Set<String> collectSuperBuilderClassNames(Outline outline) {
-        var generated = new LinkedHashMap<String, JDefinedClass>();
-        for (var classOutline : outline.getClasses()) {
-            generated.put(classOutline.implClass.fullName(), classOutline.implClass);
-        }
-
-        var result = new LinkedHashSet<String>();
-        for (var implClass : generated.values()) {
-            // Subclass of anything but Object → SuperBuilder (covers external / episode parents).
-            if (hasNonObjectSuperclass(implClass)) {
-                result.add(implClass.fullName());
-            }
-            // This-round parent of a generated child → SuperBuilder on the parent as well.
-            var superClass = implClass._extends();
-            if (superClass instanceof JDefinedClass parentDef
-                && generated.containsKey(parentDef.fullName())) {
-                result.add(parentDef.fullName());
-            }
-        }
-        return result;
     }
 
     /**
@@ -257,73 +310,9 @@ public class LombokPlugin extends AbstractPlugin {
         }
     }
 
-    /**
-     * JAXB needs a no-arg ctor; AllArgs only when there are fields (else it duplicates NoArgs).
-     * Abstract SuperBuilder bases still get NoArgs so subclasses can chain.
-     */
-    private static void addBuilderConstructors(List<XAnnotation<?>> resolved, JDefinedClass implClass) {
-        addIfAbsent(resolved, LOMBOK_NO_ARGS_CONSTRUCTOR, "@lombok.NoArgsConstructor");
-        if (!implClass.isAbstract() && !implClass.fields().isEmpty()) {
-            addIfAbsent(resolved, LOMBOK_ALL_ARGS_CONSTRUCTOR, "@lombok.AllArgsConstructor");
-        }
-    }
-
-    /**
-     * {@code Collection} or {@code Map} (including subtypes such as List/Set/SortedMap).
-     * Simpler than a fixed FQCN allow-list; matches typical XJC field types.
-     */
-    static boolean isSingularCollectionField(JDefinedClass implClass, JFieldVar field) {
-        if (!(field.type().erasure() instanceof JClass erasure)) {
-            return false;
-        }
-        var cm = implClass.owner();
-        return cm.ref(Collection.class).isAssignableFrom(erasure)
-            || cm.ref(Map.class).isAssignableFrom(erasure);
-    }
-
-    private static boolean hasAnnotation(JFieldVar field, String fqcn) {
-        for (var annotation : field.annotations()) {
-            if (fqcn.equals(annotation.getAnnotationClass().fullName())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private void applyAnnotations(JDefinedClass implClass, String className, List<XAnnotation<?>> resolved) {
         var config = new AnnotatePlugin.AddConfig();
         config.xAnnotations = resolved;
         annotatePlugin.addAnnotation(implClass, className, List.of(config));
-    }
-
-    private static void addIfAbsent(List<XAnnotation<?>> resolved, String fqcn, String source) {
-        if (!containsAnnotation(resolved, fqcn)) {
-            resolved.add(parseAnnotation(source));
-        }
-    }
-
-    private static boolean hasData(List<XAnnotation<?>> resolved) {
-        return containsAnnotation(resolved, LOMBOK_DATA);
-    }
-
-    private static boolean containsAnnotation(List<XAnnotation<?>> resolved, String fqcn) {
-        return resolved.stream().anyMatch(a -> fqcn.equals(a.getAnnotationClass().getName()));
-    }
-
-    /**
-     * True when the class extends something other than {@code java.lang.Object}.
-     * Parent may be a same-round {@link JDefinedClass} or any external/episode {@code JClass}.
-     */
-    private static boolean hasNonObjectSuperclass(JDefinedClass implClass) {
-        var superClass = implClass._extends();
-        return superClass != null && !Object.class.getName().equals(superClass.fullName());
-    }
-
-    private static XAnnotation<?> parseAnnotation(String source) {
-        try {
-            return XAnnotationParser.INSTANCE.parse(source);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to parse annotation: " + source, e);
-        }
     }
 }

@@ -31,7 +31,10 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import javax.xml.namespace.QName;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
@@ -65,38 +68,34 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
 public class ElementWrapperPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(ElementWrapperPlugin.class);
-
-    @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
-    Boolean removeWrapperClass;
-
     /**
      * Captured in postProcessModel; used in run to place {@link XmlElementWrapper}.
      */
     private final List<FlattenedField> flattenedFields = new ArrayList<>();
-
-    private record FlattenedField(
-        CClassInfo owner,
-        String propertyName,
-        QName wrapperName,
-        boolean wrapperNillable,
-        boolean wrapperRequired
-    ) {
-    }
+    @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
+    Boolean removeWrapperClass;
 
     /**
-     * Resolved outer property that points at a pure wrapper shell.
-     *
-     * @param orphanElementInfo local {@link CElementInfo} synthesized for nillable reference
-     *                          binding; removed after a successful flatten, or {@code null}
+     * Reads {@code nillable} from the original XSD element particle when available.
      */
-    private record ResolvedWrapperOuter(
-        CClassInfo wrapper,
-        CElementPropertyInfo inner,
-        QName wrapperName,
-        boolean wrapperNillable,
-        boolean wrapperRequired,
-        CElementInfo orphanElementInfo
-    ) {
+    private static boolean isSchemaNillable(CPropertyInfo property) {
+        var component = property.getSchemaComponent();
+        if (component instanceof XSParticle particle
+            && particle.getTerm() instanceof XSElementDecl elementDecl) {
+            return elementDecl.isNillable();
+        }
+        return false;
+    }
+
+    private static boolean propertyRefsTarget(Iterable<CPropertyInfo> properties, CClassInfo target) {
+        for (var property : properties) {
+            for (var ref : property.ref()) {
+                if (ref == target) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override
@@ -299,18 +298,6 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         );
     }
 
-    /**
-     * Reads {@code nillable} from the original XSD element particle when available.
-     */
-    private static boolean isSchemaNillable(CPropertyInfo property) {
-        var component = property.getSchemaComponent();
-        if (component instanceof XSParticle particle
-            && particle.getTerm() instanceof XSElementDecl elementDecl) {
-            return elementDecl.isNillable();
-        }
-        return false;
-    }
-
     private CElementPropertyInfo createFlattenedElementProperty(
         CPropertyInfo outer,
         CElementPropertyInfo inner
@@ -379,7 +366,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
         var properties = owner.getProperties();
         // 1) Append + setParent. Outer remains at `index` until this is confirmed.
-        int sizeBefore = properties.size();
+        var sizeBefore = properties.size();
         owner.addProperty(replacement);
         if (properties.size() != sizeBefore + 1 || properties.getLast() != replacement) {
             // addProperty no-op'd — model unchanged.
@@ -467,17 +454,6 @@ public class ElementWrapperPlugin extends AbstractPlugin {
         return false;
     }
 
-    private static boolean propertyRefsTarget(Iterable<CPropertyInfo> properties, CClassInfo target) {
-        for (var property : properties) {
-            for (var ref : property.ref()) {
-                if (ref == target) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private void annotateXmlElementWrapper(Outline outline, FlattenedField flattened) {
         var classOutline = outline.getClazz(flattened.owner());
         var field = classOutline.implClass.fields().get(flattened.propertyName());
@@ -558,5 +534,30 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
         return (formDefault == XmlNsForm.QUALIFIED && !generatedNS.equals(enclosingTypeNS))
             || (formDefault == XmlNsForm.UNQUALIFIED && !generatedNS.isEmpty());
+    }
+
+    private record FlattenedField(
+        CClassInfo owner,
+        String propertyName,
+        QName wrapperName,
+        boolean wrapperNillable,
+        boolean wrapperRequired
+    ) {
+    }
+
+    /**
+     * Resolved outer property that points at a pure wrapper shell.
+     *
+     * @param orphanElementInfo local {@link CElementInfo} synthesized for nillable reference
+     *                          binding; removed after a successful flatten, or {@code null}
+     */
+    private record ResolvedWrapperOuter(
+        CClassInfo wrapper,
+        CElementPropertyInfo inner,
+        QName wrapperName,
+        boolean wrapperNillable,
+        boolean wrapperRequired,
+        CElementInfo orphanElementInfo
+    ) {
     }
 }

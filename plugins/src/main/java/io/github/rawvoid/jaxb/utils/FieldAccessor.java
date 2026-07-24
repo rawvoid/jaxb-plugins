@@ -21,7 +21,7 @@ package io.github.rawvoid.jaxb.utils;
  */
 public interface FieldAccessor<T, V> {
 
-     void setValue(T instance, V value);
+    void setValue(T instance, V value);
 
-     V getValue(T instance);
+    V getValue(T instance);
 }

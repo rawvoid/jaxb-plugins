@@ -39,99 +39,82 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.*;
  */
 public final class ModelUtils {
 
-    private ModelUtils() {
-    }
-
     /**
      * Reflection field for accessing the abstract flag in CElement classes.
      */
     public static final Field ABSTRACT_FIELD = getField("com.sun.tools.xjc.model.AbstractCElement", "isAbstract");
-
     /**
      * Reflection field for accessing the base class of a CClassInfo.
      */
     public static final Field BASE_CLASS_FIELD = getField(CClassInfo.class, "baseClass");
-
     /**
      * Reflection field for accessing the first subclass of a CClassInfo.
      */
     public static final Field FIRST_SUBCLASS_FIELD = getField(CClassInfo.class, "firstSubclass");
-
     /**
      * Reflection field for accessing the next sibling in the subclass linked list.
      */
     public static final Field NEXT_SIBLING_FIELD = getField(CClassInfo.class, "nextSibling");
-
     /**
      * Reflection field for accessing the parent element of a CClassInfo.
      */
     public static final Field CCLASSINFO_PARENT_FIELD = getField(CClassInfo.class, "parent");
-
     /**
      * Reflection field for accessing the short name of a {@link CClassInfo}.
      */
     public static final Field CCLASSINFO_SHORTNAME_FIELD = getField(CClassInfo.class, "shortName");
-
     /**
      * Reflection field for accessing the parent container of a {@link CEnumLeafInfo}.
      */
     public static final Field CENUMLEAFINFO_PARENT_FIELD = getField(CEnumLeafInfo.class, "parent");
-
     /**
      * Reflection field for accessing the short name of a {@link CEnumLeafInfo}.
      */
     public static final Field CENUMLEAFINFO_SHORTNAME_FIELD = getField(CEnumLeafInfo.class, "shortName");
-
     /**
      * Reflection field for accessing the parent of CElementInfo.
      */
     public static final Field CELEMENTINFO_PARENT_FIELD = getField(CElementInfo.class, "parent");
-
     /**
      * Reflection field for accessing the generated class name of a {@link CElementInfo}.
      */
     public static final Field CELEMENTINFO_CLASSNAME_FIELD = getField(CElementInfo.class, "className");
-
     /**
      * Reflection field for accessing the element mappings in Model.
      */
     public static final Field MODEL_ELEMENT_MAPPINGS_FIELD = getField(Model.class, "elementMappings");
-
     /**
      * Reflection field for accessing the parent of CPropertyInfo.
      */
     public static final Field CPROPERTYINFO_PARENT_FIELD = getField(CPropertyInfo.class, "parent");
-
     /**
      * Reflection field for accessing the type field in CSingleTypePropertyInfo.
      */
     public static final Field TYPE_FIELD = getField("com.sun.tools.xjc.model.CSingleTypePropertyInfo", "type");
-
     /**
      * Reflection field for accessing the schema type field in CSingleTypePropertyInfo.
      */
     public static final Field SCHEMA_TYPE_FIELD = getField("com.sun.tools.xjc.model.CSingleTypePropertyInfo", "schemaType");
-
     /**
      * Reflection method for accessing the needsExplicitTypeName method in CPropertyInfo.
      */
     public static final Method NEEDS_EXPLICIT_TYPE_NAME_METHOD = getMethod(CPropertyInfo.class, "needsExplicitTypeName", TypeUse.class, QName.class);
-
     /**
      * Reflection field for accessing the types list in CElementPropertyInfo.
      */
     public static final Field ELEMENT_TYPES_FIELD = getField(CElementPropertyInfo.class, "types");
-
     /**
      * Reflection field for accessing the elements set in CReferencePropertyInfo.
      */
     public static final Field REFERENCE_ELEMENTS_FIELD = getField(CReferencePropertyInfo.class, "elements");
-
     /**
      * Reflection constructor for creating TypeUseImpl instances.
      */
     public static final Constructor<?> TYPE_USE_CONSTRUCTOR = getConstructor("com.sun.tools.xjc.model.TypeUseImpl",
         CNonElement.class, boolean.class, ID.class, MimeType.class, CAdapter.class);
+
+    private ModelUtils() {
+    }
 
     /**
      * Groups all classes in the model by their owning package.
@@ -261,6 +244,7 @@ public final class ModelUtils {
      * Replaces all references to one class with references to another class throughout the model.
      * Updates base class references, property types, and element references.
      * <p>
+     *
      * @param model the JAXB model to update
      * @param from  the class to be replaced
      * @param to    the class to replace with

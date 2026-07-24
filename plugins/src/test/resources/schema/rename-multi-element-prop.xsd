@@ -23,8 +23,8 @@
   - Base + extension both declare Time (+ Note) → multi-member rest → items
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/rename-multi-element-prop"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/rename-multi-element-prop"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/rename-multi-element-prop"
            elementFormDefault="qualified">
 
     <!-- One unbounded choice → long …Or… property name without the plugin. -->

@@ -21,26 +21,26 @@ Actionable workflow for adding or changing plugins under `plugins/`. Prefer exis
 
 ## Layout (where things live)
 
-| Piece | Path |
-|-------|------|
-| Plugin sources | `plugins/src/main/java/io/github/rawvoid/jaxb/plugin/` |
-| Utils | `plugins/src/main/java/io/github/rawvoid/jaxb/utils/` |
-| SPI | `plugins/src/main/resources/META-INF/services/com.sun.tools.xjc.Plugin` |
-| Tests | `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/` |
-| Schemas | `plugins/src/test/resources/schema/` |
-| Test base | `plugins/src/test/java/io/github/rawvoid/jaxb/AbstractXJCMojoTestCase.java` |
+| Piece          | Path                                                                        |
+|----------------|-----------------------------------------------------------------------------|
+| Plugin sources | `plugins/src/main/java/io/github/rawvoid/jaxb/plugin/`                      |
+| Utils          | `plugins/src/main/java/io/github/rawvoid/jaxb/utils/`                       |
+| SPI            | `plugins/src/main/resources/META-INF/services/com.sun.tools.xjc.Plugin`     |
+| Tests          | `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/`                      |
+| Schemas        | `plugins/src/test/resources/schema/`                                        |
+| Test base      | `plugins/src/test/java/io/github/rawvoid/jaxb/AbstractXJCMojoTestCase.java` |
 
 ## Step 1 — Choose the extension point
 
 Use the **earliest correct** hook. Do not rewrite CodeModel for problems that belong in the model phase.
 
-| Need | Hook | Reference |
-|------|------|-----------|
-| Parse CLI / cross-field validation / install converters | `@Option` fields + optional `postParseArgument` | `ConvertNamePlugin`, `NamespacePlugin` |
-| Custom name conversion before model build | Set `NameConverter` in `postParseArgument` | `ConvertNamePlugin` |
-| Restructure `C*` model (properties, types, remove classes) before BeanGenerator | `postProcessModel(Model, ErrorHandler)` | `ElementWrapperPlugin` |
-| Mutate generated CodeModel (methods, annotations, adapters, package-info) | `run(Outline, Options, ErrorHandler)` | Most plugins |
-| Model rewrite **and** annotations only XJC never emits | Both `postProcessModel` and `run` | `ElementWrapperPlugin` |
+| Need                                                                            | Hook                                            | Reference                              |
+|---------------------------------------------------------------------------------|-------------------------------------------------|----------------------------------------|
+| Parse CLI / cross-field validation / install converters                         | `@Option` fields + optional `postParseArgument` | `ConvertNamePlugin`, `NamespacePlugin` |
+| Custom name conversion before model build                                       | Set `NameConverter` in `postParseArgument`      | `ConvertNamePlugin`                    |
+| Restructure `C*` model (properties, types, remove classes) before BeanGenerator | `postProcessModel(Model, ErrorHandler)`         | `ElementWrapperPlugin`                 |
+| Mutate generated CodeModel (methods, annotations, adapters, package-info)       | `run(Outline, Options, ErrorHandler)`           | Most plugins                           |
+| Model rewrite **and** annotations only XJC never emits                          | Both `postProcessModel` and `run`               | `ElementWrapperPlugin`                 |
 
 **Rule of thumb:** collection / property-tree shape → model phase; annotations, getters/setters, adapters, package-info → `run`. State intentional limits in English Javadoc (see `ElementWrapperPlugin`).
 
@@ -49,7 +49,9 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 1. Package: `io.github.rawvoid.jaxb.plugin`
 2. Class name: `*Plugin extends AbstractPlugin`
 3. Class-level `@Option(name = "X…", description = "…")`
-   - `name` has **no** leading `-` (default `prefix` is `-` → CLI is `-Xfoo`)
+
+- `name` has **no** leading `-` (default `prefix` is `-` → CLI is `-Xfoo`)
+
 4. Implement `run` and/or other hooks; return `true` on success
 5. Field-level `@Option` for sub-options
 6. Copyright header + style matching neighboring plugins
@@ -58,19 +60,20 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 ### Minimal plugin (template)
 
 ```java
+
 @Option(name = "Xmy-feature", description = "Short user-facing description")
 public class MyFeaturePlugin extends AbstractPlugin {
 
-    @Option(name = "regex", description = "Optional name filter")
-    Pattern regex;
+  @Option(name = "regex", description = "Optional name filter")
+  Pattern regex;
 
-    @Override
-    public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {
-        for (var classOutline : outline.getClasses()) {
-            // mutate classOutline.implClass as needed
-        }
-        return true;
+  @Override
+  public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {
+    for (var classOutline : outline.getClasses()) {
+      // mutate classOutline.implClass as needed
     }
+    return true;
+  }
 }
 ```
 
@@ -78,12 +81,12 @@ Simplest real examples: `RemoveGetterPlugin`, `RemoveSetterPlugin`.
 
 ### Options (`@Option` + `AbstractPlugin`)
 
-| Field type | CLI shape | Notes |
-|------------|-----------|--------|
-| `boolean` / `Boolean` | `-flag` | Presence sets `true` |
-| `String`, numbers, `Class`, `Pattern` | `-name=value` | Built-in text parsers |
-| `List<T>` of scalars | repeat `-name=value` | Repeatable |
-| Nested static class / `List<Nested>` | `-group` then nested `-child=…` | Nested class needs no-arg ctor + `@Option` fields |
+| Field type                            | CLI shape                       | Notes                                             |
+|---------------------------------------|---------------------------------|---------------------------------------------------|
+| `boolean` / `Boolean`                 | `-flag`                         | Presence sets `true`                              |
+| `String`, numbers, `Class`, `Pattern` | `-name=value`                   | Built-in text parsers                             |
+| `List<T>` of scalars                  | repeat `-name=value`            | Repeatable                                        |
+| Nested static class / `List<Nested>`  | `-group` then nested `-child=…` | Nested class needs no-arg ctor + `@Option` fields |
 
 Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `delimiter` (default `=`), `prefix` (default `-`).
 
@@ -93,12 +96,12 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 
 ### Utils (reuse before reinventing)
 
-| Utility | Use when |
-|---------|----------|
-| `ModelUtils` | Model graph, property parents, remove class from model |
-| `OutlineUtils` | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext` |
-| `ReflectUtils` | Localized reflection helpers |
-| `FieldAccessor` / `DefaultFieldAccessor` | Field access patterns on generated types |
+| Utility                                  | Use when                                                               |
+|------------------------------------------|------------------------------------------------------------------------|
+| `ModelUtils`                             | Model graph, property parents, remove class from model                 |
+| `OutlineUtils`                           | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext` |
+| `ReflectUtils`                           | Localized reflection helpers                                           |
+| `FieldAccessor` / `DefaultFieldAccessor` | Field access patterns on generated types                               |
 
 Prefer public XJC / CodeModel APIs. If package-private fields force reflection, keep it localized (static `Field` constants like `PromoteNestedClassPlugin` or utils).
 
@@ -122,16 +125,20 @@ Without this line, XJC never loads the plugin.
 1. Class: `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/<Name>PluginTest`
 2. Extend `AbstractXJCMojoTestCase`
 3. **One dedicated schema per test class** (required):
-   - add `plugins/src/test/resources/schema/<plugin-id>.xsd` with its own `targetNamespace`
-   - in `@BeforeEach`: `schemaIncludes = List.of("<plugin-id>.xsd");`
-   - do **not** share schemas across plugin tests; harness fails if `schemaIncludes` is empty
-   - put contrast types in the same file when a negative/filter case needs them
+
+- add `plugins/src/test/resources/schema/<plugin-id>.xsd` with its own `targetNamespace`
+- in `@BeforeEach`: `schemaIncludes = List.of("<plugin-id>.xsd");`
+- do **not** share schemas across plugin tests; harness fails if `schemaIncludes` is empty
+- put contrast types in the same file when a negative/filter case needs them
+
 4. Pass real CLI args: `testExecute(List.of("-Xmy-feature", …), "package\\.Class", (source, clazz) -> { … })`
 5. Prefer precise FQCN filters over loose `.*Person` patterns
 6. Assert on compiled `Class` and/or generated source string; prefer AssertJ (`assertThat`)
 7. Cover at least:
-   - baseline without plugin when behavior differs
-   - happy path with the real option string shape
+
+- baseline without plugin when behavior differs
+- happy path with the real option string shape
+
 8. Run focused suite:
 
 ```bash
@@ -145,7 +152,7 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 ## Step 5 — Done checklist
 
 - [ ] Class `@Option` + field options complete
-- [ ] Correct lifecycle hook(s)
+- [ ] Correct lifecycle hook (s)
 - [ ] SPI entry added
 - [ ] Focused test (+ schema if needed) green
 - [ ] English Javadoc for non-obvious limits
@@ -155,24 +162,24 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 
 ## Existing plugins (quick map)
 
-| Class | Option | Role |
-|-------|--------|------|
-| `RemoveGetterPlugin` | `-Xremove-getter` | Minimal `run` method removal |
-| `RemoveSetterPlugin` | `-Xremove-setter` | Minimal `run` method removal |
-| `AnnotatePlugin` | `-Xannotate` | Nested configs + custom `TextParser` |
-| `JSR310Plugin` | `-Xjsr310` | Type mapping + adapters on fields |
-| `ConvertNamePlugin` | `-Xconvert-name` | `postParseArgument` + `NameConverter` |
-| `ElementWrapperPlugin` | `-Xelement-wrapper` | Dual-phase: model flatten + wrapper annotation |
+| Class                      | Option                   | Role                                              |
+|----------------------------|--------------------------|---------------------------------------------------|
+| `RemoveGetterPlugin`       | `-Xremove-getter`        | Minimal `run` method removal                      |
+| `RemoveSetterPlugin`       | `-Xremove-setter`        | Minimal `run` method removal                      |
+| `AnnotatePlugin`           | `-Xannotate`             | Nested configs + custom `TextParser`              |
+| `JSR310Plugin`             | `-Xjsr310`               | Type mapping + adapters on fields                 |
+| `ConvertNamePlugin`        | `-Xconvert-name`         | `postParseArgument` + `NameConverter`             |
+| `ElementWrapperPlugin`     | `-Xelement-wrapper`      | Dual-phase: model flatten + wrapper annotation    |
 | `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
-| `NsPrefixPlugin` | `-Xns-prefix` | Nested list configs on `@XmlSchema` |
-| `NamespacePlugin` | `-Xnamespace` | Custom namespace package/prefix mappings |
+| `NsPrefixPlugin`           | `-Xns-prefix`            | Nested list configs on `@XmlSchema`               |
+| `NamespacePlugin`          | `-Xnamespace`            | Custom namespace package/prefix mappings          |
 
 Framework types: `AbstractPlugin`, `Option`, `TextParser`.
 
 ## Workflow for the agent
 
 1. Clarify the desired generated behavior and CLI shape with the user if ambiguous.
-2. Pick lifecycle hook(s) using the table above.
+2. Pick lifecycle hook (s) using the table above.
 3. Implement plugin + SPI.
 4. Add/adjust tests and schema fixtures.
 5. Run the smallest relevant Maven test.

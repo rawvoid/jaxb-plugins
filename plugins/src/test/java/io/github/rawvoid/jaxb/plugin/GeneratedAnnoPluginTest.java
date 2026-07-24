@@ -40,6 +40,11 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
 
     private final String optionCmd = optionCommand(GeneratedAnnoPlugin.class);
 
+    private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
+        var option = pluginClass.getAnnotation(Option.class);
+        return option.prefix() + option.name();
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("generated-anno.xsd");
@@ -153,10 +158,5 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     private String getPackageInfoSource() throws IOException {
         var path = generatedDirectory.resolve(PACKAGE_NAME.replace('.', '/') + "/package-info.java");
         return Files.readString(path);
-    }
-
-    private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
-        var option = pluginClass.getAnnotation(Option.class);
-        return option.prefix() + option.name();
     }
 }

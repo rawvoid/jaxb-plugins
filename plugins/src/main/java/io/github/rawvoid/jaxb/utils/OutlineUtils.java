@@ -66,9 +66,9 @@ public final class OutlineUtils {
      * {@link ClassOutline#getDeclaredFields() declared} properties are considered.
      * </p>
      *
-     * @param classOutline   target class outline
-     * @param removeGetters  remove property getters when true
-     * @param removeSetters  remove property setters when true
+     * @param classOutline  target class outline
+     * @param removeGetters remove property getters when true
+     * @param removeSetters remove property setters when true
      */
     public static void removePropertyAccessors(ClassOutline classOutline, boolean removeGetters, boolean removeSetters) {
         if (!removeGetters && !removeSetters) {
@@ -93,13 +93,6 @@ public final class OutlineUtils {
             }
             return false;
         });
-    }
-
-    /**
-     * XJC property accessor name seeds and whether the property is multi-valued
-     * (list or array realization).
-     */
-    private record PropertyAccessors(String seed, boolean collection) {
     }
 
     /**
@@ -136,7 +129,7 @@ public final class OutlineUtils {
             return false;
         }
         var arity = method.params().size();
-        // setX(value) or setX(T[]) 
+        // setX(value) or setX(T[])
         if (arity == 1) {
             return true;
         }
@@ -574,5 +567,12 @@ public final class OutlineUtils {
         } catch (IllegalAccessException e) {
             throw new IllegalStateException("Failed to replace annotation type for " + valueType.fullName(), e);
         }
+    }
+
+    /**
+     * XJC property accessor name seeds and whether the property is multi-valued
+     * (list or array realization).
+     */
+    private record PropertyAccessors(String seed, boolean collection) {
     }
 }

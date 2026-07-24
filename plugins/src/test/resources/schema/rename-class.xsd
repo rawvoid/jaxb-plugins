@@ -16,9 +16,9 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/rename"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/rename"
            xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/rename"
            jaxb:version="3.0"
            elementFormDefault="qualified">
 

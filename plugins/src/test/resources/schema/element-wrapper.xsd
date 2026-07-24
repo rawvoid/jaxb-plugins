@@ -24,8 +24,8 @@
   - List-of-wrapper-shells is flattened once only (no recursive unwrap)
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/element-wrapper"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/element-wrapper"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/element-wrapper"
            elementFormDefault="qualified">
 
     <xs:element name="root" type="tns:Root"/>

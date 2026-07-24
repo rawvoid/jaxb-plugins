@@ -27,14 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CCLASSINFO_PARENT_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
@@ -93,6 +86,38 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 public class PromoteNestedClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(PromoteNestedClassPlugin.class);
+
+    /**
+     * XJC may attach the same {@link com.sun.codemodel.JPackage} through distinct
+     * {@link CClassInfoParent.Package} instances. Normalize to the model cache.
+     */
+    private static CClassInfoParent canonicalParent(Model model, CClassInfoParent parent) {
+        if (parent instanceof CClassInfoParent.Package pkgParent) {
+            return model.getPackage(pkgParent.pkg);
+        }
+        return parent;
+    }
+
+    private static void occupy(Map<CClassInfoParent, Set<String>> occupied, CClassInfoParent parent, String shortName) {
+        occupied.computeIfAbsent(parent, k -> new HashSet<>()).add(normalize(shortName));
+    }
+
+    private static void propose(
+        Map<ProposalKey, List<Move>> proposals,
+        CClassInfoParent target,
+        String shortName,
+        Move move
+    ) {
+        var key = new ProposalKey(target, normalize(shortName));
+        proposals.computeIfAbsent(key, k -> new ArrayList<>()).add(move);
+    }
+
+    /**
+     * Case-insensitive key so collisions match CodeModel / case-folding filesystems.
+     */
+    private static String normalize(String name) {
+        return name.toLowerCase(Locale.ROOT);
+    }
 
     /**
      * Nesting is defined on the model; changing parents here is enough for
@@ -193,40 +218,12 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
         return moved;
     }
 
-    /**
-     * XJC may attach the same {@link com.sun.codemodel.JPackage} through distinct
-     * {@link CClassInfoParent.Package} instances. Normalize to the model cache.
-     */
-    private static CClassInfoParent canonicalParent(Model model, CClassInfoParent parent) {
-        if (parent instanceof CClassInfoParent.Package pkgParent) {
-            return model.getPackage(pkgParent.pkg);
-        }
-        return parent;
-    }
-
-    private static void occupy(Map<CClassInfoParent, Set<String>> occupied, CClassInfoParent parent, String shortName) {
-        occupied.computeIfAbsent(parent, k -> new HashSet<>()).add(normalize(shortName));
-    }
-
-    private static void propose(
-        Map<ProposalKey, List<Move>> proposals,
-        CClassInfoParent target,
-        String shortName,
-        Move move
-    ) {
-        var key = new ProposalKey(target, normalize(shortName));
-        proposals.computeIfAbsent(key, k -> new ArrayList<>()).add(move);
-    }
-
-    /** Case-insensitive key so collisions match CodeModel / case-folding filesystems. */
-    private static String normalize(String name) {
-        return name.toLowerCase(Locale.ROOT);
-    }
-
     private record ProposalKey(CClassInfoParent target, String name) {
     }
 
-    /** One candidate reparent: exactly one of {@link #bean} / {@link #enumInfo} is non-null. */
+    /**
+     * One candidate reparent: exactly one of {@link #bean} / {@link #enumInfo} is non-null.
+     */
     private record Move(CClassInfo bean, CEnumLeafInfo enumInfo, CClassInfoParent target) {
         static Move bean(CClassInfo bean, CClassInfoParent target) {
             return new Move(bean, null, target);

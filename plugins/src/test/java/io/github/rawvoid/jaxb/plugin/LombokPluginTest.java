@@ -39,6 +39,36 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
     private static final String ORDER = PKG + "\\.Order";
     private static final String EMPTY_CHILD = PKG + "\\.EmptyChild";
 
+    private static boolean hasPropertyGetterInSource(String source) {
+        return source.lines().anyMatch(line -> {
+            var trimmed = line.trim();
+            return trimmed.startsWith("public ")
+                && (trimmed.contains(" get") || trimmed.contains(" is"))
+                && trimmed.contains("()")
+                && !trimmed.contains("getClass");
+        });
+    }
+
+    private static boolean hasPropertySetterInSource(String source) {
+        return source.lines().anyMatch(line -> {
+            var trimmed = line.trim();
+            return trimmed.startsWith("public ") && trimmed.contains(" set") && trimmed.contains("(");
+        });
+    }
+
+    private static boolean hasGetter(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredMethods())
+            .anyMatch(method ->
+                (method.getName().startsWith("get") || method.getName().startsWith("is"))
+                    && method.getParameterCount() == 0
+                    && !method.getName().equals("getClass"));
+    }
+
+    private static boolean hasSetter(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredMethods())
+            .anyMatch(method -> method.getName().startsWith("set") && method.getParameterCount() == 1);
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("lombok.xsd");
@@ -191,35 +221,5 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).contains("@Data");
             assertThat(source).doesNotContain("@EqualsAndHashCode");
         });
-    }
-
-    private static boolean hasPropertyGetterInSource(String source) {
-        return source.lines().anyMatch(line -> {
-            var trimmed = line.trim();
-            return trimmed.startsWith("public ")
-                && (trimmed.contains(" get") || trimmed.contains(" is"))
-                && trimmed.contains("()")
-                && !trimmed.contains("getClass");
-        });
-    }
-
-    private static boolean hasPropertySetterInSource(String source) {
-        return source.lines().anyMatch(line -> {
-            var trimmed = line.trim();
-            return trimmed.startsWith("public ") && trimmed.contains(" set") && trimmed.contains("(");
-        });
-    }
-
-    private static boolean hasGetter(Class<?> clazz) {
-        return Arrays.stream(clazz.getDeclaredMethods())
-            .anyMatch(method ->
-                (method.getName().startsWith("get") || method.getName().startsWith("is"))
-                    && method.getParameterCount() == 0
-                    && !method.getName().equals("getClass"));
-    }
-
-    private static boolean hasSetter(Class<?> clazz) {
-        return Arrays.stream(clazz.getDeclaredMethods())
-            .anyMatch(method -> method.getName().startsWith("set") && method.getParameterCount() == 1);
     }
 }

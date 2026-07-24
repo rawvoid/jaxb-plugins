@@ -17,16 +17,8 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
-import com.sun.tools.xjc.model.CClassInfo;
-import com.sun.tools.xjc.model.CCustomizations;
-import com.sun.tools.xjc.model.CElement;
-import com.sun.tools.xjc.model.CElementInfo;
-import com.sun.tools.xjc.model.CElementPropertyInfo;
+import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.model.CElementPropertyInfo.CollectionMode;
-import com.sun.tools.xjc.model.CPropertyInfo;
-import com.sun.tools.xjc.model.CReferencePropertyInfo;
-import com.sun.tools.xjc.model.CTypeRef;
-import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XSElementDecl;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
@@ -34,11 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Flattens multi-element properties into individual single-element properties.
@@ -77,6 +65,40 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
 
     private static final NameConverter NAMES = NameConverter.standard;
 
+    private static boolean isRequired(CPropertyInfo prop) {
+        if (prop instanceof CElementPropertyInfo ep) {
+            return ep.isRequired();
+        }
+        if (prop instanceof CReferencePropertyInfo rp) {
+            return rp.isRequired();
+        }
+        return false;
+    }
+
+    private static boolean isNillable(CElement element, CTypeRef sourceTypeRef) {
+        var schemaComponent = element.getSchemaComponent();
+        if (schemaComponent instanceof XSElementDecl decl) {
+            return decl.isNillable();
+        }
+        if (element instanceof CClassInfo classInfo) {
+            var elementName = classInfo.getElementName();
+            if (elementName != null && classInfo.model != null && classInfo.model.schemaComponent != null) {
+                var elementDecl = classInfo.model.schemaComponent.getElementDecl(
+                    elementName.getNamespaceURI(),
+                    elementName.getLocalPart()
+                );
+                if (elementDecl != null) {
+                    return elementDecl.isNillable();
+                }
+            }
+        }
+        return sourceTypeRef != null && sourceTypeRef.isNillable();
+    }
+
+    private static String normalize(String n) {
+        return n.toLowerCase(Locale.ROOT);
+    }
+
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
         var flattened = 0;
@@ -98,7 +120,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         var count = 0;
 
         // Forward iteration with manual index tracking; the list is mutated in-place.
-        for (int i = 0; i < properties.size(); i++) {
+        for (var i = 0; i < properties.size(); i++) {
             var prop = properties.get(i);
             if (!RenameMultiElementPropPlugin.isMultiElementProperty(prop)) {
                 continue;
@@ -292,36 +314,6 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         return newProp;
     }
 
-    private static boolean isRequired(CPropertyInfo prop) {
-        if (prop instanceof CElementPropertyInfo ep) {
-            return ep.isRequired();
-        }
-        if (prop instanceof CReferencePropertyInfo rp) {
-            return rp.isRequired();
-        }
-        return false;
-    }
-
-    private static boolean isNillable(CElement element, CTypeRef sourceTypeRef) {
-        var schemaComponent = element.getSchemaComponent();
-        if (schemaComponent instanceof XSElementDecl decl) {
-            return decl.isNillable();
-        }
-        if (element instanceof CClassInfo classInfo) {
-            var elementName = classInfo.getElementName();
-            if (elementName != null && classInfo.model != null && classInfo.model.schemaComponent != null) {
-                var elementDecl = classInfo.model.schemaComponent.getElementDecl(
-                    elementName.getNamespaceURI(),
-                    elementName.getLocalPart()
-                );
-                if (elementDecl != null) {
-                    return elementDecl.isNillable();
-                }
-            }
-        }
-        return sourceTypeRef != null && sourceTypeRef.isNillable();
-    }
-
     /**
      * Replaces the property at {@code index} with all {@code replacements},
      * preserving position in the property list.
@@ -336,10 +328,10 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         List<CPropertyInfo> replacements
     ) {
         var properties = owner.getProperties();
-        int sizeBefore = properties.size();
+        var sizeBefore = properties.size();
 
         // 1. Append all replacements via addProperty (triggers setParent).
-        int added = 0;
+        var added = 0;
         for (var replacement : replacements) {
             owner.addProperty(replacement);
             if (properties.size() == sizeBefore + added + 1) {
@@ -362,7 +354,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         // 3. Move the `added` properties from the tail to index.
         //    Since removeLast() retrieves the last added property first, inserting
         //    them successively at `index` naturally restores their original order.
-        for (int j = 0; j < added; j++) {
+        for (var j = 0; j < added; j++) {
             properties.add(index, properties.removeLast());
         }
 
@@ -383,10 +375,6 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         }
         occupied.add(normalize(candidate));
         return candidate;
-    }
-
-    private static String normalize(String n) {
-        return n.toLowerCase(Locale.ROOT);
     }
 
     private Set<String> getPreExistingOccupied(CPropertyInfo original, CClassInfo bean) {
