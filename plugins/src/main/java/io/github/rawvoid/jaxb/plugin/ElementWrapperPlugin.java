@@ -64,7 +64,7 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  *
  * @author Rawvoid
  */
-@Option(name = "Xelement-wrapper")
+@Option(name = "Xelement-wrapper", description = "Flatten single-collection wrapper types into @XmlElementWrapper properties")
 public class ElementWrapperPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(ElementWrapperPlugin.class);
