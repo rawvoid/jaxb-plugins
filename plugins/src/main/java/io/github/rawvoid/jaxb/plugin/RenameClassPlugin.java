@@ -74,8 +74,8 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RenameClassPlugin.class);
 
-    @Option(name = "mapping", description = "Class rename rule (package filter + regex + to)")
-    List<NameMapping> mappings;
+    @Option(name = "rename", description = "Class rename rule (package filter + from pattern + to)")
+    List<RenameConfig> renameConfigs;
 
     /**
      * Collects this bean and its {@link CClassInfo} ancestors that still have a pending rename.
@@ -188,7 +188,7 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
-        if (mappings == null || mappings.isEmpty()) {
+        if (renameConfigs == null || renameConfigs.isEmpty()) {
             return;
         }
 
@@ -366,18 +366,21 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     private String mapName(Candidate candidate) {
-        for (var mapping : mappings) {
-            if (mapping.packageName != null
-                && !Objects.equals(mapping.packageName, candidate.packageName)) {
+        if (renameConfigs == null) {
+            return candidate.shortName;
+        }
+        for (var config : renameConfigs) {
+            if (config.packageName != null
+                && !Objects.equals(config.packageName, candidate.packageName)) {
                 continue;
             }
-            if (mapping.regex == null || mapping.to == null) {
+            if (config.from == null || config.to == null) {
                 continue;
             }
-            if (!mapping.regex.matcher(candidate.shortName).matches()) {
+            if (!config.from.matcher(candidate.shortName).matches()) {
                 continue;
             }
-            var next = candidate.shortName.replaceAll(mapping.regex.pattern(), mapping.to);
+            var next = candidate.shortName.replaceAll(config.from.pattern(), config.to);
             if (!JJavaName.isJavaIdentifier(next)) {
                 log.warn(
                     "Invalid Java class name after rename: '{}' (from {}); keeping original name",
@@ -404,9 +407,14 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * Single rename rule: optional package filter, required short-name regex, target name.
+     * Single rename rule: optional package filter, required short-name pattern, target name.
+     * <p>
+     * Compact CLI (see {@link Compact}): {@code -rename=Person->CustomPerson},
+     * {@code -rename=/(.*)Type/->$1}.
+     * </p>
      */
-    public static class NameMapping {
+    @Compact(formats = {"/{from}/->{to}", "{from}->{to}"})
+    public static class RenameConfig {
 
         /**
          * Optional exact match on the owner package name ({@code getOwnerPackage().name()}).
@@ -418,8 +426,8 @@ public class RenameClassPlugin extends AbstractPlugin {
         /**
          * Matches the type short name; replacement uses {@link #to} via {@link String#replaceAll}.
          */
-        @Option(name = "regex", required = true, description = "Regular expression matching the short class name")
-        Pattern regex;
+        @Option(name = "from", required = true, description = "Regular expression matching the short class name")
+        Pattern from;
 
         /**
          * Target short name (may contain {@code $n} replacement groups).
