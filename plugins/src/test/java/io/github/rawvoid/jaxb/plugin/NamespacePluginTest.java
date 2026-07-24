@@ -260,6 +260,56 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void mappingNestedXmlnsWithPrefix() throws Exception {
+        var args = List.of(
+            "-Xnamespace",
+            "-mapping",
+            "-ns=" + NS,
+            "-package=pkg1",
+            "-prefix=n1",
+            "-xmlns=" + EXTRA_NS + "->ex"
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+            assertThat(prefixFor(clazz, NS)).isEqualTo("n1");
+            assertThat(prefixFor(clazz, EXTRA_NS)).isEqualTo("ex");
+        });
+    }
+
+    @Test
+    void mappingXmlnsListWithoutTopLevelPrefix() throws Exception {
+        var args = List.of(
+            "-Xnamespace",
+            "-mapping",
+            "-ns=" + NS,
+            "-package=pkg1",
+            "-xmlns=" + NS + "->n1",
+            "-xmlns=" + EXTRA_NS + "->ex"
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+            assertThat(prefixFor(clazz, NS)).isEqualTo("n1");
+            assertThat(prefixFor(clazz, EXTRA_NS)).isEqualTo("ex");
+        });
+    }
+
+    @Test
+    void mappingXmlnsListOverridesPrefix() throws Exception {
+        var args = List.of(
+            "-Xnamespace",
+            "-mapping",
+            "-ns=" + NS,
+            "-package=pkg1",
+            "-prefix=first",
+            "-xmlns=" + NS + "->second"
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(xmlNsFor(clazz, NS)).hasSize(1);
+            assertThat(prefixFor(clazz, NS)).isEqualTo("second");
+        });
+    }
+
+    @Test
     void xpathLiteralAndEscapeXmlHelpers() {
         assertThat(NamespacePlugin.xpathLiteral("http://a.com")).isEqualTo("'http://a.com'");
         assertThat(NamespacePlugin.xpathLiteral("a'b")).isEqualTo("\"a'b\"");

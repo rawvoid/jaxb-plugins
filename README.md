@@ -211,12 +211,16 @@ Replaces the former `-Xns-prefix` plugin.
   # Compact package mapping:
   -mapping=namespaceURI->java.package.name \
   -mapping=namespaceURI->java.package.name:xmlPrefix \
-  # Structured package mapping:
+  # Structured package mapping (+ optional xmlns set for that package):
   -mapping \
   -ns=namespaceURI \
   -package=java.package.name \
   -prefix=xmlPrefix \
-  # Prefix-only / multi-xmlns (optional package filter):
+  -xmlns=http://other.example.com->ot \
+  -xmlns \
+  -ns=http://third.example.com \
+  -prefix=th \
+  # Prefix-only / multi-xmlns without package mapping (optional package filter):
   -config \
   -package=com\.example\.* \
   -xmlns=namespaceURI->xmlPrefix \
