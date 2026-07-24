@@ -36,7 +36,7 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 -Xjsr310 \
   -type-mapping \
   -xsd-type=dateTime \
-  -target-class=java.time.OffsetDateTime
+  -target-type=java.time.OffsetDateTime
 ```
 
 #### Command Options
@@ -46,12 +46,12 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
   -adapter-package=package.name \      # Optional: defaults to <common_package>.adapter
   -type-mapping \                      # Group marker
   -xsd-type=xsdType \
-  -target-class=java.time.Class \
+  -target-type=java.time.Class \
   -format=dateFormat \
   -adapter=custom.AdapterClass \
-  -regex=fieldPattern \
+  -field=fieldPattern \
   -xsd-type=anotherType \              # Repeated child field starts next item
-  -target-class=java.time.LocalDate
+  -target-type=java.time.LocalDate
 ```
 
 #### Default Mappings
@@ -360,7 +360,7 @@ xjc schema.xsd \
     -adapter-package=com.example.adapters \
     -type-mapping \
     -xsd-type=dateTime \
-    -target-class=java.time.LocalDateTime \
+    -target-type=java.time.LocalDateTime \
   -Xannotate \
     -add-to-class \
     -anno=@com.fasterxml.jackson.annotation.JsonInclude(JsonInclude.Include.NON_NULL) \

@@ -98,7 +98,7 @@ public class JSR310Plugin extends AbstractPlugin {
                 Class<?> targetType = null;
                 var mapping = findTypeMappingConfig(className, propertyInfo, schemaType);
                 if (mapping != null) {
-                    targetType = mapping.targetClass;
+                    targetType = mapping.targetType;
                 }
                 if (targetType == null) {
                     targetType = defaultXsdTypeMapping.get(schemaType);
@@ -124,8 +124,8 @@ public class JSR310Plugin extends AbstractPlugin {
         return typeMappings.stream()
             .filter(config -> {
                 var type = config.xsdType;
-                var patterns = config.regexPatterns;
-                return (patterns == null || patterns.isEmpty() || patterns.stream().anyMatch(p -> p.matcher(fieldFullName).matches()))
+                var fields = config.fields;
+                return (fields == null || fields.isEmpty() || fields.stream().anyMatch(p -> p.matcher(fieldFullName).matches()))
                     && (type == null || type.isBlank() || (schemaType != null && type.equals(schemaType.getLocalPart())));
             })
             .findFirst()
@@ -549,8 +549,8 @@ public class JSR310Plugin extends AbstractPlugin {
         @Option(name = "xsd-type", description = "XSD built-in datatype name to map (e.g., dateTime, date, gDay)")
         String xsdType;
 
-        @Option(name = "target-class", description = "Target Java class to use (typically from java.time, e.g., java.time.LocalDateTime)")
-        Class<?> targetClass;
+        @Option(name = "target-type", description = "Target Java type to use (typically from java.time, e.g., java.time.LocalDateTime)")
+        Class<?> targetType;
 
         @Option(name = "format", placeholder = "format", description = "DateTimeFormatter pattern for auto-generated XmlAdapter (e.g., yyyy-MM-dd)")
         String format;
@@ -558,8 +558,8 @@ public class JSR310Plugin extends AbstractPlugin {
         @Option(name = "adapter", description = "Custom XmlAdapter class to use instead of auto-generated one")
         Class<? extends XmlAdapter<?, String>> adapterClass;
 
-        @Option(name = "regex", description = "Regular expression to match field names (fully qualified). Can be specified multiple times.")
-        List<Pattern> regexPatterns;
+        @Option(name = "field", description = "Regex to match the fully-qualified field name (BeanClass.field). Can be specified multiple times.")
+        List<Pattern> fields;
 
     }
 }
