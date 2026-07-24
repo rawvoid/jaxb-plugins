@@ -256,7 +256,7 @@ Generates Lombok-annotated beans and strips default XJC getters/setters. Replace
 ```bash
 -Xlombok \
   -anno=@lombok.Data \                 # Repeatable; defaults to @Data
-  -regex=.*Person \                    # Optional class filter
+  -class-name=.*Person \               # Optional class filter
   -remove-getter=true \                # Default: true
   -remove-setter=true \                # Default: true
   -builder                             # Default: false; adds @Builder + @NoArgsConstructor + @AllArgsConstructor
