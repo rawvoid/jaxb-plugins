@@ -87,10 +87,10 @@ Adds, removes, or modifies annotations on generated classes, fields, methods, an
 -Xannotate \
   -add-to-class \
   -anno=@com.example.MyAnnotation \
-  -regex=.*Person \
+  -target=.*Person \
   -add-to-field \
   -anno=@com.fasterxml.jackson.annotation.JsonProperty("value") \
-  -regex=.*name
+  -target=.*name
 ```
 
 #### Command Options
@@ -99,13 +99,13 @@ Adds, removes, or modifies annotations on generated classes, fields, methods, an
 -Xannotate \
   -add-to-class \                      # Target kind: class
   -anno=@AnnotationClass(param="value") \
-  -regex=pattern \
+  -target=pattern \
   -add-to-field \                      # Target kind: field
   -anno=@AnnotationClass(param="value") \
-  -regex=pattern \
+  -target=pattern \
   -remove-from-class|-remove-from-field|-remove-from-method|-remove-from-package \
   -anno=AnnotationClass \
-  -regex=pattern
+  -target=pattern
 ```
 
 ---
@@ -362,7 +362,7 @@ xjc schema.xsd \
     -anno=@com.fasterxml.jackson.annotation.JsonInclude(JsonInclude.Include.NON_NULL) \
     -add-to-field \
     -anno=@com.fasterxml.jackson.annotation.JsonProperty("value") \
-    -regex=.*\.value \
+    -target=.*\.value \
   -Xconvert-name \
     -class-name \
     -regex=(.*)Type \
