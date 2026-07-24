@@ -65,7 +65,7 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     void mapsNamespaceToPackageAndPrefix() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-mapping",
+            "-package-map",
             "-ns=" + NS,
             "-prefix=n1",
             "-package=pkg1"
@@ -82,7 +82,7 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     void mapsNamespaceCompactWithPrefix() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-mapping=" + NS + "->pkg1:n1"
+            "-package-map=" + NS + "->pkg1:n1"
         );
         testExecute(args, "pkg1\\.Item", (source, clazz) -> {
             assertThat(clazz.getPackageName()).isEqualTo("pkg1");
@@ -94,7 +94,7 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     void mapsNamespaceCompactPackageOnly() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-mapping=" + NS + "->pkg1"
+            "-package-map=" + NS + "->pkg1"
         );
         testExecute(args, "pkg1\\.Item", (source, clazz) -> {
             assertThat(clazz.getPackageName()).isEqualTo("pkg1");
@@ -102,10 +102,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configPrefixBasic() throws Exception {
+    void xmlnsRulePrefixBasic() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-xmlns",
             "-ns=" + NS,
             "-prefix=n1"
@@ -116,10 +116,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configPackageFilterMatches() throws Exception {
+    void xmlnsRulePackageFilterMatches() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-package=" + DEFAULT_PKG.replace(".", "\\."),
             "-xmlns",
             "-ns=" + NS,
@@ -132,10 +132,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configPackageFilterMisses() throws Exception {
+    void xmlnsRulePackageFilterMisses() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-package=com\\.example\\.other",
             "-xmlns",
             "-ns=" + NS,
@@ -148,10 +148,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configMultipleNamespacesOnSamePackage() throws Exception {
+    void xmlnsRuleMultipleNamespacesOnSamePackage() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-xmlns",
             "-ns=" + NS,
             "-prefix=n1",
@@ -166,10 +166,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configMultipleNamespacesCompact() throws Exception {
+    void xmlnsRuleMultipleNamespacesCompact() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-xmlns=" + NS + "->n1",
             "-xmlns=" + EXTRA_NS + "->ex"
         );
@@ -189,10 +189,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configUpdatesExistingPrefix() throws Exception {
+    void xmlnsRuleUpdatesExistingPrefix() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-xmlns",
             "-ns=" + NS,
             "-prefix=updated"
@@ -204,16 +204,16 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configMultipleConfigsMergeXmlns() throws Exception {
+    void xmlnsRuleMultipleRulesMergeXmlns() throws Exception {
         var packageRegex = DEFAULT_PKG.replace(".", "\\.");
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-package=" + packageRegex,
             "-xmlns",
             "-ns=" + NS,
             "-prefix=first",
-            "-config",
+            "-xmlns-rule",
             "-package=" + packageRegex,
             "-xmlns",
             "-ns=" + EXTRA_NS,
@@ -226,10 +226,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void configDuplicateNamespaceReplacement() throws Exception {
+    void xmlnsRuleDuplicateNamespaceReplacement() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-config",
+            "-xmlns-rule",
             "-xmlns",
             "-ns=" + NS,
             "-prefix=first",
@@ -244,11 +244,11 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void mappingAndConfigCanCombine() throws Exception {
+    void packageMapAndXmlnsRuleCanCombine() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-mapping=" + NS + "->pkg1:n1",
-            "-config",
+            "-package-map=" + NS + "->pkg1:n1",
+            "-xmlns-rule",
             "-package=pkg1",
             "-xmlns=" + EXTRA_NS + "->ex"
         );
@@ -260,10 +260,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void mappingNestedXmlnsWithPrefix() throws Exception {
+    void packageMapNestedXmlnsWithPrefix() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-mapping",
+            "-package-map",
             "-ns=" + NS,
             "-package=pkg1",
             "-prefix=n1",
@@ -277,10 +277,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void mappingXmlnsListWithoutTopLevelPrefix() throws Exception {
+    void packageMapXmlnsListWithoutTopLevelPrefix() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-mapping",
+            "-package-map",
             "-ns=" + NS,
             "-package=pkg1",
             "-xmlns=" + NS + "->n1",
@@ -294,10 +294,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void mappingXmlnsListOverridesPrefix() throws Exception {
+    void packageMapXmlnsListOverridesPrefix() throws Exception {
         var args = List.of(
             "-Xnamespace",
-            "-mapping",
+            "-package-map",
             "-ns=" + NS,
             "-package=pkg1",
             "-prefix=first",
@@ -321,10 +321,10 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     @Test
     void generateBindingsUsesWildcardSchemaLocation() {
         var plugin = new NamespacePlugin();
-        var mapping = new NamespacePlugin.NamespaceMappingConfig();
-        mapping.namespace = "http://example.com/a&b";
-        mapping.packageName = "com.example.a";
-        plugin.mappings = List.of(mapping);
+        var packageMap = new NamespacePlugin.PackageMapConfig();
+        packageMap.namespace = "http://example.com/a&b";
+        packageMap.packageName = "com.example.a";
+        plugin.packageMaps = List.of(packageMap);
 
         var bindings = plugin.generateBindings();
         assertThat(bindings).contains("schemaLocation=\"*\"");

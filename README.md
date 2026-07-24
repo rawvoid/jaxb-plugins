@@ -198,7 +198,7 @@ Replaces the former `-Xns-prefix` plugin.
 
 ```bash
 -Xnamespace \
-  -mapping \
+  -package-map \
   -ns=http://example.com/schema \
   -package=com.example.schema \
   -prefix=ex
@@ -208,11 +208,11 @@ Replaces the former `-Xns-prefix` plugin.
 
 ```bash
 -Xnamespace \
-  # Compact package mapping:
-  -mapping=namespaceURI->java.package.name \
-  -mapping=namespaceURI->java.package.name:xmlPrefix \
-  # Structured package mapping (+ optional xmlns set for that package):
-  -mapping \
+  # Compact package map:
+  -package-map=namespaceURI->java.package.name \
+  -package-map=namespaceURI->java.package.name:xmlPrefix \
+  # Structured package map (+ optional xmlns set for that package):
+  -package-map \
   -ns=namespaceURI \
   -package=java.package.name \
   -prefix=xmlPrefix \
@@ -220,8 +220,8 @@ Replaces the former `-Xns-prefix` plugin.
   -xmlns \
   -ns=http://third.example.com \
   -prefix=th \
-  # Prefix-only / multi-xmlns without package mapping (optional package filter):
-  -config \
+  # Prefix-only / multi-xmlns without package map (optional package filter):
+  -xmlns-rule \
   -package=com\.example\.* \
   -xmlns=namespaceURI->xmlPrefix \
   -xmlns \
@@ -371,7 +371,7 @@ xjc schema.xsd \
     -regex=(.*)_ID \
     -name=$1Id \
   -Xnamespace \
-    -mapping \
+    -package-map \
     -ns=http://api.example.com \
     -package=com.example.api
 ```

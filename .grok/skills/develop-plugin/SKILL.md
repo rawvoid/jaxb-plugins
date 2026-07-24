@@ -93,7 +93,7 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 
 - Custom parse types: `registerTextParser(Class, TextParser)` or by option name in the constructor (`AnnotatePlugin` + `XAnnotation`).
 - After parse + defaults + required checks: override `postParseArgument(Options, int)` for side effects or multi-field validation.
-- Nested / repeatable configs: `NamespacePlugin` (`List<PackageXmlNsConfig>` / `mapping`), `JSR310Plugin` (`List<TypeMappingConfig>`), `AnnotatePlugin` (add/remove groups).
+- Nested / repeatable configs: `NamespacePlugin` (`List<PackageMapConfig>` / `List<XmlNsRuleConfig>`), `JSR310Plugin` (`List<TypeMappingConfig>`), `AnnotatePlugin` (add/remove groups).
 
 ### Utils (reuse before reinventing)
 

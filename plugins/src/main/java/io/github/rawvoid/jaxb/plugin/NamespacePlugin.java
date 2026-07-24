@@ -39,8 +39,8 @@ import java.util.regex.Pattern;
 /**
  * JAXB plugin that customizes Java package names and XML namespace prefixes for XML namespaces.
  * <p>
- * Package mapping is applied through injected external bindings and does not depend on
- * command-line order of schema files. Prefix rules are applied on generated {@code @XmlSchema}
+ * Package maps are applied through injected external bindings and do not depend on
+ * command-line order of schema files. Xmlns rules are applied on generated {@code @XmlSchema}
  * annotations (including package-filtered multi-namespace rules ported from the former
  * {@code -Xns-prefix} plugin).
  * </p>
@@ -50,19 +50,19 @@ import java.util.regex.Pattern;
  * <pre>
  * {@code
  * // Map namespace to package (optional prefix for that package's own namespace)
- * -Xnamespace -mapping=http://example.com->com.example:ex
- * -Xnamespace -mapping -ns=http://example.com -package=com.example -prefix=ex
+ * -Xnamespace -package-map=http://example.com->com.example:ex
+ * -Xnamespace -package-map -ns=http://example.com -package=com.example -prefix=ex
  *
  * // Map package and declare multiple xmlns entries for that package
- * -Xnamespace -mapping -ns=http://a.com -package=com.a -prefix=a \
+ * -Xnamespace -package-map -ns=http://a.com -package=com.a -prefix=a \
  *   -xmlns=http://b.com->b -xmlns -ns=http://c.com -prefix=c
  *
  * // Prefix-only rules on all packages (or a package regex filter)
- * -Xnamespace -config -xmlns -ns=http://example.com -prefix=ex
- * -Xnamespace -config -package=com\.example\.* -xmlns=http://example.com->ex
+ * -Xnamespace -xmlns-rule -xmlns -ns=http://example.com -prefix=ex
+ * -Xnamespace -xmlns-rule -package=com\.example\.* -xmlns=http://example.com->ex
  *
  * // Multiple xmlns on one package (one -xmlns; repeated -ns starts the next item)
- * -Xnamespace -config -xmlns -ns=http://a.com -prefix=a -ns=http://b.com -prefix=b
+ * -Xnamespace -xmlns-rule -xmlns -ns=http://a.com -prefix=a -ns=http://b.com -prefix=b
  * }
  * </pre>
  *
@@ -73,36 +73,36 @@ public class NamespacePlugin extends AbstractPlugin {
 
     private static final String BINDINGS_SYSTEM_ID = "namespace-plugin-bindings.xml";
 
-    @Option(name = "mapping", description = "Namespace to Java package mapping rule (optional XML prefix)")
-    List<NamespaceMappingConfig> mappings;
+    @Option(name = "package-map", description = "Map an XML target namespace to a Java package (optional XML prefixes)")
+    List<PackageMapConfig> packageMaps;
 
-    @Option(name = "config", description = "Package-scoped XML namespace prefix mapping rule")
-    List<PackageXmlNsConfig> configs;
+    @Option(name = "xmlns-rule", description = "Package-scoped xmlns rule (optional Java package regex filter)")
+    List<XmlNsRuleConfig> xmlnsRules;
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
-        validateMappings();
+        validatePackageMaps();
         injectBindings(opt);
     }
 
-    private void validateMappings() throws BadCommandLineException {
-        if (mappings == null || mappings.isEmpty()) {
+    private void validatePackageMaps() throws BadCommandLineException {
+        if (packageMaps == null || packageMaps.isEmpty()) {
             return;
         }
         var seenNamespaces = new HashSet<String>();
-        for (var mapping : mappings) {
-            if (mapping.namespace == null || mapping.namespace.isBlank()) {
-                throw new BadCommandLineException("Namespace mapping requires a non-blank -ns value");
+        for (var packageMap : packageMaps) {
+            if (packageMap.namespace == null || packageMap.namespace.isBlank()) {
+                throw new BadCommandLineException("Package map requires a non-blank -ns value");
             }
-            if (mapping.packageName == null || mapping.packageName.isBlank()) {
+            if (packageMap.packageName == null || packageMap.packageName.isBlank()) {
                 throw new BadCommandLineException(
-                    "Namespace mapping for '%s' requires -package".formatted(mapping.namespace));
+                    "Package map for '%s' requires -package".formatted(packageMap.namespace));
             }
-            if (!seenNamespaces.add(mapping.namespace)) {
+            if (!seenNamespaces.add(packageMap.namespace)) {
                 throw new BadCommandLineException(
-                    "Duplicate namespace mapping for '%s'".formatted(mapping.namespace));
+                    "Duplicate package map for namespace '%s'".formatted(packageMap.namespace));
             }
-            validateXmlNsConfigs(mapping.xmlNsConfigs, "mapping '%s'".formatted(mapping.namespace));
+            validateXmlNsConfigs(packageMap.xmlNsConfigs, "package-map '%s'".formatted(packageMap.namespace));
         }
     }
 
@@ -144,24 +144,24 @@ public class NamespacePlugin extends AbstractPlugin {
     }
 
     /**
-     * Builds an external binding file for all configured package mappings.
+     * Builds an external binding file for all configured package maps.
      *
-     * @return binding XML, or {@code null} when no package mappings are configured
+     * @return binding XML, or {@code null} when no package maps are configured
      */
     String generateBindings() {
-        if (mappings == null || mappings.isEmpty()) {
+        if (packageMaps == null || packageMaps.isEmpty()) {
             return null;
         }
         var body = new StringBuilder();
-        for (var mapping : mappings) {
-            var node = "/xs:schema[@targetNamespace=%s]".formatted(xpathLiteral(mapping.namespace));
+        for (var packageMap : packageMaps) {
+            var node = "/xs:schema[@targetNamespace=%s]".formatted(xpathLiteral(packageMap.namespace));
             body.append("""
                 <jaxb:bindings schemaLocation="*" node="%s">
                     <jaxb:schemaBindings>
                       <jaxb:package name="%s"/>
                     </jaxb:schemaBindings>
                 </jaxb:bindings>
-                """.formatted(escapeXml(node), escapeXml(mapping.packageName)));
+                """.formatted(escapeXml(node), escapeXml(packageMap.packageName)));
         }
         if (body.isEmpty()) {
             return null;
@@ -177,24 +177,24 @@ public class NamespacePlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        if (mappings != null) {
-            for (var mapping : mappings) {
+        if (packageMaps != null) {
+            for (var packageMap : packageMaps) {
                 for (var packageOutline : outline.getAllPackageContexts()) {
-                    applyMappingXmlns(packageOutline, mapping);
+                    applyPackageMapXmlns(packageOutline, packageMap);
                 }
             }
         }
-        if (configs != null) {
+        if (xmlnsRules != null) {
             for (var packageOutline : outline.getAllPackageContexts()) {
-                processPackageConfig(packageOutline);
+                processXmlNsRule(packageOutline);
             }
         }
         return true;
     }
 
-    private void applyMappingXmlns(PackageOutline packageOutline, NamespaceMappingConfig mapping) {
-        var hasPrefix = mapping.prefix != null;
-        var hasXmlNsList = mapping.xmlNsConfigs != null && !mapping.xmlNsConfigs.isEmpty();
+    private void applyPackageMapXmlns(PackageOutline packageOutline, PackageMapConfig packageMap) {
+        var hasPrefix = packageMap.prefix != null;
+        var hasXmlNsList = packageMap.xmlNsConfigs != null && !packageMap.xmlNsConfigs.isEmpty();
         if (!hasPrefix && !hasXmlNsList) {
             return;
         }
@@ -203,28 +203,28 @@ public class NamespacePlugin extends AbstractPlugin {
             return;
         }
         var packageNamespace = readAnnotationString(xmlSchema, "namespace");
-        if (!Objects.equals(packageNamespace, mapping.namespace)) {
+        if (!Objects.equals(packageNamespace, packageMap.namespace)) {
             return;
         }
         var xmlns = ensureXmlnsArray(xmlSchema);
         if (hasPrefix) {
-            upsertXmlnsEntry(xmlns, mapping.namespace, mapping.prefix);
+            upsertXmlnsEntry(xmlns, packageMap.namespace, packageMap.prefix);
         }
         if (hasXmlNsList) {
-            for (var xmlNsConfig : mapping.xmlNsConfigs) {
+            for (var xmlNsConfig : packageMap.xmlNsConfigs) {
                 upsertXmlnsEntry(xmlns, xmlNsConfig.namespace, xmlNsConfig.prefix);
             }
         }
     }
 
-    private void processPackageConfig(PackageOutline packageOutline) {
+    private void processXmlNsRule(PackageOutline packageOutline) {
         var jPackage = packageOutline._package();
         var packageName = jPackage.name();
-        var matchedConfigs = configs.stream()
-            .filter(config -> config.packageRegex == null || config.packageRegex.matcher(packageName).matches())
-            .filter(config -> config.xmlNsConfigs != null && !config.xmlNsConfigs.isEmpty())
+        var matchedRules = xmlnsRules.stream()
+            .filter(rule -> rule.packageRegex == null || rule.packageRegex.matcher(packageName).matches())
+            .filter(rule -> rule.xmlNsConfigs != null && !rule.xmlNsConfigs.isEmpty())
             .toList();
-        if (matchedConfigs.isEmpty()) {
+        if (matchedRules.isEmpty()) {
             return;
         }
 
@@ -234,8 +234,8 @@ public class NamespacePlugin extends AbstractPlugin {
         }
 
         var xmlns = ensureXmlnsArray(xmlSchema);
-        for (var matchedConfig : matchedConfigs) {
-            for (var xmlNsConfig : matchedConfig.xmlNsConfigs) {
+        for (var matchedRule : matchedRules) {
+            for (var xmlNsConfig : matchedRule.xmlNsConfigs) {
                 upsertXmlnsEntry(xmlns, xmlNsConfig.namespace, xmlNsConfig.prefix);
             }
         }
@@ -319,15 +319,15 @@ public class NamespacePlugin extends AbstractPlugin {
     }
 
     /**
-     * Namespace to Java package mapping, with optional XML prefixes for the mapped package.
+     * Namespace to Java package map, with optional XML prefixes for the mapped package.
      * <p>
-     * Compact: {@code -mapping=http://a.com->com.example.a} or
-     * {@code -mapping=http://a.com->com.example.a:prefix} (more specific template first).
+     * Compact: {@code -package-map=http://a.com->com.example.a} or
+     * {@code -package-map=http://a.com->com.example.a:prefix} (more specific template first).
      * Structured form may nest {@code -xmlns} entries for additional prefixes on the same package.
      * </p>
      */
     @Compact(formats = {"{ns}->{package}:{prefix}", "{ns}->{package}"})
-    public static class NamespaceMappingConfig {
+    public static class PackageMapConfig {
 
         @Option(name = "ns", required = true, description = "XML target namespace URI")
         String namespace;
@@ -338,14 +338,14 @@ public class NamespacePlugin extends AbstractPlugin {
         @Option(name = "prefix", description = "XML namespace prefix written on @XmlSchema for this namespace")
         String prefix;
 
-        @Option(name = "xmlns", description = "Xmlns entries applied to the package produced by this mapping")
+        @Option(name = "xmlns", description = "Xmlns entries applied to the package produced by this map")
         List<XmlNsConfig> xmlNsConfigs;
     }
 
     /**
      * Package-scoped XML namespace prefix rules (optional Java package regex filter).
      */
-    public static class PackageXmlNsConfig {
+    public static class XmlNsRuleConfig {
 
         @Option(name = "package", description = "Java package name regex pattern; omit to match all packages")
         Pattern packageRegex;
