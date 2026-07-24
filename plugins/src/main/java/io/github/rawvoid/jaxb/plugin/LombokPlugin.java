@@ -80,19 +80,25 @@ public class LombokPlugin extends AbstractPlugin {
     private static final String LOMBOK_NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
     private static final String LOMBOK_ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
     private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
+
     @Option(name = "anno", description = "Lombok annotation to add (repeatable). Defaults to @lombok.Data when omitted")
     List<XAnnotation<?>> annotations;
+
     @Option(name = "regex", description = "Regex to match fully-qualified class names")
     List<Pattern> patterns;
+
     @Option(name = "remove-getter", defaultValue = "true",
         description = "Remove generated getter methods (default: true)")
     Boolean removeGetter;
+
     @Option(name = "remove-setter", defaultValue = "true",
         description = "Remove generated setter methods (default: true)")
     Boolean removeSetter;
+
     @Option(name = "builder", defaultValue = "false",
         description = "Smart builders: @Builder or @SuperBuilder by inheritance; @Singular on collections (exclusive with -super-builder)")
     Boolean builder;
+
     @Option(name = "super-builder", defaultValue = "false",
         description = "Add @SuperBuilder(toBuilder=true) on every matched class; @Singular on collections (exclusive with -builder)")
     Boolean superBuilder;

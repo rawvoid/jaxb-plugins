@@ -72,6 +72,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * Captured in postProcessModel; used in run to place {@link XmlElementWrapper}.
      */
     private final List<FlattenedField> flattenedFields = new ArrayList<>();
+
     @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
     Boolean removeWrapperClass;
 

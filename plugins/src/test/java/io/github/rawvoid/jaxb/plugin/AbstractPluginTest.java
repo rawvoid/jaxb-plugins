@@ -267,9 +267,12 @@ class AbstractPluginTest {
         // More specific regex template first.
         @Compact(formats = {"/{regex}/->{name}", "{token}->{name}"})
         private static class Entry {
-            @Option(name = "token") String token;
-            @Option(name = "regex") Pattern regex;
-            @Option(name = "name", required = true) String name;
+            @Option(name = "token")
+            String token;
+            @Option(name = "regex")
+            Pattern regex;
+            @Option(name = "name", required = true)
+            String name;
         }
     }
 
@@ -290,8 +293,10 @@ class AbstractPluginTest {
 
         @Compact(formats = {"{token}->{name}"})
         private static class Pair {
-            @Option(name = "token") String token;
-            @Option(name = "name", required = true) String name;
+            @Option(name = "token")
+            String token;
+            @Option(name = "name", required = true)
+            String name;
         }
     }
 
