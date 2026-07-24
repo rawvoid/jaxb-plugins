@@ -126,6 +126,20 @@ class NsPrefixPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void testMultipleNamespacesCompact() throws Exception {
+        var args = List.of(
+            "-Xns-prefix",
+            "-config",
+            "-xmlns=" + NS + "->n1",
+            "-xmlns=" + EXTRA_NS + "->ex"
+        );
+        testExecute(args, ITEM, (source, clazz) -> {
+            assertThat(prefixFor(clazz, NS)).isEqualTo("n1");
+            assertThat(prefixFor(clazz, EXTRA_NS)).isEqualTo("ex");
+        });
+    }
+
+    @Test
     void testEmptyConfigsIsNoOp() throws Exception {
         var args = List.of("-Xns-prefix");
         testExecute(args, ITEM, (source, clazz) -> {

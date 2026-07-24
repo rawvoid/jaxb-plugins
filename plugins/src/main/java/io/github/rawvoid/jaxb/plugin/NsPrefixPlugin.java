@@ -149,9 +149,10 @@ public class NsPrefixPlugin extends AbstractPlugin {
     /**
      * Configuration class for XML namespace to prefix mappings.
      * <p>
-     * This class defines a single mapping between an XML namespace URI and its prefix.
+     * Compact: {@code -xmlns=http://example.com->ex} (repeatable).
      * </p>
      */
+    @Compact(formats = {"{ns}->{prefix}"})
     public static class XmlNsConfig {
 
         @Option(name = "ns", required = true, description = "XML namespace URI")
