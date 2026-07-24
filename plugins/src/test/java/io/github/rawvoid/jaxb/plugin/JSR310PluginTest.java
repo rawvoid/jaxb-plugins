@@ -89,10 +89,10 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
             "-Xjsr310",
             "-type-mapping",
             "-xsd-type=date",
-            "-target-class=java.time.OffsetDateTime",
+            "-target-type=java.time.OffsetDateTime",
             "-type-mapping",
-            "-regex=.*time",
-            "-target-class=java.time.ZonedDateTime"
+            "-field=.*time",
+            "-target-type=java.time.ZonedDateTime"
         );
         testExecute(args, DATE_TIME_TYPES, (source, clazz) -> {
             assertThat(clazz.getDeclaredField("date").getType()).isEqualTo(OffsetDateTime.class);
@@ -106,7 +106,7 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xjsr310",
             "-type-mapping",
-            "-regex=.*\\.date",
+            "-field=.*\\.date",
             "-format=yyyy/MM/dd"
         );
         testExecute(args, DATE_TIME_TYPES, (source, clazz) -> {
