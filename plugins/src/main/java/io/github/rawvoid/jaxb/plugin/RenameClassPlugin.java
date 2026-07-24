@@ -274,35 +274,49 @@ public class RenameClassPlugin extends AbstractPlugin {
         do {
             changed = false;
             for (var child : candidates) {
-                if (!(child.parent instanceof CClassInfo parentBean)) {
-                    continue;
+                if (revertParentChildClash(child, beans, names, errorHandler)) {
+                    changed = true;
                 }
-                var parent = beans.get(parentBean);
-                if (parent == null) {
-                    continue;
-                }
-                if (!normalize(names.get(child)).equals(normalize(names.get(parent)))) {
-                    continue;
-                }
-                // Prefer undoing the parent's rename; otherwise undo the child's.
-                var undo = isPending(parent, names) ? parent : isPending(child, names) ? child : null;
-                if (undo == null) {
-                    continue;
-                }
-                names.put(undo, undo.shortName);
-                warn(
-                    errorHandler,
-                    undo.locator,
-                    "Parent-child name conflict after rename ('"
-                        + parent.fullName
-                        + "' / '"
-                        + child.fullName
-                        + "'); keeping original name for "
-                        + undo.fullName
-                );
-                changed = true;
             }
         } while (changed);
+    }
+
+    /**
+     * When {@code child} and its parent would share a simple name after rename, reverts one
+     * of them (prefer the parent) and reports a warning.
+     *
+     * @return {@code true} if a rename was reverted
+     */
+    private boolean revertParentChildClash(
+        Candidate child,
+        Map<CClassInfo, Candidate> beans,
+        Map<Candidate, String> names,
+        ErrorHandler errorHandler
+    ) {
+        if (!(child.parent instanceof CClassInfo parentBean)) {
+            return false;
+        }
+        var parent = beans.get(parentBean);
+        if (parent == null || !normalize(names.get(child)).equals(normalize(names.get(parent)))) {
+            return false;
+        }
+        // Prefer undoing the parent's rename; otherwise undo the child's.
+        var undo = isPending(parent, names) ? parent : isPending(child, names) ? child : null;
+        if (undo == null) {
+            return false;
+        }
+        names.put(undo, undo.shortName);
+        warn(
+            errorHandler,
+            undo.locator,
+            "Parent-child name conflict after rename ('"
+                + parent.fullName
+                + "' / '"
+                + child.fullName
+                + "'); keeping original name for "
+                + undo.fullName
+        );
+        return true;
     }
 
     /**
@@ -365,32 +379,34 @@ public class RenameClassPlugin extends AbstractPlugin {
         } while (changed);
     }
 
+    /**
+     * First matching rename rule wins. {@link #renameConfigs} is non-null and non-empty
+     * when this is called from {@link #postProcessModel}.
+     */
     private String mapName(Candidate candidate) {
-        if (renameConfigs == null) {
-            return candidate.shortName;
-        }
         for (var config : renameConfigs) {
-            if (config.packageName != null
-                && !Objects.equals(config.packageName, candidate.packageName)) {
-                continue;
+            if (matches(config, candidate)) {
+                return mapWith(config, candidate);
             }
-            if (config.from == null || config.to == null) {
-                continue;
-            }
-            if (!config.from.matcher(candidate.shortName).matches()) {
-                continue;
-            }
-            var next = candidate.shortName.replaceAll(config.from.pattern(), config.to);
-            if (!JJavaName.isJavaIdentifier(next)) {
-                log.warn(
-                    "Invalid Java class name after rename: '{}' (from {}); keeping original name",
-                    next,
-                    candidate.fullName
-                );
-                return candidate.shortName;
-            }
+        }
+        return candidate.shortName;
+    }
+
+    private static boolean matches(RenameConfig config, Candidate candidate) {
+        return (config.packageName == null || config.packageName.equals(candidate.packageName))
+            && config.from.matcher(candidate.shortName).matches();
+    }
+
+    private static String mapWith(RenameConfig config, Candidate candidate) {
+        var next = candidate.shortName.replaceAll(config.from.pattern(), config.to);
+        if (JJavaName.isJavaIdentifier(next)) {
             return next;
         }
+        log.warn(
+            "Invalid Java class name after rename: '{}' (from {}); keeping original name",
+            next,
+            candidate.fullName
+        );
         return candidate.shortName;
     }
 
