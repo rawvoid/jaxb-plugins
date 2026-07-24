@@ -269,7 +269,7 @@ public class RenameClassPlugin extends AbstractPlugin {
         Map<Candidate, String> names,
         ErrorHandler errorHandler
     ) {
-        Map<CClassInfo, Candidate> beans = beansByClass(candidates);
+        var beans = beansByClass(candidates);
         boolean changed;
         do {
             changed = false;
@@ -323,7 +323,7 @@ public class RenameClassPlugin extends AbstractPlugin {
         Map<Candidate, String> names,
         ErrorHandler errorHandler
     ) {
-        Map<CClassInfo, Candidate> beans = beansByClass(candidates);
+        var beans = beansByClass(candidates);
         if (beans.isEmpty()) {
             return;
         }

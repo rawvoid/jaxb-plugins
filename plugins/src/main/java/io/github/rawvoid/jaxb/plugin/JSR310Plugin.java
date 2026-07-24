@@ -71,7 +71,7 @@ public class JSR310Plugin extends AbstractPlugin {
         for (var pkg : packages.subList(1, packages.size())) {
             var parts = pkg.split("\\.");
             commonLength = Math.min(commonLength, parts.length);
-            for (int i = 0; i < commonLength; i++) {
+            for (var i = 0; i < commonLength; i++) {
                 if (!first[i].equals(parts[i])) {
                     commonLength = i;
                     break;

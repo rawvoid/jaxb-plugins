@@ -366,7 +366,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
         var properties = owner.getProperties();
         // 1) Append + setParent. Outer remains at `index` until this is confirmed.
-        int sizeBefore = properties.size();
+        var sizeBefore = properties.size();
         owner.addProperty(replacement);
         if (properties.size() != sizeBefore + 1 || properties.getLast() != replacement) {
             // addProperty no-op'd — model unchanged.

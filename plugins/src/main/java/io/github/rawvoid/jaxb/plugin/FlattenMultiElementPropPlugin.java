@@ -120,7 +120,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         var count = 0;
 
         // Forward iteration with manual index tracking; the list is mutated in-place.
-        for (int i = 0; i < properties.size(); i++) {
+        for (var i = 0; i < properties.size(); i++) {
             var prop = properties.get(i);
             if (!RenameMultiElementPropPlugin.isMultiElementProperty(prop)) {
                 continue;
@@ -328,10 +328,10 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         List<CPropertyInfo> replacements
     ) {
         var properties = owner.getProperties();
-        int sizeBefore = properties.size();
+        var sizeBefore = properties.size();
 
         // 1. Append all replacements via addProperty (triggers setParent).
-        int added = 0;
+        var added = 0;
         for (var replacement : replacements) {
             owner.addProperty(replacement);
             if (properties.size() == sizeBefore + added + 1) {
@@ -354,7 +354,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         // 3. Move the `added` properties from the tail to index.
         //    Since removeLast() retrieves the last added property first, inserting
         //    them successively at `index` naturally restores their original order.
-        for (int j = 0; j < added; j++) {
+        for (var j = 0; j < added; j++) {
             properties.add(index, properties.removeLast());
         }
 

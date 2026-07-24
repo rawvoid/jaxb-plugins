@@ -97,7 +97,7 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void flattensStringAndComplexCollectionsPreservingOrder() throws Exception {
-        List<Class<?>> classes = testExecute(List.of("-Xelement-wrapper"), ROOT, (source, clazz) -> {
+        var classes = testExecute(List.of("-Xelement-wrapper"), ROOT, (source, clazz) -> {
             assertListField(clazz, "tags", String.class, "tag");
             assertListField(clazz, "notes", String.class, "note");
 

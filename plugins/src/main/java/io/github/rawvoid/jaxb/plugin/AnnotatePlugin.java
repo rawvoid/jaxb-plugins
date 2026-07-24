@@ -190,9 +190,9 @@ public class AnnotatePlugin extends AbstractPlugin {
                 if (paramValue instanceof Iterable<?>) {
                     iterable = (Iterable<?>) paramValue;
                 } else if (paramValue.getClass().isArray()) {
-                    int length = Array.getLength(paramValue);
+                    var length = Array.getLength(paramValue);
                     var list = new ArrayList<>(length);
-                    for (int i = 0; i < length; i++) {
+                    for (var i = 0; i < length; i++) {
                         list.add(Array.get(paramValue, i));
                     }
                     iterable = list;
