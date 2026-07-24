@@ -41,9 +41,23 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesMatchingClass() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-mapping",
-            "-regex=Person",
+            "-rename",
+            "-from=Person",
             "-to=CustomPerson"
+        );
+        var classes = testExecute(args, ".*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("CustomPerson");
+        assertThat(byName).doesNotContainKey("Person");
+        assertThat(byName.get("CustomPerson").getFirst().getSimpleName()).isEqualTo("CustomPerson");
+    }
+
+    @Test
+    void renamesWithCompactSyntax() throws Exception {
+        var args = List.of(
+            "-Xrename-class",
+            "-rename=Person->CustomPerson"
         );
         var classes = testExecute(args, ".*", null);
         var byName = bySimpleName(classes);
@@ -57,9 +71,22 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesWithRegexReplacement() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-mapping",
-            "-regex=(.*)Type",
+            "-rename",
+            "-from=(.*)Type",
             "-to=$1"
+        );
+        var classes = testExecute(args, ".*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("Address");
+        assertThat(byName).doesNotContainKey("AddressType");
+    }
+
+    @Test
+    void renamesWithRegexCompactSyntax() throws Exception {
+        var args = List.of(
+            "-Xrename-class",
+            "-rename=/(.*)Type/->$1"
         );
         var classes = testExecute(args, ".*", null);
         var byName = bySimpleName(classes);
@@ -73,9 +100,9 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // Default package derived from namespace; wrong package must leave Person untouched.
         var wrongPackage = List.of(
             "-Xrename-class",
-            "-mapping",
+            "-rename",
             "-package=com.does.not.exist",
-            "-regex=Person",
+            "-from=Person",
             "-to=CustomPerson"
         );
         var classes = testExecute(wrongPackage, ".*", null);
@@ -87,8 +114,8 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesEnum() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-mapping",
-            "-regex=Color",
+            "-rename",
+            "-from=Color",
             "-to=Colour"
         );
         var classes = testExecute(args, ".*", null);
@@ -104,12 +131,12 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // Map Alpha and Beta both to SharedName → conflict group; both stay original.
         var args = List.of(
             "-Xrename-class",
-            "-mapping",
-            "-regex=Alpha|Beta",
+            "-rename",
+            "-from=Alpha|Beta",
             "-to=SharedName",
             // Unrelated rename still applies.
-            "-mapping",
-            "-regex=Person",
+            "-rename",
+            "-from=Person",
             "-to=CustomPerson"
         );
         var classes = testExecute(args, ".*", null);
@@ -125,8 +152,8 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // Alpha → Person while Person stays Person → both blocked for that slot.
         var args = List.of(
             "-Xrename-class",
-            "-mapping",
-            "-regex=^Alpha$",
+            "-rename",
+            "-from=^Alpha$",
             "-to=Person"
         );
         var classes = testExecute(args, ".*", null);
@@ -142,8 +169,8 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // NamedAssocType → NamedAssoc would match nested NamedAssoc; outer rename blocked.
         var args = List.of(
             "-Xrename-class",
-            "-mapping",
-            "-regex=^(.+)Type$",
+            "-rename",
+            "-from=^(.+)Type$",
             "-to=$1"
         );
         var classes = testExecute(args, ".*NamedAssoc.*", null);
@@ -163,8 +190,8 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xpromote-nested-class",
             "-Xrename-class",
-            "-mapping",
-            "-regex=^(.+)Type$",
+            "-rename",
+            "-from=^(.+)Type$",
             "-to=$1"
         );
         var classes = testExecute(args, ".*(Email|Address|Holder).*", null);
