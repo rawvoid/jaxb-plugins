@@ -75,7 +75,7 @@ public abstract class AbstractPlugin extends Plugin {
      * and for nested types annotated with {@link Compact}.</p>
      */
     public AbstractPlugin() {
-        initDefaultTextParsers();
+        registerDefaultTextParsers();
         registerCompactParsersFrom(getClass());
     }
 
@@ -460,8 +460,8 @@ public abstract class AbstractPlugin extends Plugin {
     /**
      * Finds the start index of the next nested-list element's fields.
      *
-     * @param afterIndex     last arg index belonging to the previous element, or the opening group marker
-     * @param elementFields  {@code @Option} fields of the element type (caller-cached)
+     * @param afterIndex    last arg index belonging to the previous element, or the opening group marker
+     * @param elementFields {@code @Option} fields of the element type (caller-cached)
      * @return content start index, or {@code -1} if there is no further element
      */
     private int findNextElementStart(String[] args, int afterIndex, String groupName, List<Field> elementFields) {
@@ -500,7 +500,9 @@ public abstract class AbstractPlugin extends Plugin {
         return type.equals(boolean.class) || type.equals(Boolean.class);
     }
 
-    /** True for user/plugin nested config types (has a non-bootstrap class loader). */
+    /**
+     * True for user/plugin nested config types (has a non-bootstrap class loader).
+     */
     private static boolean isNestedOptionType(Class<?> type) {
         return type.getClassLoader() != null;
     }
@@ -742,7 +744,7 @@ public abstract class AbstractPlugin extends Plugin {
         return null;
     }
 
-    private void initDefaultTextParsers() {
+    private void registerDefaultTextParsers() {
         registerTextParser(boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
         registerTextParser(Boolean.class, (optionName, text) -> Boolean.parseBoolean(text.toString().trim()));
         registerTextParser(int.class, (optionName, text) -> Integer.parseInt(text.toString().trim()));
