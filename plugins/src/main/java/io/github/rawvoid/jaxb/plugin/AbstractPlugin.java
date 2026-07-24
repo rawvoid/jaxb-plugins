@@ -393,7 +393,7 @@ public abstract class AbstractPlugin extends Plugin {
         var collection = getOrCreateCollection(object, optionField);
 
         if (textValue != null) {
-            return parseScalarCollectionValues(collection, option, elementType, textValue, args, index);
+            return parseRepeatedEqualsValues(collection, option, elementType, textValue, args, index);
         }
         if (isNestedOptionType(elementType)) {
             return parseNestedObjectCollection(collection, elementType, getFullOptionName(option), args, index);
@@ -404,10 +404,13 @@ public abstract class AbstractPlugin extends Plugin {
     }
 
     /**
-     * @return exclusive end index after consecutive {@code -name=value} elements
+     * Parses consecutive {@code -option=value} args into collection elements (scalars or
+     * {@link Compact} / nested DTOs via the element {@link TextParser}).
+     *
+     * @return exclusive end index after the last consumed {@code -option=value}
      */
-    private int parseScalarCollectionValues(Collection<Object> collection, Option option, Class<?> elementType,
-                                            String firstText, String[] args, int index) throws Exception {
+    private int parseRepeatedEqualsValues(Collection<Object> collection, Option option, Class<?> elementType,
+                                          String firstText, String[] args, int index) throws Exception {
         var parser = getParser(option, elementType);
         if (parser == null) {
             throw newExceptionForNoParser(option, elementType);
