@@ -318,43 +318,15 @@ public abstract class AbstractPlugin extends Plugin {
             var option = match.option();
             var fieldType = field.getType();
             var textValue = match.textValue();
-            var isCollection = Collection.class.isAssignableFrom(fieldType);
 
             if (isBooleanType(fieldType) && textValue == null) {
                 setFieldValue(object, field, true);
-            } else if (isCollection) {
-                // Nested element types (including @Compact DTOs) always parse one element per
-                // -name=value. Whole-collection TextParsers (e.g. int-list2=1,2,3) are registered
-                // by option name for scalar element lists only — never for nested DTOs, so that
-                // field-level @Compact (also by option name) is not mistaken for a whole-list parser.
-                if (textValue != null) {
-                    var elementType = getCollectionElementType(field);
-                    if (!isNestedOptionType(elementType)) {
-                        var wholeCollectionParser = textParsersByOptionName.get(option.name());
-                        if (wholeCollectionParser == null) {
-                            wholeCollectionParser = textParsersByOptionType.get(fieldType);
-                        }
-                        if (wholeCollectionParser != null) {
-                            appendParsedCollection(object, field, wholeCollectionParser.parse(option.name(), textValue));
-                            if (!retainCollectionOptions) {
-                                remaining.remove(field);
-                            }
-                            j++;
-                            continue;
-                        }
-                    }
-                    j = parseCollectionArgument(object, field, option, textValue, args, j);
-                    if (!retainCollectionOptions) {
-                        remaining.remove(field);
-                    }
-                    continue;
-                } else {
-                    j = parseCollectionArgument(object, field, option, null, args, j);
-                    if (!retainCollectionOptions) {
-                        remaining.remove(field);
-                    }
-                    continue;
+            } else if (Collection.class.isAssignableFrom(fieldType)) {
+                j = parseCollectionOption(object, field, option, textValue, args, j);
+                if (!retainCollectionOptions) {
+                    remaining.remove(field);
                 }
+                continue;
             } else if (textValue != null) {
                 var parser = getParser(option, fieldType);
                 if (parser == null) {
@@ -374,18 +346,42 @@ public abstract class AbstractPlugin extends Plugin {
                         .formatted(getFullOptionName(option), formatUsage(field, fieldType, option)));
             }
 
-            if (!isCollection || !retainCollectionOptions) {
-                remaining.remove(field);
-            }
+            remaining.remove(field);
             j++;
         }
         return j - i;
     }
 
     /**
-     * Parses one contiguous contribution to a collection option.
+     * Parses one contribution to a collection option at {@code args[index]}.
      *
-     * @return exclusive end index (first arg index after the consumed block)
+     * @return exclusive end index (first arg after the consumed block)
+     */
+    private int parseCollectionOption(Object object, Field optionField, Option option,
+                                      String textValue, String[] args, int index) throws Exception {
+        // Nested element types (including @Compact DTOs): one element per -name=value.
+        // Whole-collection TextParsers (e.g. int-list2=1,2,3) apply only to scalar element lists,
+        // so field-level @Compact (also by option name) is not treated as a whole-list parser.
+        if (textValue != null) {
+            var elementType = getCollectionElementType(optionField);
+            if (!isNestedOptionType(elementType)) {
+                var wholeCollectionParser = textParsersByOptionName.get(option.name());
+                if (wholeCollectionParser == null) {
+                    wholeCollectionParser = textParsersByOptionType.get(optionField.getType());
+                }
+                if (wholeCollectionParser != null) {
+                    appendParsedCollection(object, optionField, wholeCollectionParser.parse(option.name(), textValue));
+                    return index + 1;
+                }
+            }
+        }
+        return parseCollectionArgument(object, optionField, option, textValue, args, index);
+    }
+
+    /**
+     * Parses repeated {@code -name=value} elements or a nested-object group block.
+     *
+     * @return exclusive end index (first arg after the consumed block)
      */
     private int parseCollectionArgument(Object object, Field optionField, Option option,
                                         String textValue, String[] args, int index) throws Exception {
