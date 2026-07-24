@@ -108,6 +108,18 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void testClassNameConvertCompactRegex() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-class-name=/(Per)(.*)/->Human$2"
+        );
+        // "Person" → groups Per, son → Human + son = Humanson (same as structured regex test intent)
+        testExecute(args, PKG + "\\.Humanson", (source, clazz) -> {
+            assertThat(clazz.getSimpleName()).isEqualTo("Humanson");
+        });
+    }
+
+    @Test
     void testRegexConvert() throws Exception {
         var args = List.of(
             "-Xconvert-name",
