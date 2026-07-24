@@ -393,9 +393,10 @@ public abstract class AbstractPlugin extends Plugin {
         // args[groupIndex] is the group marker that triggered this call.
         // lastConsumed advances over each element; findNextElementStart skips optional
         // repeated group markers and accepts either the first item or scheme-C continuations.
+        var elementFields = getOptionFields(elementType);
         var lastConsumed = groupIndex;
         while (true) {
-            var contentStart = findNextElementStart(args, lastConsumed, groupName, elementType);
+            var contentStart = findNextElementStart(args, lastConsumed, groupName, elementFields);
             if (contentStart < 0) {
                 break;
             }
@@ -415,10 +416,11 @@ public abstract class AbstractPlugin extends Plugin {
     /**
      * Finds the start index of the next nested-list element's fields.
      *
-     * @param afterIndex last arg index belonging to the previous element, or the opening group marker
+     * @param afterIndex     last arg index belonging to the previous element, or the opening group marker
+     * @param elementFields  {@code @Option} fields of the element type (caller-cached)
      * @return content start index, or {@code -1} if there is no further element
      */
-    private int findNextElementStart(String[] args, int afterIndex, String groupName, Class<?> elementType) {
+    private int findNextElementStart(String[] args, int afterIndex, String groupName, List<Field> elementFields) {
         var i = afterIndex + 1;
         while (i < args.length && groupName.equals(args[i].trim())) {
             i++;
@@ -426,7 +428,7 @@ public abstract class AbstractPlugin extends Plugin {
         if (i >= args.length) {
             return -1;
         }
-        if (matchOption(getOptionFields(elementType), args[i]) != null) {
+        if (matchOption(elementFields, args[i]) != null) {
             return i;
         }
         return -1;
