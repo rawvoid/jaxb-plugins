@@ -18,6 +18,20 @@ This collection of powerful plugins transforms the way you work with JAXB, givin
 
 Built on a rock-solid foundation with our `AbstractPlugin` class that makes creating new plugins a breeze. Features annotation-based configuration, automatic option parsing, and extensible text parsers.
 
+**Nested list options (e.g. `-package-name`, `-mapping`, `-add-to-class`):**
+
+- Write the **group marker once**, then list as many items as you need:
+
+```bash
+-package-name \
+  -token=http://example.com/a -name=com.example.a \
+  -token=http://example.com/b -name=com.example.b
+```
+
+- A **repeated child field** (e.g. a second `-token=…` after `-name=…`) starts the next list item. You may still repeat the group marker between items if you prefer.
+- **Unused optional fields** on the current item remain open. If the next logical item would begin with such a field (e.g. `-regex` after a `-token/-name` item), restate the group marker so the shapes stay separate.
+- List options at the plugin root may **interleave** with other options (`-package-name … -class-name … -package-name …`).
+
 ---
 
 ## 🎯 Plugin Arsenal
@@ -49,12 +63,14 @@ Bring your JAXB code into the 21st century with full JSR-310 (java.time) support
 ```bash
 -Xjsr310 \
   -adapter-package=package.name \      # Optional: defaults to auto-derived package (<common_package>.adapter)
-  -mapping \
+  -mapping \                           # group once; next item starts on a repeated child field
   -xsd-type=xsdType \
   -target-class=java.time.Class \
   -pattern=dateFormat \
   -adapter=custom.AdapterClass \
-  -regex=fieldPattern
+  -regex=fieldPattern \
+  -xsd-type=anotherType \              # same field → next mapping item
+  -target-class=java.time.LocalDate
 ```
 
 **🎯 Default Mappings:**
@@ -101,7 +117,12 @@ Add, remove, or customize annotations on generated classes, fields, methods, and
 
 ```bash
 -Xannotate \
-  -add-to-class|-add-to-field|-add-to-method|-add-to-package \
+  -add-to-class \                      # group once per target kind
+  -anno=@AnnotationClass(param="value") \
+  -regex=pattern \
+  -anno=@AnotherAnnotation \           # same field → next add-to-class item
+  -regex=otherPattern \
+  -add-to-field \
   -anno=@AnnotationClass(param="value") \
   -regex=pattern \
   -remove-from-class|-remove-from-field|-remove-from-method|-remove-from-package \
@@ -140,10 +161,19 @@ Take control of how JAXB converts XML names to Java identifiers. Customize class
 
 ```bash
 -Xconvert-name \
-  -class-name|-variable-name|-interface-name|-property-name|-constant-name|-package-name \
+  -class-name \                        # group once
   -token=originalName \
-  -regex=pattern \
-  -name=newName
+  -name=newName \
+  -token=AnotherType \                 # same field → next class-name item
+  -name=RenamedType \
+  -variable-name \
+  -regex=(.*)_ID \
+  -name=$1Id \
+  -package-name \
+  -token=http://example.com/a \
+  -name=com.example.a \
+  -token=http://example.com/b \
+  -name=com.example.b
 ```
 
 ---
@@ -223,10 +253,13 @@ Take control of XML namespace to Java package mappings. Define custom mappings a
 
 ```bash
 -Xnamespace \
-  -mapping \
+  -mapping \                           # group once
   -ns=namespaceURI \
   -package=java.package.name \
-  -prefix=xmlPrefix
+  -prefix=xmlPrefix \
+  -ns=anotherNamespaceURI \            # same field → next mapping item
+  -package=com.example.other \
+  -prefix=other
 ```
 
 ---
@@ -344,16 +377,14 @@ Take control of XML namespace prefixes in generated @XmlSchema annotations. Defi
 
 ```bash
 -Xns-prefix \
-  -config \
+  -config \                            # group once for package configs
     -package=package.regex.pattern \
-    -xmlns \
+    -xmlns \                           # group once for xmlns entries
     -ns=namespaceURI \
     -prefix=xmlPrefix \
-    -xmlns \
-    -ns=anotherNamespace \
+    -ns=anotherNamespace \             # same field → next xmlns item
     -prefix=anotherPrefix \
-  -config \
-    -package=another.package.regex \
+    -package=another.package.regex \   # same field → next config item
     -xmlns \
     -ns=namespaceURI \
     -prefix=prefix
@@ -368,8 +399,12 @@ Take control of XML namespace prefixes in generated @XmlSchema annotations. Defi
 # Package-specific configuration
 -Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex
 
-# Multiple namespaces for a package
--Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex -xmlns -ns=http://test.com -prefix=tst
+# Multiple namespaces for a package (one -xmlns; repeated -ns starts the next item)
+-Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex -ns=http://test.com -prefix=tst
+
+# Multiple packages (one -config; repeated -package starts the next item)
+-Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex \
+  -package=com\.test\.* -xmlns -ns=http://test.com -prefix=tst
 ```
 
 ---
@@ -470,7 +505,6 @@ xjc -d src \
     -mapping \
     -xsd-type=dateTime \
     -target-class=java.time.Instant \
-    -mapping \
     -xsd-type=date \
     -target-class=java.time.LocalDate \
     -pattern=yyyy-MM-dd \

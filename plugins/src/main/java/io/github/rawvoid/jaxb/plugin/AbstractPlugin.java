@@ -35,6 +35,8 @@ import java.util.regex.Pattern;
  *   <li>Automatic parsing of command line arguments and mapping to fields annotated with @Option</li>
  *   <li>Support for various data types including primitives, wrapper types, strings, and regular expressions</li>
  *   <li>Support for collection types (List, Set, Queue) with repeatable options</li>
+ *   <li>Nested-object lists: group marker once, next item on a repeated child field;
+ *       list options may interleave at the plugin root</li>
  *   <li>Support for nested objects and complex object structures</li>
  *   <li>Advanced features such as default values, required validation, and custom delimiters</li>
  *   <li>Automatic generation of formatted usage documentation</li>
@@ -181,6 +183,13 @@ public abstract class AbstractPlugin extends Plugin {
         }
         if (Collection.class.isAssignableFrom(field.getType())) {
             parts.add("[repeatable]");
+            var elementType = getCollectionElementType(field);
+            if (isNestedOptionType(elementType) && !getOptionFields(elementType).isEmpty()) {
+                // Nested-object lists: one group marker covers consecutive items; a repeated
+                // child field starts the next item. Unused optional fields on the current item
+                // still accept values — restate the group marker to separate different shapes.
+                parts.add("[group once; same child field starts next item; restate group to separate shapes]");
+            }
         }
         return parts.toString().lines().toList();
     }
@@ -210,7 +219,9 @@ public abstract class AbstractPlugin extends Plugin {
         try {
             var arg = args[i].trim();
             if (arg.equals(fullOptionName)) {
-                var count = parseArgument(this, args, i + 1) + 1;
+                // Retain collection options on the plugin root so list blocks may interleave
+                // with other options and reappear later (e.g. -package-name … -class-name … -package-name).
+                var count = parseArgument(this, args, i + 1, true) + 1;
                 applyDefaultValueAndValidate(this);
                 postParseArgument(opt, count);
                 return count;
@@ -245,112 +256,248 @@ public abstract class AbstractPlugin extends Plugin {
         // No-op by default
     }
 
-    private int parseArgument(Object object, String[] args, int i) throws Exception {
-        var clazz = object.getClass();
-        var optionFields = getOptionFields(clazz);
-
-        int count = 0, j = i;
-        for (; j < args.length; j++) {
-            var arg = args[j];
-            Field matchedOptionField = null;
-            for (var optionField : optionFields) {
-                var fieldType = optionField.getType();
-                var option = optionField.getAnnotation(Option.class);
-                var fullOptionName = getFullOptionName(option);
-                if (arg.trim().equals(fullOptionName)) {
-                    matchedOptionField = optionField;
-                    if (fieldType.equals(boolean.class) || fieldType.equals(Boolean.class)) {
-                        setFieldValue(object, optionField, true);
-                    } else if (Collection.class.isAssignableFrom(fieldType)) {
-                        j += parseCollectionArgument(object, optionField, option, null, null, args, j);
-                    } else if (fieldType.getClassLoader() != null) {
-                        var value = newInstance(fieldType);
-                        var x = parseArgument(value, args, j + 1);
-                        if (x > 0) {
-                            j += x;
-                            setFieldValue(object, optionField, value);
-                        }
-                    } else {
-                        var message = "Option '%s' requires a value but none was provided. Use format: %s"
-                            .formatted(fullOptionName, formatUsage(optionField, fieldType, option));
-                        throw new BadCommandLineException(message);
-                    }
-                    break;
-                } else {
-                    var delimiter = option.delimiter();
-                    var optionQt = Pattern.quote(fullOptionName);
-                    var delimiterQt = Pattern.quote(delimiter);
-                    var pattern = Pattern.compile("^" + optionQt + "\\s*" + delimiterQt + "(.*)");
-                    var matcher = pattern.matcher(arg);
-                    if (matcher.matches()) {
-                        matchedOptionField = optionField;
-                        var textValue = matcher.group(1);
-                        var parser = getParser(option, fieldType);
-                        if (parser == null) {
-                            if (Collection.class.isAssignableFrom(fieldType)) {
-                                j += parseCollectionArgument(object, optionField, option, textValue, pattern, args, j);
-                            } else {
-                                throw newExceptionForNoParser(option, fieldType);
-                            }
-                        } else {
-                            var value = parser.parse(option.name(), textValue);
-                            setFieldValue(object, optionField, value);
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if (matchedOptionField == null) {
+    /**
+     * Parses {@code @Option} fields on {@code object} starting at {@code args[i]}.
+     * <p>
+     * Non-collection fields may appear at most once per object: after a field is set it is
+     * removed from the match set, so a later occurrence of the same option ends this object
+     * and (for nested list elements) lets the caller open the next list item.
+     * </p>
+     * <p>
+     * When {@code retainCollectionOptions} is {@code true} (plugin root only), collection
+     * options stay matchable and append on reappearance, so list blocks may be interleaved
+     * with other options (e.g. {@code -package-name … -class-name … -package-name}).
+     * Nested objects always drop collection options after the first block so that a repeated
+     * child option (e.g. a second {@code -annotation=…} after {@code -regex}) starts the next
+     * list element instead of appending to the current one.
+     * </p>
+     */
+    private int parseArgument(Object object, String[] args, int i, boolean retainCollectionOptions) throws Exception {
+        var remaining = getOptionFields(object.getClass());
+        var j = i;
+        while (j < args.length) {
+            var match = matchOption(remaining, args[j]);
+            if (match == null) {
                 break;
-            } else {
-                optionFields.remove(matchedOptionField);
-                count = j - i + 1;
             }
+
+            var field = match.field();
+            var option = match.option();
+            var fieldType = field.getType();
+            var textValue = match.textValue();
+            var isCollection = Collection.class.isAssignableFrom(fieldType);
+
+            if (isBooleanType(fieldType) && textValue == null) {
+                setFieldValue(object, field, true);
+            } else if (isCollection) {
+                // A TextParser registered for the option name or collection field type
+                // may produce the entire collection from one text value (e.g. "1,2,3").
+                if (textValue != null) {
+                    var wholeCollectionParser = getParser(option, fieldType);
+                    if (wholeCollectionParser != null) {
+                        appendParsedCollection(object, field, wholeCollectionParser.parse(option.name(), textValue));
+                    } else {
+                        j = parseCollectionArgument(object, field, option, textValue, args, j);
+                        if (!retainCollectionOptions) {
+                            remaining.remove(field);
+                        }
+                        continue;
+                    }
+                } else {
+                    j = parseCollectionArgument(object, field, option, null, args, j);
+                    if (!retainCollectionOptions) {
+                        remaining.remove(field);
+                    }
+                    continue;
+                }
+            } else if (textValue != null) {
+                var parser = getParser(option, fieldType);
+                if (parser == null) {
+                    throw newExceptionForNoParser(option, fieldType);
+                }
+                setFieldValue(object, field, parser.parse(option.name(), textValue));
+            } else if (isNestedOptionType(fieldType)) {
+                var value = newInstance(fieldType);
+                var consumed = parseArgument(value, args, j + 1, false);
+                if (consumed > 0) {
+                    j += consumed;
+                    setFieldValue(object, field, value);
+                }
+            } else {
+                throw new BadCommandLineException(
+                    "Option '%s' requires a value but none was provided. Use format: %s"
+                        .formatted(getFullOptionName(option), formatUsage(field, fieldType, option)));
+            }
+
+            if (!isCollection || !retainCollectionOptions) {
+                remaining.remove(field);
+            }
+            j++;
         }
-        return count;
+        return j - i;
     }
 
-    private int parseCollectionArgument(Object object, Field optionField, Option option, String textValue,
-                                        Pattern regex, String[] args, int j) throws Exception {
+    /**
+     * Parses one contiguous contribution to a collection option.
+     *
+     * @return exclusive end index (first arg index after the consumed block)
+     */
+    private int parseCollectionArgument(Object object, Field optionField, Option option,
+                                        String textValue, String[] args, int index) throws Exception {
         var elementType = getCollectionElementType(optionField);
-        var fieldType = optionField.getType();
-        var collection = newCollectionInstance(fieldType);
-        var fullOptionName = getFullOptionName(option);
+        var collection = getOrCreateCollection(object, optionField);
 
-        var i = j;
-        if (textValue == null) {
-            --j;
-            for (var s = fullOptionName; fullOptionName.equals(s) && ++j < args.length; s = args[j + 1].trim()) {
-                var elementValue = newInstance(elementType);
-                var x = parseArgument(elementValue, args, j + 1);
-                if (x > 0) {
-                    j += x;
-                    collection.add(elementValue);
-                }
+        if (textValue != null) {
+            return parseScalarCollectionValues(collection, option, elementType, textValue, args, index);
+        }
+        if (isNestedOptionType(elementType)) {
+            return parseNestedObjectCollection(collection, elementType, getFullOptionName(option), args, index);
+        }
+        throw new BadCommandLineException(
+            "Option '%s' requires a value but none was provided. Use format: %s"
+                .formatted(getFullOptionName(option), formatUsage(optionField, optionField.getType(), option)));
+    }
+
+    /**
+     * @return exclusive end index after consecutive {@code -name=value} elements
+     */
+    private int parseScalarCollectionValues(Collection<Object> collection, Option option, Class<?> elementType,
+                                            String firstText, String[] args, int index) throws Exception {
+        var parser = getParser(option, elementType);
+        if (parser == null) {
+            throw newExceptionForNoParser(option, elementType);
+        }
+        var fullOptionName = getFullOptionName(option);
+        var delimiter = option.delimiter();
+        var pattern = Pattern.compile(
+            "^" + Pattern.quote(fullOptionName) + "\\s*" + Pattern.quote(delimiter) + "(.*)");
+
+        collection.add(parser.parse(option.name(), firstText));
+        var last = index;
+        while (last + 1 < args.length) {
+            var matcher = pattern.matcher(args[last + 1]);
+            if (!matcher.matches()) {
+                break;
             }
-        } else {
-            var parser = getParser(option, elementType);
-            if (parser == null) {
-                throw newExceptionForNoParser(option, elementType);
+            last++;
+            collection.add(parser.parse(option.name(), matcher.group(1)));
+        }
+        return last + 1;
+    }
+
+    /**
+     * @return exclusive end index after the group marker and all parsed elements
+     */
+    private int parseNestedObjectCollection(Collection<Object> collection, Class<?> elementType,
+                                            String groupName, String[] args, int groupIndex) throws Exception {
+        // args[groupIndex] is the group marker that triggered this call.
+        // lastConsumed advances over each element; findNextElementStart skips optional
+        // repeated group markers and accepts either the first item or scheme-C continuations.
+        var elementFields = getOptionFields(elementType);
+        var lastConsumed = groupIndex;
+        while (true) {
+            var contentStart = findNextElementStart(args, lastConsumed, groupName, elementFields);
+            if (contentStart < 0) {
+                break;
             }
-            var value = parser.parse(option.name(), textValue);
-            collection.add(value);
-            for (var x = j + 1; x < args.length; x++) {
-                var arg = args[x];
-                var matcher = regex.matcher(arg);
-                if (matcher.matches()) {
-                    j++;
-                    textValue = matcher.group(1);
-                    value = parser.parse(option.name(), textValue);
-                    collection.add(value);
-                } else {
-                    break;
-                }
+            var element = newInstance(elementType);
+            // Nested elements never retain collection options: a repeated child option
+            // after other fields closes the current element (same-field → next item).
+            var consumed = parseArgument(element, args, contentStart, false);
+            if (consumed <= 0) {
+                break;
+            }
+            collection.add(element);
+            lastConsumed = contentStart + consumed - 1;
+        }
+        return lastConsumed + 1;
+    }
+
+    /**
+     * Finds the start index of the next nested-list element's fields.
+     *
+     * @param afterIndex     last arg index belonging to the previous element, or the opening group marker
+     * @param elementFields  {@code @Option} fields of the element type (caller-cached)
+     * @return content start index, or {@code -1} if there is no further element
+     */
+    private int findNextElementStart(String[] args, int afterIndex, String groupName, List<Field> elementFields) {
+        var i = afterIndex + 1;
+        while (i < args.length && groupName.equals(args[i].trim())) {
+            i++;
+        }
+        if (i >= args.length) {
+            return -1;
+        }
+        if (matchOption(elementFields, args[i]) != null) {
+            return i;
+        }
+        return -1;
+    }
+
+    private OptionMatch matchOption(List<Field> fields, String rawArg) {
+        var arg = rawArg.trim();
+        for (var field : fields) {
+            var option = field.getAnnotation(Option.class);
+            var fullOptionName = getFullOptionName(option);
+            if (arg.equals(fullOptionName)) {
+                return new OptionMatch(field, option, null);
+            }
+            var pattern = Pattern.compile(
+                "^" + Pattern.quote(fullOptionName) + "\\s*" + Pattern.quote(option.delimiter()) + "(.*)");
+            var matcher = pattern.matcher(arg);
+            if (matcher.matches()) {
+                return new OptionMatch(field, option, matcher.group(1));
             }
         }
+        return null;
+    }
+
+    private static boolean isBooleanType(Class<?> type) {
+        return type.equals(boolean.class) || type.equals(Boolean.class);
+    }
+
+    /** True for user/plugin nested config types (has a non-bootstrap class loader). */
+    private static boolean isNestedOptionType(Class<?> type) {
+        return type.getClassLoader() != null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Collection<Object> getOrCreateCollection(Object object, Field optionField) throws Exception {
+        optionField.setAccessible(true);
+        var existing = (Collection<Object>) optionField.get(object);
+        if (existing != null) {
+            return existing;
+        }
+        var collection = newCollectionInstance(optionField.getType());
         setFieldValue(object, optionField, collection);
-        return j - i;
+        return collection;
+    }
+
+    /**
+     * Applies a whole-collection TextParser result. If the field already holds a collection
+     * (e.g. after an interleaved earlier appearance of the same option), appends into it so
+     * behavior matches element-wise scalar lists. Always stores a mutable collection instance
+     * for the field type, because parsers often return immutable lists ({@code List.of}, {@code Stream.toList}).
+     */
+    @SuppressWarnings("unchecked")
+    private void appendParsedCollection(Object object, Field optionField, Object parsed) throws Exception {
+        if (!(parsed instanceof Collection<?> parsedCollection)) {
+            throw new BadCommandLineException(
+                "Text parser for option '%s' must return a Collection, but got %s"
+                    .formatted(getFullOptionName(optionField.getAnnotation(Option.class)),
+                        parsed == null ? "null" : parsed.getClass().getName()));
+        }
+        optionField.setAccessible(true);
+        var existing = (Collection<Object>) optionField.get(object);
+        var target = newCollectionInstance(optionField.getType());
+        if (existing != null) {
+            target.addAll(existing);
+        }
+        target.addAll((Collection<Object>) parsedCollection);
+        setFieldValue(object, optionField, target);
+    }
+
+    private record OptionMatch(Field field, Option option, String textValue) {
     }
 
     private void applyDefaultValueAndValidate(Object object) throws Exception {
