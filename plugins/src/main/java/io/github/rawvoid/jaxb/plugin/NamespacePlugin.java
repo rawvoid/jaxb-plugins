@@ -108,14 +108,13 @@ public class NamespacePlugin extends AbstractPlugin {
         }
         var body = new StringBuilder();
         for (var packageMap : packageMaps) {
-            var node = "/xs:schema[@targetNamespace=%s]".formatted(xpathLiteral(packageMap.namespace));
             body.append("""
-                <jaxb:bindings schemaLocation="*" node="%s">
+                <jaxb:bindings schemaLocation="*" node="/xs:schema[@targetNamespace='%s']">
                     <jaxb:schemaBindings>
                       <jaxb:package name="%s"/>
                     </jaxb:schemaBindings>
                 </jaxb:bindings>
-                """.formatted(escapeXml(node), escapeXml(packageMap.packageName)));
+                """.formatted(packageMap.namespace, packageMap.packageName));
         }
         if (body.isEmpty()) {
             return null;
@@ -233,43 +232,6 @@ public class NamespacePlugin extends AbstractPlugin {
             return null;
         }
         return stringValue.toString();
-    }
-
-    /**
-     * Quotes {@code value} as an XPath string literal.
-     */
-    static String xpathLiteral(String value) {
-        if (value == null) {
-            return "''";
-        }
-        if (!value.contains("'")) {
-            return "'" + value + "'";
-        }
-        if (!value.contains("\"")) {
-            return "\"" + value + "\"";
-        }
-        var parts = value.split("'", -1);
-        var concat = new StringBuilder("concat(");
-        for (var i = 0; i < parts.length; i++) {
-            if (i > 0) {
-                concat.append(",\"'\",");
-            }
-            concat.append('\'').append(parts[i]).append('\'');
-        }
-        concat.append(')');
-        return concat.toString();
-    }
-
-    static String escapeXml(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value
-            .replace("&", "&amp;")
-            .replace("\"", "&quot;")
-            .replace("'", "&apos;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;");
     }
 
     /**

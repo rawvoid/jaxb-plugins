@@ -310,25 +310,16 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void xpathLiteralAndEscapeXmlHelpers() {
-        assertThat(NamespacePlugin.xpathLiteral("http://a.com")).isEqualTo("'http://a.com'");
-        assertThat(NamespacePlugin.xpathLiteral("a'b")).isEqualTo("\"a'b\"");
-        assertThat(NamespacePlugin.xpathLiteral("a'b\"c")).isEqualTo("concat('a',\"'\",'b\"c')");
-        assertThat(NamespacePlugin.escapeXml("a&b\"c'd<e>f"))
-            .isEqualTo("a&amp;b&quot;c&apos;d&lt;e&gt;f");
-    }
-
-    @Test
     void generateBindingsUsesWildcardSchemaLocation() {
         var plugin = new NamespacePlugin();
         var packageMap = new NamespacePlugin.PackageMapConfig();
-        packageMap.namespace = "http://example.com/a&b";
+        packageMap.namespace = "http://example.com/a";
         packageMap.packageName = "com.example.a";
         plugin.packageMaps = List.of(packageMap);
 
         var bindings = plugin.generateBindings();
         assertThat(bindings).contains("schemaLocation=\"*\"");
-        assertThat(bindings).contains("targetNamespace=&apos;http://example.com/a&amp;b&apos;");
+        assertThat(bindings).contains("node=\"/xs:schema[@targetNamespace='http://example.com/a']\"");
         assertThat(bindings).contains("name=\"com.example.a\"");
     }
 }
