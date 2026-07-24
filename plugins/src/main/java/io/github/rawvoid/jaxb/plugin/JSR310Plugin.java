@@ -57,8 +57,8 @@ public class JSR310Plugin extends AbstractPlugin {
         description = "Package name for auto-generated XmlAdapter classes (default: derived from common package of generated classes)")
     String adapterPackage;
 
-    @Option(name = "mapping", description = "Define a type mapping rule (XSD type → Java class + adapter)")
-    List<TypeMappingConfig> mappings;
+    @Option(name = "type-mapping", description = "Override XSD/Java type mapping for matching types or fields")
+    List<TypeMappingConfig> typeMappings;
 
     private static boolean isGDay(QName schemaType) {
         return schemaType != null && "gDay".equals(schemaType.getLocalPart());
@@ -121,7 +121,7 @@ public class JSR310Plugin extends AbstractPlugin {
      */
     public TypeMappingConfig findTypeMappingConfig(String beanClassName, CPropertyInfo propertyInfo, QName schemaType) {
         var fieldFullName = beanClassName + "." + propertyInfo.getName(false);
-        return mappings.stream()
+        return typeMappings.stream()
             .filter(config -> {
                 var type = config.xsdType;
                 var patterns = config.regexPatterns;
@@ -180,7 +180,7 @@ public class JSR310Plugin extends AbstractPlugin {
             field.annotate(XmlJavaTypeAdapter.class).param("value", mapping.adapterClass);
         } else {
             var adapterClass = generateAdapterClass(beanClass.owner(), targetType,
-                propertyInfo.getSchemaType(), mapping == null ? null : mapping.pattern, targetAdapterPackage);
+                propertyInfo.getSchemaType(), mapping == null ? null : mapping.format, targetAdapterPackage);
             field.annotate(XmlJavaTypeAdapter.class).param("value", adapterClass);
         }
 
@@ -201,17 +201,17 @@ public class JSR310Plugin extends AbstractPlugin {
         }
     }
 
-    JClass generateAdapterClass(JCodeModel codeModel, Class<?> targetClass, QName schemaType, String pattern, String targetAdapterPackage) {
+    JClass generateAdapterClass(JCodeModel codeModel, Class<?> targetClass, QName schemaType, String format, String targetAdapterPackage) {
         var adapterClassName = targetClass.getSimpleName() + "XmlAdapter";
         if (Integer.class.equals(targetClass) && "gDay".equals(schemaType.getLocalPart())) {
             adapterClassName = "IntegerXmlAdapter_gDay";
-        } else if (pattern != null) {
-            var patternPart = pattern.chars()
+        } else if (format != null) {
+            var formatPart = format.chars()
                 .map(c -> Character.isJavaIdentifierPart(c) ? c : '_')
                 .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
                 .toString();
-            var hashCode = Integer.toString(pattern.hashCode(), Character.MAX_RADIX).replace('-', '$');
-            adapterClassName += "_" + patternPart + "_" + hashCode;
+            var hashCode = Integer.toString(format.hashCode(), Character.MAX_RADIX).replace('-', '$');
+            adapterClassName += "_" + formatPart + "_" + hashCode;
         }
         adapterClassName = targetAdapterPackage + "." + adapterClassName;
 
@@ -231,7 +231,7 @@ public class JSR310Plugin extends AbstractPlugin {
 
             var generator = adapterGeneratorMapping().get(targetClass);
             if (generator != null) {
-                generator.generate(adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern);
+                generator.generate(adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, format);
             } else if (Integer.class.equals(targetClass) && isGDay(schemaType)) {
                 implementGDayAdapter(adapterClass, unmarshal, marshal, str, target);
             } else {
@@ -267,14 +267,14 @@ public class JSR310Plugin extends AbstractPlugin {
      * </p>
      */
     private void implementDateTimeAdapter(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
-                                          JVar str, JVar target, Class<?> targetClass, String pattern) {
+                                          JVar str, JVar target, Class<?> targetClass, String format) {
         var cm = adapterClass.owner();
 
-        // Custom pattern takes priority — use explicit formatter for both parse and format.
-        if (pattern != null && !pattern.isBlank()) {
+        // Custom format takes priority — use explicit formatter for both parse and format.
+        if (format != null && !format.isBlank()) {
             var formatter = adapterClass.field(JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
                 DateTimeFormatter.class, "formatter");
-            formatter.init(cm.ref(DateTimeFormatter.class).staticInvoke("ofPattern").arg(pattern));
+            formatter.init(cm.ref(DateTimeFormatter.class).staticInvoke("ofPattern").arg(format));
 
             unmarshal.body()._return(
                 cm.ref(targetClass).staticInvoke("parse").arg(str).arg(formatter));
@@ -457,16 +457,16 @@ public class JSR310Plugin extends AbstractPlugin {
     public Map<Class<?>, AdapterGenerator> adapterGeneratorMapping() {
         Map<Class<?>, AdapterGenerator> mapping = new HashMap<>();
 
-        AdapterGenerator durationGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
+        AdapterGenerator durationGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, format) ->
             implementDurationAdapter(adapterClass, unmarshal, marshal, str, target);
 
-        AdapterGenerator dateTimeGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
-            implementDateTimeAdapter(adapterClass, unmarshal, marshal, str, target, targetClass, pattern);
+        AdapterGenerator dateTimeGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, format) ->
+            implementDateTimeAdapter(adapterClass, unmarshal, marshal, str, target, targetClass, format);
 
-        AdapterGenerator monthGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
+        AdapterGenerator monthGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, format) ->
             implementGMonthAdapter(adapterClass, unmarshal, marshal, str, target);
 
-        AdapterGenerator dayOfWeekGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, pattern) ->
+        AdapterGenerator dayOfWeekGen = (adapterClass, unmarshal, marshal, str, target, targetClass, schemaType, format) ->
             implementDayOfWeekAdapter(adapterClass, unmarshal, marshal, str, target);
 
         mapping.put(Duration.class, durationGen);
@@ -538,7 +538,7 @@ public class JSR310Plugin extends AbstractPlugin {
     @FunctionalInterface
     public interface AdapterGenerator {
         void generate(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
-                      JVar str, JVar target, Class<?> targetClass, QName schemaType, String pattern);
+                      JVar str, JVar target, Class<?> targetClass, QName schemaType, String format);
     }
 
     /**
@@ -552,8 +552,8 @@ public class JSR310Plugin extends AbstractPlugin {
         @Option(name = "target-class", description = "Target Java class to use (typically from java.time, e.g., java.time.LocalDateTime)")
         Class<?> targetClass;
 
-        @Option(name = "pattern", placeholder = "pattern", description = "DateTimeFormatter pattern for auto-generated XmlAdapter (e.g., yyyy-MM-dd)")
-        String pattern;
+        @Option(name = "format", placeholder = "format", description = "DateTimeFormatter pattern for auto-generated XmlAdapter (e.g., yyyy-MM-dd)")
+        String format;
 
         @Option(name = "adapter", description = "Custom XmlAdapter class to use instead of auto-generated one")
         Class<? extends XmlAdapter<?, String>> adapterClass;

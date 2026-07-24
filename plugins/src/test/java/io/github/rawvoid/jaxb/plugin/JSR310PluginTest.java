@@ -87,10 +87,10 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
     void testJSR310PluginCustomConfig() throws Exception {
         var args = List.of(
             "-Xjsr310",
-            "-mapping",
+            "-type-mapping",
             "-xsd-type=date",
             "-target-class=java.time.OffsetDateTime",
-            "-mapping",
+            "-type-mapping",
             "-regex=.*time",
             "-target-class=java.time.ZonedDateTime"
         );
@@ -105,9 +105,9 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
     void testJSR310PluginCustomPattern() throws Exception {
         var args = List.of(
             "-Xjsr310",
-            "-mapping",
+            "-type-mapping",
             "-regex=.*\\.date",
-            "-pattern=yyyy/MM/dd"
+            "-format=yyyy/MM/dd"
         );
         testExecute(args, DATE_TIME_TYPES, (source, clazz) -> {
             var field = clazz.getDeclaredField("date");
