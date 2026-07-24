@@ -41,16 +41,10 @@ import java.util.stream.Collectors;
  * It modifies the generated JAXB classes to use the specified package names for the
  * corresponding XML namespaces.
  * </p>
- * <p>
- * {@code @Deprecated} This plugin is deprecated and may be removed in future versions.
  *
  * @author Rawvoid
  */
-@Deprecated
-@Option(name = "Xnamespace", description = """
-    Customize Java package names for XML namespaces.
-    This plugin is deprecated and may be removed in future versions.
-    """)
+@Option(name = "Xnamespace", description = "Customize Java package names for XML namespaces")
 public class NamespacePlugin extends AbstractPlugin {
 
     @Option(name = "mapping", description = "Namespace to package mapping rule")

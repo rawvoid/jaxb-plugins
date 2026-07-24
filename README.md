@@ -196,21 +196,19 @@ Promotes nested beans **and enums** toward package scope one parent level at a t
 
 ---
 
-### 🌍 ~~**NamespacePlugin** `-Xnamespace`~~
+### 🌍 **NamespacePlugin** `-Xnamespace`
 
-~~*The namespace navigator!*~~
+*The namespace navigator!*
 
-~~**This plugin is deprecated and may be removed in future versions.**~~
+Take control of XML namespace to Java package mappings. Define custom mappings and automatically generate JAXB binding files.
 
-~~Take control of XML namespace to Java package mappings. Define custom mappings and automatically generate JAXB binding files.~~
+**🔥 Use Cases:**
+- Map namespaces to meaningful package names
+- Avoid default package naming conflicts
+- Support multiple schema versions
+- Clean up package structure
 
-~~**🔥 Use Cases:**~~
-~~- Map namespaces to meaningful package names~~
-~~- Avoid default package naming conflicts~~
-~~- Support multiple schema versions~~
-~~- Clean up package structure~~
-
-~~**⚡ Quick Start:**~~
+**⚡ Quick Start:**
 
 ```bash
 -Xnamespace \
@@ -220,7 +218,7 @@ Promotes nested beans **and enums** toward package scope one parent level at a t
   -prefix=ex
 ```
 
-~~**📝 Command Structure:**~~
+**📝 Command Structure:**
 
 ```bash
 -Xnamespace \
