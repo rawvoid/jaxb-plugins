@@ -340,8 +340,8 @@ Renames generated classes, enums, and element classes post-model building with s
 
 ```bash
 -Xrename-class \
-  -class-mapping=/(.*)Type/->$1 \
-  -class-mapping=Person->CustomPerson
+  -mapping=/(.*)Type/->$1 \
+  -mapping=Person->CustomPerson
 ```
 
 ---

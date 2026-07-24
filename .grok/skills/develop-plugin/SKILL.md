@@ -172,7 +172,7 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 | `ConvertNamePlugin`        | `-Xconvert-name`         | `postParseArgument` + `NameConverter`             |
 | `ElementWrapperPlugin`     | `-Xelement-wrapper`      | Dual-phase: model flatten + wrapper annotation    |
 | `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
-| `RenameClassPlugin`        | `-Xrename-class`         | Class short-name mapping (`-class-mapping`)       |
+| `RenameClassPlugin`        | `-Xrename-class`         | Class short-name mapping (`-mapping`)             |
 | `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes |
 
 Framework types: `AbstractPlugin`, `Option`, `TextParser`.
