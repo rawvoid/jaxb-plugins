@@ -297,10 +297,18 @@ public abstract class AbstractPlugin extends Plugin {
                     if (wholeCollectionParser != null) {
                         setFieldValue(object, field, wholeCollectionParser.parse(option.name(), textValue));
                     } else {
-                        j += parseCollectionArgument(object, field, option, textValue, args, j);
+                        j = parseCollectionArgument(object, field, option, textValue, args, j);
+                        if (!retainCollectionOptions) {
+                            remaining.remove(field);
+                        }
+                        continue;
                     }
                 } else {
-                    j += parseCollectionArgument(object, field, option, null, args, j);
+                    j = parseCollectionArgument(object, field, option, null, args, j);
+                    if (!retainCollectionOptions) {
+                        remaining.remove(field);
+                    }
+                    continue;
                 }
             } else if (textValue != null) {
                 var parser = getParser(option, fieldType);
@@ -330,14 +338,9 @@ public abstract class AbstractPlugin extends Plugin {
     }
 
     /**
-     * Parses one contiguous contribution to a collection option and returns how many
-     * additional args after {@code args[index]} were consumed (0 if only {@code args[index]}).
-     * <p>
-     * Nested-object lists accept a single leading group marker, then as many elements as
-     * fit. A repeated group marker is optional. A new element also starts when the next arg
-     * belongs to the element type (typically a field already used on the previous element).
-     * Scalar lists use {@code -name=value} and consume consecutive identical options.
-     * </p>
+     * Parses one contiguous contribution to a collection option.
+     *
+     * @return exclusive end index (first arg index after the consumed block)
      */
     private int parseCollectionArgument(Object object, Field optionField, Option option,
                                         String textValue, String[] args, int index) throws Exception {
@@ -355,6 +358,9 @@ public abstract class AbstractPlugin extends Plugin {
                 .formatted(getFullOptionName(option), formatUsage(optionField, optionField.getType(), option)));
     }
 
+    /**
+     * @return exclusive end index after consecutive {@code -name=value} elements
+     */
     private int parseScalarCollectionValues(Collection<Object> collection, Option option, Class<?> elementType,
                                             String firstText, String[] args, int index) throws Exception {
         var parser = getParser(option, elementType);
@@ -367,18 +373,21 @@ public abstract class AbstractPlugin extends Plugin {
             "^" + Pattern.quote(fullOptionName) + "\\s*" + Pattern.quote(delimiter) + "(.*)");
 
         collection.add(parser.parse(option.name(), firstText));
-        var j = index;
-        while (j + 1 < args.length) {
-            var matcher = pattern.matcher(args[j + 1]);
+        var last = index;
+        while (last + 1 < args.length) {
+            var matcher = pattern.matcher(args[last + 1]);
             if (!matcher.matches()) {
                 break;
             }
-            j++;
+            last++;
             collection.add(parser.parse(option.name(), matcher.group(1)));
         }
-        return j - index;
+        return last + 1;
     }
 
+    /**
+     * @return exclusive end index after the group marker and all parsed elements
+     */
     private int parseNestedObjectCollection(Collection<Object> collection, Class<?> elementType,
                                             String groupName, String[] args, int groupIndex) throws Exception {
         // args[groupIndex] is the group marker that triggered this call.
@@ -400,7 +409,7 @@ public abstract class AbstractPlugin extends Plugin {
             collection.add(element);
             lastConsumed = contentStart + consumed - 1;
         }
-        return lastConsumed - groupIndex;
+        return lastConsumed + 1;
     }
 
     /**
