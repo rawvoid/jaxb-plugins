@@ -69,7 +69,8 @@ import java.util.regex.Pattern;
 @Option(name = "Xnamespace", description = "Customize Java package names and XML namespace prefixes")
 public class NamespacePlugin extends AbstractPlugin {
 
-    private static final String BINDINGS_SYSTEM_ID = "namespace-plugin-bindings.xml";
+    private static final String BINDINGS_SYSTEM_ID =
+        "urn:io.github.rawvoid:jaxb-plugins:namespace-package-map";
 
     @Option(name = "package-map", description = "Map an XML target namespace to a Java package (optional XML prefixes)")
     List<PackageMapConfig> packageMaps;
