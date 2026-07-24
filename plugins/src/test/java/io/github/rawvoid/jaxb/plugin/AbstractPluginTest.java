@@ -154,6 +154,67 @@ class AbstractPluginTest {
     }
 
     @Test
+    void testCompactMappingSingleAndRepeated() throws Exception {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name=ns1->pkg1",
+            "-package-name=ns2->pkg2"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.packageNames).hasSize(2);
+        assertThat(plugin.packageNames.get(0).token).isEqualTo("ns1");
+        assertThat(plugin.packageNames.get(0).name).isEqualTo("pkg1");
+        assertThat(plugin.packageNames.get(1).token).isEqualTo("ns2");
+        assertThat(plugin.packageNames.get(1).name).isEqualTo("pkg2");
+    }
+
+    @Test
+    void testCompactAndStructuredMappingsAppend() throws Exception {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name=ns1->pkg1",
+            "-package-name",
+            "-token=ns2",
+            "-name=pkg2",
+            "-class-name=Person->Human"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.packageNames).hasSize(2);
+        assertThat(plugin.packageNames.get(0).name).isEqualTo("pkg1");
+        assertThat(plugin.packageNames.get(1).name).isEqualTo("pkg2");
+        assertThat(plugin.classNames).hasSize(1);
+        assertThat(plugin.classNames.getFirst().token).isEqualTo("Person");
+        assertThat(plugin.classNames.getFirst().name).isEqualTo("Human");
+    }
+
+    @Test
+    void testCompactInvalidFormatThrows() {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name=missing-arrow"
+        ).toArray(new String[0]);
+
+        assertThatThrownBy(() -> plugin.parseArgument(new Options(), args, 0))
+            .isInstanceOf(BadCommandLineException.class)
+            .hasMessageContaining("Invalid compact value");
+    }
+
+    @Test
+    void testCompactUsageShowsFormat() {
+        var plugin = new MappingPlugin();
+        var usage = plugin.getUsage();
+        assertThat(usage).contains("-package-name=<{token}->{name}>");
+        assertThat(usage).contains("[compact]");
+    }
+
+    @Test
     void testNestedListRepeatedGroupMarkerStillWorks() throws Exception {
         var plugin = new MappingPlugin();
         var args = List.of(
@@ -293,6 +354,7 @@ class AbstractPluginTest {
             return true;
         }
 
+        @Compact(format = "{token}->{name}")
         private static class NameMapping {
 
             @Option(name = "token", description = "Source token")

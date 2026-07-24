@@ -20,7 +20,14 @@ Built on a rock-solid foundation with our `AbstractPlugin` class that makes crea
 
 **Nested list options (e.g. `-package-name`, `-mapping`, `-add-to-class`):**
 
-- Write the **group marker once**, then list as many items as you need:
+- **Compact** (when the nested type has `@Compact`, e.g. convert-name mappings):
+
+```bash
+-package-name=http://example.com/a->com.example.a \
+-package-name=http://example.com/b->com.example.b
+```
+
+- **Structured** — write the **group marker once**, then list as many items as you need:
 
 ```bash
 -package-name \
@@ -149,9 +156,7 @@ Take control of how JAXB converts XML names to Java identifiers. Customize class
 
 ```bash
 -Xconvert-name \
-  -class-name \
-  -token=XMLDocument \
-  -name=Document \
+  -class-name=XMLDocument->Document \
   -variable-name \
   -regex=(.*)_ID \
   -name=$1Id
@@ -161,19 +166,15 @@ Take control of how JAXB converts XML names to Java identifiers. Customize class
 
 ```bash
 -Xconvert-name \
-  -class-name \                        # group once
-  -token=originalName \
-  -name=newName \
-  -token=AnotherType \                 # same field → next class-name item
-  -name=RenamedType \
+  # compact (token→name):
+  -class-name=originalName->newName \
+  -class-name=AnotherType->RenamedType \
+  -package-name=http://example.com/a->com.example.a \
+  -package-name=http://example.com/b->com.example.b \
+  # structured (regex or multi-field):
   -variable-name \
   -regex=(.*)_ID \
-  -name=$1Id \
-  -package-name \
-  -token=http://example.com/a \
-  -name=com.example.a \
-  -token=http://example.com/b \
-  -name=com.example.b
+  -name=$1Id
 ```
 
 ---
