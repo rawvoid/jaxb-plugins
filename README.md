@@ -34,7 +34,7 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 
 ```bash
 -Xjsr310 \
-  -mapping \
+  -type-mapping \
   -xsd-type=dateTime \
   -target-class=java.time.OffsetDateTime
 ```
@@ -44,10 +44,10 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 ```bash
 -Xjsr310 \
   -adapter-package=package.name \      # Optional: defaults to <common_package>.adapter
-  -mapping \                           # Group marker
+  -type-mapping \                      # Group marker
   -xsd-type=xsdType \
   -target-class=java.time.Class \
-  -pattern=dateFormat \
+  -format=dateFormat \
   -adapter=custom.AdapterClass \
   -regex=fieldPattern \
   -xsd-type=anotherType \              # Repeated child field starts next item
@@ -354,7 +354,7 @@ xjc schema.xsd \
   -extension \
   -Xjsr310 \
     -adapter-package=com.example.adapters \
-    -mapping \
+    -type-mapping \
     -xsd-type=dateTime \
     -target-class=java.time.LocalDateTime \
   -Xannotate \
