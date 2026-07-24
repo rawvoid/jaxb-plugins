@@ -117,9 +117,6 @@ public class NamespacePlugin extends AbstractPlugin {
                 </jaxb:bindings>
                 """.formatted(packageMap.namespace, packageMap.packageName));
         }
-        if (body.isEmpty()) {
-            return null;
-        }
         return """
             <?xml version="1.0" encoding="UTF-8"?>
             <jaxb:bindings
