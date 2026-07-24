@@ -21,7 +21,6 @@ io.github.rawvoid.jaxb.plugin.JSR310Plugin
 io.github.rawvoid.jaxb.plugin.NamespacePlugin
 io.github.rawvoid.jaxb.plugin.ConvertNamePlugin
 io.github.rawvoid.jaxb.plugin.ElementWrapperPlugin
-io.github.rawvoid.jaxb.plugin.NsPrefixPlugin
 io.github.rawvoid.jaxb.plugin.PromoteNestedClassPlugin
 io.github.rawvoid.jaxb.plugin.LombokPlugin
 io.github.rawvoid.jaxb.plugin.RenameClassPlugin

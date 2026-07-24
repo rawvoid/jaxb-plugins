@@ -18,169 +18,272 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.JAnnotationArrayMember;
 import com.sun.codemodel.JAnnotationStringValue;
+import com.sun.codemodel.JAnnotationUse;
+import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import com.sun.tools.xjc.outline.PackageOutline;
 import jakarta.xml.bind.annotation.XmlNs;
 import jakarta.xml.bind.annotation.XmlSchema;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
-import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
- * JAXB plugin that customizes Java package names for XML namespaces.
+ * JAXB plugin that customizes Java package names and XML namespace prefixes for XML namespaces.
  * <p>
- * This plugin allows users to define a mapping between XML namespaces and Java packages.
- * It modifies the generated JAXB classes to use the specified package names for the
- * corresponding XML namespaces.
+ * Package mapping is applied through injected external bindings and does not depend on
+ * command-line order of schema files. Prefix rules are applied on generated {@code @XmlSchema}
+ * annotations (including package-filtered multi-namespace rules ported from the former
+ * {@code -Xns-prefix} plugin).
  * </p>
+ * <p>
+ * Usage examples:
+ * </p>
+ * <pre>
+ * {@code
+ * // Map namespace to package (optional prefix for that package's own namespace)
+ * -Xnamespace -mapping=http://example.com->com.example:ex
+ * -Xnamespace -mapping -ns=http://example.com -package=com.example -prefix=ex
+ *
+ * // Prefix-only rules on all packages (or a package regex filter)
+ * -Xnamespace -config -xmlns -ns=http://example.com -prefix=ex
+ * -Xnamespace -config -package=com\.example\.* -xmlns=http://example.com->ex
+ *
+ * // Multiple xmlns on one package (one -xmlns; repeated -ns starts the next item)
+ * -Xnamespace -config -xmlns -ns=http://a.com -prefix=a -ns=http://b.com -prefix=b
+ * }
+ * </pre>
  *
  * @author Rawvoid
  */
-@Option(name = "Xnamespace", description = "Customize Java package names for XML namespaces")
+@Option(name = "Xnamespace", description = "Customize Java package names and XML namespace prefixes")
 public class NamespacePlugin extends AbstractPlugin {
 
-    @Option(name = "mapping", description = "Namespace to package mapping rule")
+    private static final String BINDINGS_SYSTEM_ID = "namespace-plugin-bindings.xml";
+
+    @Option(name = "mapping", description = "Namespace to Java package mapping rule (optional XML prefix)")
     List<NamespaceMappingConfig> mappings;
+
+    @Option(name = "config", description = "Package-scoped XML namespace prefix mapping rule")
+    List<PackageXmlNsConfig> configs;
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+        validateMappings();
         injectBindings(opt);
     }
 
-    /**
-     * Injects custom bindings into the JAXB options.
-     *
-     * @param options The JAXB options to inject bindings into.
-     */
-    public void injectBindings(Options options) {
-        var schemaLocations = collectSchemaLocation(options);
-        var bindings = generateBindings(schemaLocations);
-        if (bindings == null || bindings.isBlank()) return;
+    private void validateMappings() throws BadCommandLineException {
+        if (mappings == null || mappings.isEmpty()) {
+            return;
+        }
+        var seenNamespaces = new HashSet<String>();
+        for (var mapping : mappings) {
+            if (mapping.namespace == null || mapping.namespace.isBlank()) {
+                throw new BadCommandLineException("Namespace mapping requires a non-blank -ns value");
+            }
+            if (mapping.packageName == null || mapping.packageName.isBlank()) {
+                throw new BadCommandLineException(
+                    "Namespace mapping for '%s' requires -package".formatted(mapping.namespace));
+            }
+            if (!seenNamespaces.add(mapping.namespace)) {
+                throw new BadCommandLineException(
+                    "Duplicate namespace mapping for '%s'".formatted(mapping.namespace));
+            }
+        }
+    }
 
+    /**
+     * Injects external bindings that assign Java packages by XML target namespace.
+     * Bindings use {@code schemaLocation="*"} so they do not depend on when schemas were
+     * registered relative to plugin arguments.
+     */
+    private void injectBindings(Options options) {
+        var bindings = generateBindings();
+        if (bindings == null || bindings.isBlank()) {
+            return;
+        }
         var inputSource = new InputSource(new StringReader(bindings));
-        inputSource.setSystemId("//" + inputSource.hashCode());
+        inputSource.setSystemId(BINDINGS_SYSTEM_ID);
         options.addBindFile(inputSource);
     }
 
     /**
-     * Generates custom bindings for the JAXB options.
+     * Builds an external binding file for all configured package mappings.
      *
-     * @param schemaLocations A map of schema locations to XML namespaces.
-     * @return The generated bindings as a string, or {@code null} if no bindings are needed.
+     * @return binding XML, or {@code null} when no package mappings are configured
      */
-    public String generateBindings(Map<String, String> schemaLocations) {
-        var header = """
+    String generateBindings() {
+        if (mappings == null || mappings.isEmpty()) {
+            return null;
+        }
+        var body = new StringBuilder();
+        for (var mapping : mappings) {
+            var node = "/xs:schema[@targetNamespace=%s]".formatted(xpathLiteral(mapping.namespace));
+            body.append("""
+                <jaxb:bindings schemaLocation="*" node="%s">
+                    <jaxb:schemaBindings>
+                      <jaxb:package name="%s"/>
+                    </jaxb:schemaBindings>
+                </jaxb:bindings>
+                """.formatted(escapeXml(node), escapeXml(mapping.packageName)));
+        }
+        if (body.isEmpty()) {
+            return null;
+        }
+        return """
             <?xml version="1.0" encoding="UTF-8"?>
             <jaxb:bindings
                 xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
                 xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 version="3.0">
-            """;
-        var bodyTemplate = """
-            <jaxb:bindings schemaLocation="%s" node="/xs:schema">
-                <jaxb:schemaBindings>
-                  <jaxb:package name="%s"/>
-                </jaxb:schemaBindings>
-            </jaxb:bindings>
-            """;
-        var footer = "</jaxb:bindings>";
-
-        var body = new StringBuilder();
-        schemaLocations.forEach((schemaLocation, namespace) -> mappings.stream()
-            .filter(m -> Objects.equals(m.namespace, namespace))
-            .findFirst()
-            .ifPresent(mapping -> {
-                body.append(bodyTemplate.formatted(schemaLocation, mapping.packageName));
-            }));
-        if (body.isEmpty()) return null;
-        return header + body + footer;
+            """ + body + "</jaxb:bindings>";
     }
 
-    /**
-     * Resolves the target namespace from the given XML schema input source.
-     *
-     * @param inputSource The XML schema input source.
-     * @return The resolved target namespace, or {@code null} if not found.
-     */
-    public String resolveTargetNamespace(InputSource inputSource) {
-        try {
-            var doc = DocumentBuilderFactory.newInstance()
-                .newDocumentBuilder()
-                .parse(inputSource);
-            return doc.getDocumentElement().getAttribute("targetNamespace");
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * Collects the schema locations and their corresponding XML namespaces from the JAXB options.
-     *
-     * @param options The JAXB options to collect schema locations from.
-     * @return A map of schema locations to XML namespaces.
-     */
-    public Map<String, String> collectSchemaLocation(Options options) {
-        var grammars = options.getGrammars();
-        return Arrays.stream(grammars)
-            .filter(i -> i.getSystemId() != null)
-            .collect(Collectors.toMap(InputSource::getSystemId, this::resolveTargetNamespace));
-    }
-
-    /**
-     * Applies the custom namespace mappings to the JAXB outline.
-     *
-     * @param outline      The JAXB outline to apply mappings to.
-     * @param opt          The JAXB options.
-     * @param errorHandler The error handler.
-     * @return {@code true} if the mappings were applied successfully, {@code false} otherwise.
-     * @throws SAXException If a SAX error occurs.
-     */
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        outline.getAllPackageContexts().forEach(pkgOutline -> {
-            var jPackage = pkgOutline._package();
-            var xmlSchema = jPackage.annotations().stream()
-                .filter(a -> a.getAnnotationClass().fullName().equals(XmlSchema.class.getName()))
-                .findFirst()
-                .orElse(null);
-            if (xmlSchema == null) return;
-
-            var namespaceValue = (JAnnotationStringValue) xmlSchema.getAnnotationMembers().get("namespace");
-            if (namespaceValue == null) return;
-
-            var namespace = namespaceValue.toString();
-            var mapping = mappings.stream()
-                .filter(m -> Objects.equals(m.namespace, namespace) && m.prefix != null)
-                .findFirst()
-                .orElse(null);
-            if (mapping == null) return;
-
-            var xmlns = (JAnnotationArrayMember) xmlSchema.getAnnotationMembers().get("xmlns");
-            if (xmlns == null) {
-                xmlns = xmlSchema.paramArray("xmlns");
-                var anno = xmlns.annotate(XmlNs.class);
-                anno.param("prefix", mapping.prefix);
-                anno.param("namespaceURI", namespace);
-            } else {
-                xmlns.annotations().stream().filter(anno -> {
-                    var namespaceURIValue = (JAnnotationStringValue) anno.getAnnotationMembers().get("namespaceURI");
-                    return namespaceURIValue != null && Objects.equals(namespaceURIValue.toString(), namespace);
-                }).forEach(anno -> anno.param("prefix", mapping.prefix));
+        if (mappings != null) {
+            for (var mapping : mappings) {
+                if (mapping.prefix == null) {
+                    continue;
+                }
+                for (var packageOutline : outline.getAllPackageContexts()) {
+                    applyMappingPrefix(packageOutline, mapping);
+                }
             }
-        });
+        }
+        if (configs != null) {
+            for (var packageOutline : outline.getAllPackageContexts()) {
+                processPackageConfig(packageOutline);
+            }
+        }
         return true;
     }
 
+    private void applyMappingPrefix(PackageOutline packageOutline, NamespaceMappingConfig mapping) {
+        var xmlSchema = findXmlSchema(packageOutline);
+        if (xmlSchema == null) {
+            return;
+        }
+        var packageNamespace = readAnnotationString(xmlSchema, "namespace");
+        if (!Objects.equals(packageNamespace, mapping.namespace)) {
+            return;
+        }
+        var xmlns = ensureXmlnsArray(xmlSchema);
+        upsertXmlnsEntry(xmlns, mapping.namespace, mapping.prefix);
+    }
+
+    private void processPackageConfig(PackageOutline packageOutline) {
+        var jPackage = packageOutline._package();
+        var packageName = jPackage.name();
+        var matchedConfigs = configs.stream()
+            .filter(config -> config.packageRegex == null || config.packageRegex.matcher(packageName).matches())
+            .filter(config -> config.xmlNsConfigs != null && !config.xmlNsConfigs.isEmpty())
+            .toList();
+        if (matchedConfigs.isEmpty()) {
+            return;
+        }
+
+        var xmlSchema = findXmlSchema(packageOutline);
+        if (xmlSchema == null) {
+            return;
+        }
+
+        var xmlns = ensureXmlnsArray(xmlSchema);
+        for (var matchedConfig : matchedConfigs) {
+            for (var xmlNsConfig : matchedConfig.xmlNsConfigs) {
+                upsertXmlnsEntry(xmlns, xmlNsConfig.namespace, xmlNsConfig.prefix);
+            }
+        }
+    }
+
+    private static JAnnotationUse findXmlSchema(PackageOutline packageOutline) {
+        return packageOutline._package().annotations().stream()
+            .filter(a -> a.getAnnotationClass().fullName().equals(XmlSchema.class.getName()))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private static JAnnotationArrayMember ensureXmlnsArray(JAnnotationUse xmlSchema) {
+        var xmlns = (JAnnotationArrayMember) xmlSchema.getAnnotationMembers().get("xmlns");
+        if (xmlns == null) {
+            xmlns = xmlSchema.paramArray("xmlns");
+        }
+        return xmlns;
+    }
+
+    private static void upsertXmlnsEntry(JAnnotationArrayMember xmlns, String namespace, String prefix) {
+        var existing = findExistingXmlnsEntry(xmlns, namespace);
+        if (existing.isPresent()) {
+            existing.get().param("prefix", prefix);
+            return;
+        }
+        var entry = xmlns.annotate(XmlNs.class);
+        entry.param("prefix", prefix);
+        entry.param("namespaceURI", namespace);
+    }
+
+    private static Optional<JAnnotationUse> findExistingXmlnsEntry(JAnnotationArrayMember xmlns, String targetNamespace) {
+        return xmlns.annotations().stream()
+            .filter(anno -> Objects.equals(readAnnotationString(anno, "namespaceURI"), targetNamespace))
+            .findFirst();
+    }
+
+    private static String readAnnotationString(JAnnotationUse annotation, String member) {
+        var value = annotation.getAnnotationMembers().get(member);
+        if (!(value instanceof JAnnotationStringValue stringValue)) {
+            return null;
+        }
+        return stringValue.toString();
+    }
+
     /**
-     * Naming mapping rule configuration.
+     * Quotes {@code value} as an XPath string literal.
+     */
+    static String xpathLiteral(String value) {
+        if (value == null) {
+            return "''";
+        }
+        if (!value.contains("'")) {
+            return "'" + value + "'";
+        }
+        if (!value.contains("\"")) {
+            return "\"" + value + "\"";
+        }
+        var parts = value.split("'", -1);
+        var concat = new StringBuilder("concat(");
+        for (var i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                concat.append(",\"'\",");
+            }
+            concat.append('\'').append(parts[i]).append('\'');
+        }
+        concat.append(')');
+        return concat.toString();
+    }
+
+    static String escapeXml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+            .replace("&", "&amp;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;");
+    }
+
+    /**
+     * Namespace to Java package mapping, with optional XML prefix for that namespace.
      * <p>
      * Compact: {@code -mapping=http://a.com->com.example.a} or
      * {@code -mapping=http://a.com->com.example.a:prefix} (more specific template first).
@@ -189,14 +292,41 @@ public class NamespacePlugin extends AbstractPlugin {
     @Compact(formats = {"{ns}->{package}:{prefix}", "{ns}->{package}"})
     public static class NamespaceMappingConfig {
 
-        @Option(name = "ns", required = true, description = "XML target namespace URI (e.g., http://example.com/my-schema)")
+        @Option(name = "ns", required = true, description = "XML target namespace URI")
         String namespace;
 
-        @Option(name = "prefix", description = "XML target namespace prefix (e.g., myschema)")
-        String prefix;
-
-        @Option(name = "package", required = true, description = "Target Java package name for this namespace (e.g., com.example.myschema)")
+        @Option(name = "package", required = true, description = "Target Java package name for this namespace")
         String packageName;
+
+        @Option(name = "prefix", description = "XML namespace prefix written on @XmlSchema for this namespace")
+        String prefix;
     }
 
+    /**
+     * Package-scoped XML namespace prefix rules (optional Java package regex filter).
+     */
+    public static class PackageXmlNsConfig {
+
+        @Option(name = "package", description = "Java package name regex pattern; omit to match all packages")
+        Pattern packageRegex;
+
+        @Option(name = "xmlns", description = "XML namespace to prefix mappings")
+        List<XmlNsConfig> xmlNsConfigs;
+    }
+
+    /**
+     * Single namespace URI to prefix mapping.
+     * <p>
+     * Compact: {@code -xmlns=http://example.com->ex} (repeatable).
+     * </p>
+     */
+    @Compact(formats = {"{ns}->{prefix}"})
+    public static class XmlNsConfig {
+
+        @Option(name = "ns", required = true, description = "XML namespace URI")
+        String namespace;
+
+        @Option(name = "prefix", required = true, description = "XML namespace prefix")
+        String prefix;
+    }
 }
