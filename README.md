@@ -17,19 +17,21 @@ A suite of extensible XJC (JAXB) plugins designed to streamline XML-to-Java bind
 
 ---
 
-
 ## Available Plugins
 
 ### JSR-310 Plugin (`-Xjsr310`)
+
 Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 
 #### Key Features
+
 - Timezone-aware date/time handling (`OffsetDateTime`, `OffsetTime`).
 - Timezone-tolerant unmarshalling (automatically falls back to system local offset if timezone is omitted in XML).
 - Custom formatting patterns.
 - Automated `XmlAdapter` generation (derived from common package prefixes).
 
 #### Quick Start
+
 ```bash
 -Xjsr310 \
   -mapping \
@@ -38,6 +40,7 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 ```
 
 #### Command Options
+
 ```bash
 -Xjsr310 \
   -adapter-package=package.name \      # Optional: defaults to <common_package>.adapter
@@ -52,30 +55,34 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 ```
 
 #### Default Mappings
-| XSD Type | Java Target Type | Notes |
-| :--- | :--- | :--- |
-| `xs:dateTime` | `java.time.OffsetDateTime` | Timezone-tolerant |
-| `xs:date` | `java.time.LocalDate` | `ISO_DATE` |
-| `xs:time` | `java.time.OffsetTime` | Timezone-tolerant |
-| `xs:gYearMonth` | `java.time.YearMonth` | |
-| `xs:gYear` | `java.time.Year` | |
-| `xs:gMonthDay` | `java.time.MonthDay` | |
-| `xs:gDay` | `java.lang.Integer` | |
-| `xs:gMonth` | `java.time.Month` | |
-| `xs:duration` | `java.time.Duration` | |
+
+| XSD Type        | Java Target Type           | Notes             |
+|:----------------|:---------------------------|:------------------|
+| `xs:dateTime`   | `java.time.OffsetDateTime` | Timezone-tolerant |
+| `xs:date`       | `java.time.LocalDate`      | `ISO_DATE`        |
+| `xs:time`       | `java.time.OffsetTime`     | Timezone-tolerant |
+| `xs:gYearMonth` | `java.time.YearMonth`      |                   |
+| `xs:gYear`      | `java.time.Year`           |                   |
+| `xs:gMonthDay`  | `java.time.MonthDay`       |                   |
+| `xs:gDay`       | `java.lang.Integer`        |                   |
+| `xs:gMonth`     | `java.time.Month`          |                   |
+| `xs:duration`   | `java.time.Duration`       |                   |
 
 ---
 
 ### Annotate Plugin (`-Xannotate`)
+
 Adds, removes, or modifies annotations on generated classes, fields, methods, and package metadata.
 
 #### Key Features
+
 - Inject JSON binding annotations (e.g., Jackson `@JsonProperty`).
 - Add Jakarta validation constraints (`@NotNull`, `@Size`).
 - Attach framework-specific metadata.
 - Strip unwanted JAXB-generated annotations.
 
 #### Quick Start
+
 ```bash
 -Xannotate \
   -add-to-class \
@@ -87,6 +94,7 @@ Adds, removes, or modifies annotations on generated classes, fields, methods, an
 ```
 
 #### Command Options
+
 ```bash
 -Xannotate \
   -add-to-class \                      # Target kind: class
@@ -103,14 +111,17 @@ Adds, removes, or modifies annotations on generated classes, fields, methods, an
 ---
 
 ### Convert Name Plugin (`-Xconvert-name`)
+
 Customizes how XJC maps XML element names to Java identifiers (class names, field names, method names, and package names).
 
 #### Key Features
+
 - Convert `snake_case` XML definitions into `camelCase` Java properties.
 - Apply regular expression replacements to auto-generated class/variable names.
 - Resolve conflicts with legacy naming conventions.
 
 #### Quick Start
+
 ```bash
 -Xconvert-name \
   -class-name=XMLDocument->Document \
@@ -120,6 +131,7 @@ Customizes how XJC maps XML element names to Java identifiers (class names, fiel
 ```
 
 #### Command Options
+
 ```bash
 -Xconvert-name \
   # Compact format:
@@ -135,13 +147,16 @@ Customizes how XJC maps XML element names to Java identifiers (class names, fiel
 ---
 
 ### Element Wrapper Plugin (`-Xelement-wrapper`)
+
 Flattens XML collection wrapper elements by moving `@XmlElementWrapper` and `@XmlElement` annotations directly to the collection field and optionally deleting unnecessary wrapper classes.
 
 #### Key Features
+
 - Removes redundant wrapper DTO classes.
 - Simplifies object graphs and cleans up API signatures.
 
 #### Quick Start
+
 ```bash
 -Xelement-wrapper \
   -remove-wrapper-class=true
@@ -150,14 +165,17 @@ Flattens XML collection wrapper elements by moving `@XmlElementWrapper` and `@Xm
 ---
 
 ### Promote Nested Class Plugin (`-Xpromote-nested-class`)
+
 Promotes nested static classes and enums toward package scope level by level, stopping automatically upon name collisions.
 
 #### Key Features
+
 - Un-nests deeply scoped anonymous complex types and local enums.
 - Avoids unsafe renames by respecting namespace boundaries.
 - Executes during the `postProcessModel` phase.
 
 #### Quick Start
+
 ```bash
 -Xpromote-nested-class
 ```
@@ -165,13 +183,16 @@ Promotes nested static classes and enums toward package scope level by level, st
 ---
 
 ### Namespace Plugin (`-Xnamespace`)
+
 Controls the mapping between XML namespaces and Java package structures.
 
 #### Key Features
+
 - Defines explicit package mappings per namespace URI.
 - Prevents default package conflicts across complex multi-schema projects.
 
 #### Quick Start
+
 ```bash
 -Xnamespace \
   -mapping \
@@ -181,6 +202,7 @@ Controls the mapping between XML namespaces and Java package structures.
 ```
 
 #### Command Options
+
 ```bash
 -Xnamespace \
   # Compact format:
@@ -196,19 +218,23 @@ Controls the mapping between XML namespaces and Java package structures.
 ---
 
 ### Lombok Plugin (`-Xlombok`)
+
 Generates Lombok-annotated beans and strips default XJC getters/setters. Replaces hand-crafted `-Xannotate` + `-Xremove-getter` + `-Xremove-setter` pipelines.
 
 #### Key Features
+
 - Replaces getter/setter boilerplate with `@Data`.
 - Supports optional `@Builder` pattern generation.
 - Automatically handles `@EqualsAndHashCode(callSuper = true)` for non-`Object` subclasses.
 
 #### Quick Start
+
 ```bash
 -Xlombok
 ```
 
 #### Options
+
 ```bash
 -Xlombok \
   -anno=@lombok.Data \                 # Repeatable; defaults to @Data
@@ -223,9 +249,11 @@ Generates Lombok-annotated beans and strips default XJC getters/setters. Replace
 ---
 
 ### Remove Getter Plugin (`-Xremove-getter`)
+
 Removes property getter methods generated by XJC (matched against the property model rather than raw method names).
 
 #### Quick Start
+
 ```bash
 -Xremove-getter
 ```
@@ -233,9 +261,11 @@ Removes property getter methods generated by XJC (matched against the property m
 ---
 
 ### Remove Setter Plugin (`-Xremove-setter`)
+
 Removes property setter methods generated by XJC to create read-only DTOs and enforce immutability.
 
 #### Quick Start
+
 ```bash
 -Xremove-setter
 ```
@@ -243,13 +273,16 @@ Removes property setter methods generated by XJC to create read-only DTOs and en
 ---
 
 ### NS Prefix Plugin (`-Xns-prefix`)
+
 Manages XML namespace prefixes in generated `@XmlSchema` annotations and `package-info.java` files.
 
 #### Key Features
+
 - Ensures consistent XML namespace prefixes across generated packages.
 - Supports package filtering via regular expressions.
 
 #### Quick Start
+
 ```bash
 -Xns-prefix \
   -config \
@@ -259,6 +292,7 @@ Manages XML namespace prefixes in generated `@XmlSchema` annotations and `packag
 ```
 
 #### Command Options
+
 ```bash
 -Xns-prefix \
   -config \
@@ -277,6 +311,7 @@ Manages XML namespace prefixes in generated `@XmlSchema` annotations and `packag
 Add the plugin dependency to your project:
 
 ```xml
+
 <dependency>
   <groupId>io.github.rawvoid</groupId>
   <artifactId>jaxb-plugins</artifactId>
@@ -289,6 +324,7 @@ Add the plugin dependency to your project:
 Configure `jaxb-maven-plugin` with desired plugin arguments:
 
 ```xml
+
 <plugin>
   <groupId>org.jvnet.jaxb</groupId>
   <artifactId>jaxb-maven-plugin</artifactId>
@@ -328,6 +364,7 @@ xjc -d src -p com.example \
 ## Advanced Recipes
 
 ### Full Stack Pipeline Example
+
 ```bash
 xjc schema.xsd \
   -d src/main/java \
@@ -358,6 +395,7 @@ xjc schema.xsd \
 ```
 
 ### Lombok Integration Recipe
+
 ```bash
 xjc schema.xsd \
   -d src/main/java \
@@ -374,6 +412,7 @@ xjc schema.xsd \
 ## Building from Source
 
 ### Prerequisites
+
 - JDK 21+
 - Apache Maven 3.6+
 
