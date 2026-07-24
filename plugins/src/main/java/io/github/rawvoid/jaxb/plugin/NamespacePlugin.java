@@ -19,7 +19,6 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.codemodel.JAnnotationArrayMember;
 import com.sun.codemodel.JAnnotationStringValue;
 import com.sun.codemodel.JAnnotationUse;
-import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.tools.xjc.outline.PackageOutline;
@@ -30,7 +29,6 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 import java.io.StringReader;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -81,51 +79,7 @@ public class NamespacePlugin extends AbstractPlugin {
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
-        validatePackageMaps();
         injectBindings(opt);
-    }
-
-    private void validatePackageMaps() throws BadCommandLineException {
-        if (packageMaps == null || packageMaps.isEmpty()) {
-            return;
-        }
-        var seenNamespaces = new HashSet<String>();
-        for (var packageMap : packageMaps) {
-            if (packageMap.namespace == null || packageMap.namespace.isBlank()) {
-                throw new BadCommandLineException("Package map requires a non-blank -ns value");
-            }
-            if (packageMap.packageName == null || packageMap.packageName.isBlank()) {
-                throw new BadCommandLineException(
-                    "Package map for '%s' requires -package".formatted(packageMap.namespace));
-            }
-            if (!seenNamespaces.add(packageMap.namespace)) {
-                throw new BadCommandLineException(
-                    "Duplicate package map for namespace '%s'".formatted(packageMap.namespace));
-            }
-            validateXmlNsConfigs(packageMap.xmlNsConfigs, "package-map '%s'".formatted(packageMap.namespace));
-        }
-    }
-
-    private static void validateXmlNsConfigs(List<XmlNsConfig> xmlNsConfigs, String owner)
-        throws BadCommandLineException {
-        if (xmlNsConfigs == null || xmlNsConfigs.isEmpty()) {
-            return;
-        }
-        var seen = new HashSet<String>();
-        for (var xmlNs : xmlNsConfigs) {
-            if (xmlNs.namespace == null || xmlNs.namespace.isBlank()) {
-                throw new BadCommandLineException(
-                    "Xmlns entry under %s requires a non-blank -ns value".formatted(owner));
-            }
-            if (xmlNs.prefix == null || xmlNs.prefix.isBlank()) {
-                throw new BadCommandLineException(
-                    "Xmlns entry for '%s' under %s requires -prefix".formatted(xmlNs.namespace, owner));
-            }
-            if (!seen.add(xmlNs.namespace)) {
-                throw new BadCommandLineException(
-                    "Duplicate xmlns namespace '%s' under %s".formatted(xmlNs.namespace, owner));
-            }
-        }
     }
 
     /**
