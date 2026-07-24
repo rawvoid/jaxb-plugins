@@ -51,12 +51,12 @@ import java.util.regex.Pattern;
  * // Package-specific configuration
  * -Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex
  *
- * // Multiple namespaces for a package
- * -Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex -xmlns -ns=http://test.com -prefix=tst
+ * // Multiple namespaces for a package (one -xmlns; repeated -ns starts the next item)
+ * -Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex -ns=http://test.com -prefix=tst
  *
- * // Multiple package configurations
+ * // Multiple package configurations (one -config; repeated -package starts the next item)
  * -Xns-prefix -config -package=com\.example\.* -xmlns -ns=http://example.com -prefix=ex \
- *                  -config -package=com\.test\.* -xmlns -ns=http://test.com -prefix=tst
+ *                  -package=com\.test\.* -xmlns -ns=http://test.com -prefix=tst
  * }
  * </pre>
  *
