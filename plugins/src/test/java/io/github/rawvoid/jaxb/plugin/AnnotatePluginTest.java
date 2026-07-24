@@ -54,10 +54,10 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(value = {java.lang.Object.class, java.lang.String.class})",
-            "-regex=.*Person",
+            "-target=.*Person",
             "-add-to-field",
             "-anno=@jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter(jakarta.xml.bind.annotation.adapters.CollapsedStringAdapter.class)",
-            "-regex=.*name"
+            "-target=.*name"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             var generatedAnnotation = clazz.getDeclaredAnnotation(XmlSeeAlso.class);
@@ -80,7 +80,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlAccessorType(jakarta.xml.bind.annotation.XmlAccessType.NONE)",
-            "-regex=.*Person"
+            "-target=.*Person"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             var generatedAnnotation = clazz.getDeclaredAnnotation(XmlAccessorType.class);
@@ -96,7 +96,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")",
             "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(java.lang.Object.class)",
-            "-regex=.*Person"
+            "-target=.*Person"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(XmlRootElement.class)).isNotNull();
@@ -105,13 +105,13 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testMultiplePatterns() throws Exception {
+    void testMultipleTargets() throws Exception {
         var args = List.of(
             "-Xannotate",
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")",
-            "-regex=.*Person",
-            "-regex=.*Order"
+            "-target=.*Person",
+            "-target=.*Order"
         );
         var classes = testExecute(args, PERSON_OR_ORDER, (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(XmlRootElement.class)).isNotNull();
@@ -126,10 +126,10 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"test\")",
-            "-regex=.*Person",
+            "-target=.*Person",
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlSeeAlso(java.lang.Object.class)",
-            "-regex=.*Person"
+            "-target=.*Person"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(XmlRootElement.class)).isNotNull();
@@ -144,7 +144,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-add-to-class",
             "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"first\")",
             "-anno=@jakarta.xml.bind.annotation.XmlRootElement(name=\"second\")",
-            "-regex=.*Person"
+            "-target=.*Person"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             var annotations = clazz.getDeclaredAnnotationsByType(XmlRootElement.class);
@@ -166,13 +166,13 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testMultipleFieldPatterns() throws Exception {
+    void testMultipleFieldTargets() throws Exception {
         var args = List.of(
             "-Xannotate",
             "-add-to-field",
             "-anno=@jakarta.xml.bind.annotation.XmlSchemaType(name=\"test\")",
-            "-regex=.*name",
-            "-regex=.*age"
+            "-target=.*name",
+            "-target=.*age"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(clazz.getDeclaredField("name").getDeclaredAnnotation(XmlSchemaType.class)).isNotNull();
@@ -187,7 +187,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-remove-from-class",
             "-anno=jakarta.xml.bind.annotation.XmlAccessorType",
-            "-regex=.*Person"
+            "-target=.*Person"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(clazz.getDeclaredAnnotation(XmlAccessorType.class)).isNull();
@@ -200,10 +200,10 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-field",
             "-anno=@jakarta.xml.bind.annotation.XmlSchemaType(name=\"test\")",
-            "-regex=.*name",
+            "-target=.*name",
             "-remove-from-field",
             "-anno=jakarta.xml.bind.annotation.XmlSchemaType",
-            "-regex=.*name"
+            "-target=.*name"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             var nameField = clazz.getDeclaredField("name");
@@ -217,7 +217,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-remove-from-class",
             "-anno=jakarta.xml.bind.annotation.XmlAccessorType",
-            "-regex=.*Order"
+            "-target=.*Order"
         );
         testExecute(args, PERSON_OR_ORDER, (source, clazz) -> {
             if (clazz.getSimpleName().equals("Person")) {
@@ -234,7 +234,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-method",
             "-anno=@java.lang.Deprecated",
-            "-regex=.*getName"
+            "-target=.*getName"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(clazz.getDeclaredMethod("getName").getDeclaredAnnotation(Deprecated.class)).isNotNull();
@@ -248,10 +248,10 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-method",
             "-anno=@java.lang.Deprecated",
-            "-regex=.*getName",
+            "-target=.*getName",
             "-remove-from-method",
             "-anno=java.lang.Deprecated",
-            "-regex=.*getName"
+            "-target=.*getName"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(clazz.getDeclaredMethod("getName").getDeclaredAnnotation(Deprecated.class)).isNull();
@@ -264,7 +264,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-package",
             "-anno=@java.lang.Deprecated",
-            "-regex=com\\.github\\.rawvoid\\.xjc_plugins\\.annotate"
+            "-target=com\\.github\\.rawvoid\\.xjc_plugins\\.annotate"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             var pkg = clazz.getPackage();
@@ -279,7 +279,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-remove-from-package",
             "-anno=jakarta.xml.bind.annotation.XmlSchema",
-            "-regex=com\\.github\\.rawvoid\\.xjc_plugins\\.annotate"
+            "-target=com\\.github\\.rawvoid\\.xjc_plugins\\.annotate"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(clazz.getPackage().getDeclaredAnnotation(XmlSchema.class)).isNull();
@@ -292,7 +292,7 @@ class AnnotatePluginTest extends AbstractXJCMojoTestCase {
             "-Xannotate",
             "-add-to-package",
             "-anno=@jakarta.xml.bind.annotation.XmlSchema(xmlns={@jakarta.xml.bind.annotation.XmlNs(prefix=\"p\", namespaceURI=\"http://example.com\")})",
-            "-regex=com\\.github\\.rawvoid\\.xjc_plugins\\.annotate"
+            "-target=com\\.github\\.rawvoid\\.xjc_plugins\\.annotate"
         );
         testExecute(args, PERSON, (source, clazz) -> {
             var schema = clazz.getPackage().getDeclaredAnnotation(XmlSchema.class);

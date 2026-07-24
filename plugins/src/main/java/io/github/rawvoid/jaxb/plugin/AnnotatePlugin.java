@@ -123,7 +123,7 @@ public class AnnotatePlugin extends AbstractPlugin {
     }
 
     /**
-     * Adds annotations to the specified target if the target name matches any of the patterns in the configuration.
+     * Adds annotations to the specified target if the target name matches any of the targets in the configuration.
      *
      * @param target     the target to add annotations to
      * @param targetName the name of the target
@@ -131,8 +131,8 @@ public class AnnotatePlugin extends AbstractPlugin {
      */
     public void addAnnotation(JAnnotatable target, String targetName, List<AddConfig> configs) {
         var matchedConfigs = configs.stream()
-            .filter(config -> config.patterns == null || config.patterns.isEmpty() || config.patterns.stream()
-                .anyMatch(pattern -> pattern.matcher(targetName).matches()))
+            .filter(config -> config.targets == null || config.targets.isEmpty() || config.targets.stream()
+                .anyMatch(targetPattern -> targetPattern.matcher(targetName).matches()))
             .toList();
         var xAnnotations = matchedConfigs.stream()
             .flatMap(config -> config.xAnnotations.stream());
@@ -252,7 +252,7 @@ public class AnnotatePlugin extends AbstractPlugin {
     }
 
     /**
-     * Removes annotations from the specified target if the target name matches any of the patterns in the configuration.
+     * Removes annotations from the specified target if the target name matches any of the targets in the configuration.
      *
      * @param target     the target to remove annotations from
      * @param targetName the name of the target
@@ -260,8 +260,8 @@ public class AnnotatePlugin extends AbstractPlugin {
      */
     public void removeAnnotation(JAnnotatable target, String targetName, List<RemoveConfig> configs) {
         var matchedConfigs = configs.stream()
-            .filter(config -> config.patterns == null || config.patterns.isEmpty() || config.patterns.stream()
-                .anyMatch(pattern -> pattern.matcher(targetName).matches()))
+            .filter(config -> config.targets == null || config.targets.isEmpty() || config.targets.stream()
+                .anyMatch(targetPattern -> targetPattern.matcher(targetName).matches()))
             .toList();
 
         matchedConfigs.forEach(config -> config.annotations.forEach(annoClass -> {
@@ -280,8 +280,8 @@ public class AnnotatePlugin extends AbstractPlugin {
         @Option(name = "anno", required = true, placeholder = "annotation", description = "The annotation to be added")
         List<XAnnotation<?>> xAnnotations;
 
-        @Option(name = "regex", description = "The regex pattern to match the target")
-        List<Pattern> patterns;
+        @Option(name = "target", description = "Regex to match the fully-qualified target name")
+        List<Pattern> targets;
 
     }
 
@@ -293,8 +293,8 @@ public class AnnotatePlugin extends AbstractPlugin {
         @Option(name = "anno", required = true, placeholder = "class", description = "The annotation class name to be removed")
         List<Class<? extends Annotation>> annotations;
 
-        @Option(name = "regex", description = "The regex pattern to match the target")
-        List<Pattern> patterns;
+        @Option(name = "target", description = "Regex to match the fully-qualified target name")
+        List<Pattern> targets;
 
     }
 }
