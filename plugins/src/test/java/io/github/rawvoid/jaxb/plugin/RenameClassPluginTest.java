@@ -41,7 +41,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesMatchingClass() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-from=Person",
             "-to=CustomPerson"
         );
@@ -57,7 +57,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesWithCompactSyntax() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping=Person->CustomPerson"
+            "-mapping=Person->CustomPerson"
         );
         var classes = testExecute(args, ".*", null);
         var byName = bySimpleName(classes);
@@ -71,7 +71,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesWithRegexReplacement() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-from=(.*)Type",
             "-to=$1"
         );
@@ -86,7 +86,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesWithRegexCompactSyntax() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping=/(.*)Type/->$1"
+            "-mapping=/(.*)Type/->$1"
         );
         var classes = testExecute(args, ".*", null);
         var byName = bySimpleName(classes);
@@ -100,7 +100,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // Default package derived from namespace; wrong package must leave Person untouched.
         var wrongPackage = List.of(
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-package=com.does.not.exist",
             "-from=Person",
             "-to=CustomPerson"
@@ -114,7 +114,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     void renamesEnum() throws Exception {
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-from=Color",
             "-to=Colour"
         );
@@ -131,11 +131,11 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // Map Alpha and Beta both to SharedName → conflict group; both stay original.
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-from=Alpha|Beta",
             "-to=SharedName",
             // Unrelated rename still applies.
-            "-class-mapping",
+            "-mapping",
             "-from=Person",
             "-to=CustomPerson"
         );
@@ -152,7 +152,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // Alpha → Person while Person stays Person → both blocked for that slot.
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-from=^Alpha$",
             "-to=Person"
         );
@@ -169,7 +169,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // NamedAssocType → NamedAssoc would match nested NamedAssoc; outer rename blocked.
         var args = List.of(
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-from=^(.+)Type$",
             "-to=$1"
         );
@@ -190,7 +190,7 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xpromote-nested-class",
             "-Xrename-class",
-            "-class-mapping",
+            "-mapping",
             "-from=^(.+)Type$",
             "-to=$1"
         );

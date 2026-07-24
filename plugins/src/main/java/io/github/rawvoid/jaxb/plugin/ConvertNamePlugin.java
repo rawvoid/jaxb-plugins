@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
  *
  * @author Rawvoid
  */
-@Option(name = "Xconvert-name", description = "Enable name conversion plugin")
+@Option(name = "Xconvert-name", description = "Customize naming conversion rules for generated code")
 public class ConvertNamePlugin extends AbstractPlugin {
 
     /**
@@ -50,37 +50,37 @@ public class ConvertNamePlugin extends AbstractPlugin {
      * List of class name conversion configurations.
      */
     @Option(name = "class-name", description = "Configure class name conversion rules")
-    List<NameMapping> classNameMappings;
+    List<NameMappingConfig> classNameMappings;
 
     /**
      * List of variable name conversion configurations.
      */
     @Option(name = "variable-name", description = "Configure variable name conversion rules")
-    List<NameMapping> variableNameMappings;
+    List<NameMappingConfig> variableNameMappings;
 
     /**
      * List of interface name conversion configurations.
      */
     @Option(name = "interface-name", description = "Configure interface name conversion rules")
-    List<NameMapping> interfaceNameMappings;
+    List<NameMappingConfig> interfaceNameMappings;
 
     /**
      * List of property name conversion configurations.
      */
     @Option(name = "property-name", description = "Configure property name (including Getter/Setter method names) conversion rules")
-    List<NameMapping> propertyNameMappings;
+    List<NameMappingConfig> propertyNameMappings;
 
     /**
      * List of constant name conversion configurations.
      */
     @Option(name = "constant-name", description = "Configure constant name conversion rules")
-    List<NameMapping> constantNameMappings;
+    List<NameMappingConfig> constantNameMappings;
 
     /**
      * List of package name conversion configurations.
      */
     @Option(name = "package-name", description = "Configure package name conversion rules")
-    List<NameMapping> packageNameMappings;
+    List<NameMappingConfig> packageNameMappings;
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
@@ -122,7 +122,7 @@ public class ConvertNamePlugin extends AbstractPlugin {
                 return convertName(nsUri, super.toPackageName(nsUri), packageNameMappings);
             }
 
-            public String convertName(String token, String internalName, List<NameMapping> mappings) {
+            public String convertName(String token, String internalName, List<NameMappingConfig> mappings) {
                 if (mappings == null || mappings.isEmpty()) {
                     return internalName;
                 }
@@ -148,7 +148,7 @@ public class ConvertNamePlugin extends AbstractPlugin {
         opt.setNameConverter(nameConverter, this);
     }
 
-    private static void validateMappings(String optionName, List<NameMapping> mappings) {
+    private static void validateMappings(String optionName, List<NameMappingConfig> mappings) {
         if (mappings == null || mappings.isEmpty()) {
             return;
         }
@@ -185,7 +185,7 @@ public class ConvertNamePlugin extends AbstractPlugin {
      */
     // More specific regex template first so "/…/->…" is not parsed as input="/…/".
     @Compact(formats = {"/{name}/->{to}", "{input}->{to}"})
-    public static class NameMapping {
+    public static class NameMappingConfig {
 
         /**
          * Exact match against the original NameConverter input

@@ -41,18 +41,18 @@ import java.util.Queue;
  *
  * @author Rawvoid
  */
-@Option(name = "Xgenerated-anno", description = "Automatically add jakarta.annotation.Generated annotations to generated classes and packages")
+@Option(name = "Xgenerated-anno", description = "Add jakarta.annotation.Generated annotations to generated classes and packages")
 public class GeneratedAnnoPlugin extends AbstractPlugin {
 
     private static final String GENERATED_ANNOTATION_FQCN = "jakarta.annotation.Generated";
 
-    @Option(name = "value", description = "The value attribute of @Generated annotation. Defaults to 'JAXB RI v[BuildID]'")
+    @Option(name = "value", description = "Value attribute of @Generated annotation (default: JAXB RI v[BuildID])")
     private String value;
 
-    @Option(name = "comments", description = "The comments attribute of @Generated annotation. Defaults to none")
+    @Option(name = "comments", description = "Comments attribute of @Generated annotation")
     private String comments;
 
-    @Option(name = "date", defaultValue = "false", description = "Whether to include a date in @Generated annotation")
+    @Option(name = "date", defaultValue = "false", description = "Include generation date in @Generated annotation (default: false)")
     private Boolean date;
 
     @Override

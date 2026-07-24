@@ -36,7 +36,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  * <pre>
  * {@code
  * @Compact(formats = {"/{name}/->{to}", "{input}->{to}"})
- * public static class NameMapping {
+ * public static class NameMappingConfig {
  *     @Option(name = "input") String input;
  *     @Option(name = "name") Pattern name;
  *     @Option(name = "to", required = true) String to;

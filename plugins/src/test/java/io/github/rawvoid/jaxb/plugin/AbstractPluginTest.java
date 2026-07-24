@@ -430,10 +430,10 @@ class AbstractPluginTest {
     private static class MappingPlugin extends AbstractPlugin {
 
         @Option(name = "package-name", description = "Package name mappings")
-        List<NameMapping> packageNames;
+        List<NameMappingConfig> packageNames;
 
         @Option(name = "class-name", description = "Class name mappings")
-        List<NameMapping> classNames;
+        List<NameMappingConfig> classNames;
 
         @Override
         public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
@@ -441,7 +441,7 @@ class AbstractPluginTest {
         }
 
         @Compact(formats = {"{token}->{name}"})
-        private static class NameMapping {
+        private static class NameMappingConfig {
 
             @Option(name = "token", description = "Source token")
             String token;

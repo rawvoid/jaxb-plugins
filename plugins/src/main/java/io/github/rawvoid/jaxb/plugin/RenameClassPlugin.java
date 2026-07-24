@@ -74,8 +74,8 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RenameClassPlugin.class);
 
-    @Option(name = "class-mapping", description = "Class name mapping (package filter + from pattern + to)")
-    List<ClassMappingConfig> classMappings;
+    @Option(name = "mapping", description = "Class name mapping (package filter + from pattern + to)")
+    List<MappingConfig> mappings;
 
     /**
      * Collects this bean and its {@link CClassInfo} ancestors that still have a pending rename.
@@ -188,7 +188,7 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
-        if (classMappings == null || classMappings.isEmpty()) {
+        if (mappings == null || mappings.isEmpty()) {
             return;
         }
 
@@ -380,11 +380,11 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * First matching {@link #classMappings} entry wins. The list is non-null and non-empty
+     * First matching {@link #mappings} entry wins. The list is non-null and non-empty
      * when this is called from {@link #postProcessModel}.
      */
     private String mapName(Candidate candidate) {
-        for (var mapping : classMappings) {
+        for (var mapping : mappings) {
             if (matches(mapping, candidate)) {
                 return mapWith(mapping, candidate);
             }
@@ -392,12 +392,12 @@ public class RenameClassPlugin extends AbstractPlugin {
         return candidate.shortName;
     }
 
-    private static boolean matches(ClassMappingConfig mapping, Candidate candidate) {
+    private static boolean matches(MappingConfig mapping, Candidate candidate) {
         return (mapping.packageName == null || mapping.packageName.equals(candidate.packageName))
             && mapping.from.matcher(candidate.shortName).matches();
     }
 
-    private static String mapWith(ClassMappingConfig mapping, Candidate candidate) {
+    private static String mapWith(MappingConfig mapping, Candidate candidate) {
         var next = candidate.shortName.replaceAll(mapping.from.pattern(), mapping.to);
         if (JJavaName.isJavaIdentifier(next)) {
             return next;
@@ -425,12 +425,12 @@ public class RenameClassPlugin extends AbstractPlugin {
     /**
      * One class-name mapping: optional package filter, required short-name pattern, target name.
      * <p>
-     * Compact CLI (see {@link Compact}): {@code -class-mapping=Person->CustomPerson},
-     * {@code -class-mapping=/(.*)Type/->$1}.
+     * Compact CLI (see {@link Compact}): {@code -mapping=Person->CustomPerson},
+     * {@code -mapping=/(.*)Type/->$1}.
      * </p>
      */
     @Compact(formats = {"/{from}/->{to}", "{from}->{to}"})
-    public static class ClassMappingConfig {
+    public static class MappingConfig {
 
         /**
          * Optional exact match on the owner package name ({@code getOwnerPackage().name()}).

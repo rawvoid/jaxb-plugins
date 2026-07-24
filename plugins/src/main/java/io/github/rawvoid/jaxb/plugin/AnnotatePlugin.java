@@ -277,7 +277,7 @@ public class AnnotatePlugin extends AbstractPlugin {
      */
     public static class AddConfig {
 
-        @Option(name = "anno", required = true, placeholder = "annotation", description = "The annotation to be added")
+        @Option(name = "anno", required = true, placeholder = "annotation", description = "Annotation to add")
         List<XAnnotation<?>> xAnnotations;
 
         @Option(name = "target", description = "Regex to match the fully-qualified target name")
@@ -290,7 +290,7 @@ public class AnnotatePlugin extends AbstractPlugin {
      */
     public static class RemoveConfig {
 
-        @Option(name = "anno", required = true, placeholder = "class", description = "The annotation class name to be removed")
+        @Option(name = "anno", required = true, placeholder = "class", description = "Annotation class name to remove")
         List<Class<? extends Annotation>> annotations;
 
         @Option(name = "target", description = "Regex to match the fully-qualified target name")
