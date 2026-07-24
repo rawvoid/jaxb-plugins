@@ -128,6 +128,157 @@ class AbstractPluginTest {
             .isInstanceOf(BadCommandLineException.class);
     }
 
+    @Test
+    void testNestedListGroupMarkerOnceStartsNextItemOnSameField() throws Exception {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name",
+            "-token=ns1",
+            "-name=pkg1",
+            "-token=ns2",
+            "-name=pkg2",
+            "-token=ns3",
+            "-name=pkg3"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.packageNames).hasSize(3);
+        assertThat(plugin.packageNames.get(0).token).isEqualTo("ns1");
+        assertThat(plugin.packageNames.get(0).name).isEqualTo("pkg1");
+        assertThat(plugin.packageNames.get(1).token).isEqualTo("ns2");
+        assertThat(plugin.packageNames.get(1).name).isEqualTo("pkg2");
+        assertThat(plugin.packageNames.get(2).token).isEqualTo("ns3");
+        assertThat(plugin.packageNames.get(2).name).isEqualTo("pkg3");
+    }
+
+    @Test
+    void testNestedListRepeatedGroupMarkerStillWorks() throws Exception {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name",
+            "-token=ns1",
+            "-name=pkg1",
+            "-package-name",
+            "-token=ns2",
+            "-name=pkg2"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.packageNames).hasSize(2);
+        assertThat(plugin.packageNames.get(0).name).isEqualTo("pkg1");
+        assertThat(plugin.packageNames.get(1).name).isEqualTo("pkg2");
+    }
+
+    @Test
+    void testNestedListOptionsMayInterleave() throws Exception {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name",
+            "-token=ns1",
+            "-name=pkg1",
+            "-class-name",
+            "-token=Person",
+            "-name=Human",
+            "-package-name",
+            "-token=ns2",
+            "-name=pkg2",
+            "-class-name",
+            "-token=Root",
+            "-name=RootType"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.packageNames).hasSize(2);
+        assertThat(plugin.packageNames.get(0).token).isEqualTo("ns1");
+        assertThat(plugin.packageNames.get(1).token).isEqualTo("ns2");
+        assertThat(plugin.classNames).hasSize(2);
+        assertThat(plugin.classNames.get(0).token).isEqualTo("Person");
+        assertThat(plugin.classNames.get(1).token).isEqualTo("Root");
+    }
+
+    @Test
+    void testScalarListOptionsMayInterleave() throws Exception {
+        var plugin = new TestPlugin();
+        plugin.registerTextParser(XAnnotation.class, (optionName, text) ->
+            XAnnotationParser.INSTANCE.parse(text.toString()));
+        plugin.registerTextParser(Pattern.class, (optionName, text) -> Pattern.compile(text.toString()));
+
+        var args = List.of(
+            "-Xtest-plugin",
+            "-int-list=1",
+            "-config",
+            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest",
+            "-index=1",
+            "-int-list=2",
+            "-int-list=3"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.intList).containsExactly(1, 2, 3);
+        assertThat(plugin.config.index).isEqualTo(1);
+    }
+
+    @Test
+    void testAnnotationListGroupOnceAndSameFieldStartsNextItem() throws Exception {
+        var plugin = new TestPlugin();
+        plugin.registerTextParser(XAnnotation.class, (optionName, text) ->
+            XAnnotationParser.INSTANCE.parse(text.toString()));
+        plugin.registerTextParser(Pattern.class, (optionName, text) -> Pattern.compile(text.toString()));
+
+        var args = List.of(
+            "-Xtest-plugin",
+            "-annotation-list",
+            "-annotation=@jakarta.xml.bind.annotation.XmlElement",
+            "-regex=a.*",
+            "-annotation=@jakarta.xml.bind.annotation.XmlRootElement",
+            "-regex=b.*",
+            "-config",
+            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest",
+            "-int-list=1"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.annotationList).hasSize(2);
+        assertThat(plugin.annotationList.get(0).annotation.getFirst().getAnnotationClass())
+            .isEqualTo(jakarta.xml.bind.annotation.XmlElement.class);
+        assertThat(plugin.annotationList.get(0).regex.pattern()).isEqualTo("a.*");
+        assertThat(plugin.annotationList.get(1).annotation.getFirst().getAnnotationClass())
+            .isEqualTo(jakarta.xml.bind.annotation.XmlRootElement.class);
+        assertThat(plugin.annotationList.get(1).regex.pattern()).isEqualTo("b.*");
+    }
+
+    @Option(prefix = "-X", name = "mapping", description = "Nested list mapping options")
+    private static class MappingPlugin extends AbstractPlugin {
+
+        @Option(name = "package-name", description = "Package name mappings")
+        List<NameMapping> packageNames;
+
+        @Option(name = "class-name", description = "Class name mappings")
+        List<NameMapping> classNames;
+
+        @Override
+        public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+            return true;
+        }
+
+        private static class NameMapping {
+
+            @Option(name = "token", description = "Source token")
+            String token;
+
+            @Option(name = "name", required = true, description = "Target name")
+            String name;
+        }
+    }
+
     @Option(prefix = "-X", name = "default-required", description = "Test defaults + required")
     private static class DefaultAndRequiredPlugin extends AbstractPlugin {
 

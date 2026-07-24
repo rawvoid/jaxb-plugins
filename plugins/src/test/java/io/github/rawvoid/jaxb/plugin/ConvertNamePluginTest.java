@@ -116,6 +116,45 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void testClassNameGroupMarkerOnce() throws Exception {
+        // Same child field (-token) starts the next list item without repeating -class-name.
+        var args = List.of(
+            "-Xconvert-name",
+            "-class-name",
+            "-token=Person",
+            "-name=CustomPerson",
+            "-token=RootType",
+            "-name=Root"
+        );
+        List<String> list = new ArrayList<>();
+        testExecute(args, PKG + "\\.(CustomPerson|Root)", (source, clazz) -> {
+            list.add(clazz.getSimpleName());
+        });
+
+        assertThat(list).containsExactlyInAnyOrder("CustomPerson", "Root");
+    }
+
+    @Test
+    void testInterleavedPackageAndClassNameMappings() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-package-name",
+            "-token=" + NS,
+            "-name=io.github.rawvoid.custom",
+            "-class-name",
+            "-token=Person",
+            "-name=CustomPerson",
+            "-package-name",
+            "-token=https://unused.example/ns",
+            "-name=io.github.rawvoid.ignored"
+        );
+        testExecute(args, "io\\.github\\.rawvoid\\.custom\\.CustomPerson", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("io.github.rawvoid.custom");
+            assertThat(clazz.getSimpleName()).isEqualTo("CustomPerson");
+        });
+    }
+
+    @Test
     void testConstantNameConvert() throws Exception {
         var args = List.of(
             "-Xconvert-name",

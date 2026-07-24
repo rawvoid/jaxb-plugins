@@ -85,8 +85,8 @@ Simplest real examples: `RemoveGetterPlugin`, `RemoveSetterPlugin`.
 |---------------------------------------|---------------------------------|---------------------------------------------------|
 | `boolean` / `Boolean`                 | `-flag`                         | Presence sets `true`                              |
 | `String`, numbers, `Class`, `Pattern` | `-name=value`                   | Built-in text parsers                             |
-| `List<T>` of scalars                  | repeat `-name=value`            | Repeatable                                        |
-| Nested static class / `List<Nested>`  | `-group` then nested `-child=…` | Nested class needs no-arg ctor + `@Option` fields |
+| `List<T>` of scalars                  | repeat `-name=value`            | Repeatable; may interleave with other root options |
+| Nested static class / `List<Nested>`  | `-group` then nested `-child=…` | Group marker once; repeated child field starts next item; nested class needs no-arg ctor + `@Option` fields |
 
 Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `delimiter` (default `=`), `prefix` (default `-`).
 
