@@ -84,8 +84,8 @@ public class LombokPlugin extends AbstractPlugin {
     @Option(name = "anno", description = "Lombok annotation to add (repeatable). Defaults to @lombok.Data when omitted")
     List<XAnnotation<?>> annotations;
 
-    @Option(name = "regex", description = "Regex to match fully-qualified class names")
-    List<Pattern> patterns;
+    @Option(name = "class-name", description = "Regex to match fully-qualified class names")
+    List<Pattern> classNames;
 
     @Option(name = "remove-getter", defaultValue = "true",
         description = "Remove generated getter methods (default: true)")
@@ -241,10 +241,10 @@ public class LombokPlugin extends AbstractPlugin {
     }
 
     private boolean matches(String className) {
-        if (patterns == null || patterns.isEmpty()) {
+        if (classNames == null || classNames.isEmpty()) {
             return true;
         }
-        return patterns.stream().anyMatch(pattern -> pattern.matcher(className).matches());
+        return classNames.stream().anyMatch(pattern -> pattern.matcher(className).matches());
     }
 
     /**

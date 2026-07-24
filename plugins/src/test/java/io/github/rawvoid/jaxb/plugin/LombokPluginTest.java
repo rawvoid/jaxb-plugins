@@ -193,8 +193,8 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testRegexFilter() throws Exception {
-        var args = List.of("-Xlombok", "-regex=.*Person");
+    void testClassNameFilter() throws Exception {
+        var args = List.of("-Xlombok", "-class-name=.*Person");
         testExecute(args, PERSON, (source, clazz) -> {
             assertThat(source).contains("@Data");
             assertThat(hasPropertyGetterInSource(source)).isFalse();
