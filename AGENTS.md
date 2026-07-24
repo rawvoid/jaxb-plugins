@@ -10,7 +10,7 @@ Instructions for AI assistants working in this repository.
 
 ## 2. Code & Research
 
-- **Simplicity & Elegance**: Keep architecture flat and control flow obvious. Drop unused branches, speculative abstractions, and defensive code for impossible states.
+- **Simplicity & Elegance**: Avoid over-engineering, over-coding, and speculative abstractions. Keep architecture flat and control flow obvious. Write concise, readable, and elegant code with clear structure. Drop unused branches and defensive code for impossible states.
 - **Modern Java**: Target **Java 21+**. Use current Java features (`var` for obvious types, records, pattern matching, sequenced collections, text blocks) when they improve clarity.
 - **Dependencies**: Do NOT introduce new external libraries or frameworks without explicit user approval.
 - **Local Source Inspection**: Prioritize reading local Maven repository (`~/.m2/repository`) source JARs over web searches when investigating third-party APIs. If local source JARs are missing, run `mvn dependency:sources` to download them before attempting online search.
