@@ -74,8 +74,8 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RenameClassPlugin.class);
 
-    @Option(name = "rename", description = "Class rename rule (package filter + from pattern + to)")
-    List<RenameConfig> renameConfigs;
+    @Option(name = "class-mapping", description = "Class name mapping (package filter + from pattern + to)")
+    List<ClassMappingConfig> classMappings;
 
     /**
      * Collects this bean and its {@link CClassInfo} ancestors that still have a pending rename.
@@ -188,7 +188,7 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
-        if (renameConfigs == null || renameConfigs.isEmpty()) {
+        if (classMappings == null || classMappings.isEmpty()) {
             return;
         }
 
@@ -274,35 +274,49 @@ public class RenameClassPlugin extends AbstractPlugin {
         do {
             changed = false;
             for (var child : candidates) {
-                if (!(child.parent instanceof CClassInfo parentBean)) {
-                    continue;
+                if (revertParentChildClash(child, beans, names, errorHandler)) {
+                    changed = true;
                 }
-                var parent = beans.get(parentBean);
-                if (parent == null) {
-                    continue;
-                }
-                if (!normalize(names.get(child)).equals(normalize(names.get(parent)))) {
-                    continue;
-                }
-                // Prefer undoing the parent's rename; otherwise undo the child's.
-                var undo = isPending(parent, names) ? parent : isPending(child, names) ? child : null;
-                if (undo == null) {
-                    continue;
-                }
-                names.put(undo, undo.shortName);
-                warn(
-                    errorHandler,
-                    undo.locator,
-                    "Parent-child name conflict after rename ('"
-                        + parent.fullName
-                        + "' / '"
-                        + child.fullName
-                        + "'); keeping original name for "
-                        + undo.fullName
-                );
-                changed = true;
             }
         } while (changed);
+    }
+
+    /**
+     * When {@code child} and its parent would share a simple name after rename, reverts one
+     * of them (prefer the parent) and reports a warning.
+     *
+     * @return {@code true} if a rename was reverted
+     */
+    private boolean revertParentChildClash(
+        Candidate child,
+        Map<CClassInfo, Candidate> beans,
+        Map<Candidate, String> names,
+        ErrorHandler errorHandler
+    ) {
+        if (!(child.parent instanceof CClassInfo parentBean)) {
+            return false;
+        }
+        var parent = beans.get(parentBean);
+        if (parent == null || !normalize(names.get(child)).equals(normalize(names.get(parent)))) {
+            return false;
+        }
+        // Prefer undoing the parent's rename; otherwise undo the child's.
+        var undo = isPending(parent, names) ? parent : isPending(child, names) ? child : null;
+        if (undo == null) {
+            return false;
+        }
+        names.put(undo, undo.shortName);
+        warn(
+            errorHandler,
+            undo.locator,
+            "Parent-child name conflict after rename ('"
+                + parent.fullName
+                + "' / '"
+                + child.fullName
+                + "'); keeping original name for "
+                + undo.fullName
+        );
+        return true;
     }
 
     /**
@@ -365,32 +379,34 @@ public class RenameClassPlugin extends AbstractPlugin {
         } while (changed);
     }
 
+    /**
+     * First matching {@link #classMappings} entry wins. The list is non-null and non-empty
+     * when this is called from {@link #postProcessModel}.
+     */
     private String mapName(Candidate candidate) {
-        if (renameConfigs == null) {
-            return candidate.shortName;
+        for (var mapping : classMappings) {
+            if (matches(mapping, candidate)) {
+                return mapWith(mapping, candidate);
+            }
         }
-        for (var config : renameConfigs) {
-            if (config.packageName != null
-                && !Objects.equals(config.packageName, candidate.packageName)) {
-                continue;
-            }
-            if (config.from == null || config.to == null) {
-                continue;
-            }
-            if (!config.from.matcher(candidate.shortName).matches()) {
-                continue;
-            }
-            var next = candidate.shortName.replaceAll(config.from.pattern(), config.to);
-            if (!JJavaName.isJavaIdentifier(next)) {
-                log.warn(
-                    "Invalid Java class name after rename: '{}' (from {}); keeping original name",
-                    next,
-                    candidate.fullName
-                );
-                return candidate.shortName;
-            }
+        return candidate.shortName;
+    }
+
+    private static boolean matches(ClassMappingConfig mapping, Candidate candidate) {
+        return (mapping.packageName == null || mapping.packageName.equals(candidate.packageName))
+            && mapping.from.matcher(candidate.shortName).matches();
+    }
+
+    private static String mapWith(ClassMappingConfig mapping, Candidate candidate) {
+        var next = candidate.shortName.replaceAll(mapping.from.pattern(), mapping.to);
+        if (JJavaName.isJavaIdentifier(next)) {
             return next;
         }
+        log.warn(
+            "Invalid Java class name after mapping: '{}' (from {}); keeping original name",
+            next,
+            candidate.fullName
+        );
         return candidate.shortName;
     }
 
@@ -407,14 +423,14 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * Single rename rule: optional package filter, required short-name pattern, target name.
+     * One class-name mapping: optional package filter, required short-name pattern, target name.
      * <p>
-     * Compact CLI (see {@link Compact}): {@code -rename=Person->CustomPerson},
-     * {@code -rename=/(.*)Type/->$1}.
+     * Compact CLI (see {@link Compact}): {@code -class-mapping=Person->CustomPerson},
+     * {@code -class-mapping=/(.*)Type/->$1}.
      * </p>
      */
     @Compact(formats = {"/{from}/->{to}", "{from}->{to}"})
-    public static class RenameConfig {
+    public static class ClassMappingConfig {
 
         /**
          * Optional exact match on the owner package name ({@code getOwnerPackage().name()}).
@@ -432,7 +448,7 @@ public class RenameClassPlugin extends AbstractPlugin {
         /**
          * Target short name (may contain {@code $n} replacement groups).
          */
-        @Option(name = "to", required = true, description = "Target short class name after rename")
+        @Option(name = "to", required = true, description = "Target short class name")
         String to;
     }
 
