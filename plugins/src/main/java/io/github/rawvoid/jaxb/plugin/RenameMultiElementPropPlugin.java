@@ -18,22 +18,14 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.JJavaName;
 import com.sun.tools.xjc.Options;
-import com.sun.tools.xjc.model.CClassInfo;
-import com.sun.tools.xjc.model.CElementPropertyInfo;
-import com.sun.tools.xjc.model.CPropertyInfo;
-import com.sun.tools.xjc.model.CReferencePropertyInfo;
-import com.sun.tools.xjc.model.Model;
+import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Renames multi-element properties produced by XJC to a short plural base name.
@@ -70,6 +62,29 @@ public class RenameMultiElementPropPlugin extends AbstractPlugin {
     @Option(name = "name", defaultValue = "items",
         description = "Plural base name for renamed properties (default: items)")
     String name = "items";
+
+    /**
+     * More than one bound element/type — the structural signal for multi-element properties.
+     */
+    static boolean isMultiElementProperty(CPropertyInfo prop) {
+        if (prop instanceof CElementPropertyInfo elementProp) {
+            return elementProp.getTypes().size() > 1;
+        }
+        if (prop instanceof CReferencePropertyInfo refProp) {
+            return refProp.getElements().size() > 1;
+        }
+        return false;
+    }
+
+    private static boolean isValidBaseName(String base) {
+        var privateName = NAMES.toVariableName(base);
+        var publicName = NAMES.toPropertyName(base);
+        return JJavaName.isJavaIdentifier(privateName) && JJavaName.isJavaIdentifier(publicName);
+    }
+
+    private static String normalize(String n) {
+        return n.toLowerCase(Locale.ROOT);
+    }
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
@@ -127,19 +142,6 @@ public class RenameMultiElementPropPlugin extends AbstractPlugin {
         return count;
     }
 
-    /**
-     * More than one bound element/type — the structural signal for multi-element properties.
-     */
-    static boolean isMultiElementProperty(CPropertyInfo prop) {
-        if (prop instanceof CElementPropertyInfo elementProp) {
-            return elementProp.getTypes().size() > 1;
-        }
-        if (prop instanceof CReferencePropertyInfo refProp) {
-            return refProp.getElements().size() > 1;
-        }
-        return false;
-    }
-
     private String allocateName(Set<String> occupied) {
         var index = 1;
         while (true) {
@@ -150,15 +152,5 @@ public class RenameMultiElementPropPlugin extends AbstractPlugin {
             }
             index++;
         }
-    }
-
-    private static boolean isValidBaseName(String base) {
-        var privateName = NAMES.toVariableName(base);
-        var publicName = NAMES.toPropertyName(base);
-        return JJavaName.isJavaIdentifier(privateName) && JJavaName.isJavaIdentifier(publicName);
-    }
-
-    private static String normalize(String n) {
-        return n.toLowerCase(Locale.ROOT);
     }
 }

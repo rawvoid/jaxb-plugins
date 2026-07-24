@@ -18,11 +18,7 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.JJavaName;
 import com.sun.tools.xjc.Options;
-import com.sun.tools.xjc.model.CClassInfo;
-import com.sun.tools.xjc.model.CClassInfoParent;
-import com.sun.tools.xjc.model.CElementInfo;
-import com.sun.tools.xjc.model.CEnumLeafInfo;
-import com.sun.tools.xjc.model.Model;
+import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
 import io.github.rawvoid.jaxb.utils.ModelUtils;
 import org.slf4j.Logger;
@@ -32,20 +28,11 @@ import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CCLASSINFO_SHORTNAME_FIELD;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CELEMENTINFO_CLASSNAME_FIELD;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_SHORTNAME_FIELD;
+import static io.github.rawvoid.jaxb.utils.ModelUtils.*;
 import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 
 /**
@@ -89,6 +76,115 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     @Option(name = "mapping", description = "Class rename rule (package filter + regex + to)")
     List<NameMapping> mappings;
+
+    /**
+     * Collects this bean and its {@link CClassInfo} ancestors that still have a pending rename.
+     */
+    private static void collectPendingAncestors(
+        CClassInfo bean,
+        Map<CClassInfo, Candidate> beans,
+        Map<Candidate, String> names,
+        Set<Candidate> out
+    ) {
+        CClassInfoParent current = bean;
+        while (current instanceof CClassInfo classInfo) {
+            var candidate = beans.get(classInfo);
+            if (candidate != null && isPending(candidate, names)) {
+                out.add(candidate);
+            }
+            current = classInfo.parent();
+        }
+    }
+
+    private static List<Candidate> collect(Model model) {
+        var result = new ArrayList<Candidate>();
+        for (var bean : model.beans().values()) {
+            result.add(new Candidate(
+                "bean",
+                bean.shortName,
+                bean.fullName(),
+                bean.parent(),
+                bean.getOwnerPackage().name(),
+                bean.getLocator(),
+                name -> setFieldValue(CCLASSINFO_SHORTNAME_FIELD, bean, name),
+                bean
+            ));
+        }
+        for (var enumInfo : model.enums().values()) {
+            result.add(new Candidate(
+                "enum",
+                enumInfo.shortName,
+                enumInfo.fullName(),
+                enumInfo.parent,
+                enumInfo.parent.getOwnerPackage().name(),
+                enumInfo.getLocator(),
+                name -> setFieldValue(CENUMLEAFINFO_SHORTNAME_FIELD, enumInfo, name),
+                null
+            ));
+        }
+        for (var element : model.getAllElements()) {
+            if (!element.hasClass()) {
+                continue;
+            }
+            result.add(new Candidate(
+                "element",
+                element.shortName(),
+                element.fullName(),
+                element.parent,
+                element.getOwnerPackage().name(),
+                element.getLocator(),
+                name -> setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, element, name),
+                null
+            ));
+        }
+        return result;
+    }
+
+    private static Map<CClassInfo, Candidate> beansByClass(List<Candidate> candidates) {
+        var map = new LinkedHashMap<CClassInfo, Candidate>();
+        for (var candidate : candidates) {
+            if (candidate.bean != null) {
+                map.put(candidate.bean, candidate);
+            }
+        }
+        return map;
+    }
+
+    /**
+     * XJC may attach the same {@link com.sun.codemodel.JPackage} through distinct
+     * {@link CClassInfoParent.Package} instances. Normalize to the model cache.
+     */
+    private static CClassInfoParent canonicalParent(Model model, CClassInfoParent parent) {
+        if (parent instanceof CClassInfoParent.Package pkgParent) {
+            return model.getPackage(pkgParent.pkg);
+        }
+        return parent;
+    }
+
+    /**
+     * Case-insensitive key so collisions match CodeModel / case-folding filesystems.
+     */
+    private static String normalize(String name) {
+        return name.toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isPending(Candidate candidate, Map<Candidate, String> names) {
+        return !names.get(candidate).equals(candidate.shortName);
+    }
+
+    private static boolean anyPending(List<Candidate> group, Map<Candidate, String> names) {
+        for (var candidate : group) {
+            if (isPending(candidate, names)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String parentLabel(CClassInfoParent parent) {
+        var label = parent.fullName();
+        return label == null || label.isEmpty() ? "(default package)" : label;
+    }
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
@@ -269,25 +365,6 @@ public class RenameClassPlugin extends AbstractPlugin {
         } while (changed);
     }
 
-    /**
-     * Collects this bean and its {@link CClassInfo} ancestors that still have a pending rename.
-     */
-    private static void collectPendingAncestors(
-        CClassInfo bean,
-        Map<CClassInfo, Candidate> beans,
-        Map<Candidate, String> names,
-        Set<Candidate> out
-    ) {
-        CClassInfoParent current = bean;
-        while (current instanceof CClassInfo classInfo) {
-            var candidate = beans.get(classInfo);
-            if (candidate != null && isPending(candidate, names)) {
-                out.add(candidate);
-            }
-            current = classInfo.parent();
-        }
-    }
-
     private String mapName(Candidate candidate) {
         for (var mapping : mappings) {
             if (mapping.packageName != null
@@ -312,94 +389,6 @@ public class RenameClassPlugin extends AbstractPlugin {
             return next;
         }
         return candidate.shortName;
-    }
-
-    private static List<Candidate> collect(Model model) {
-        var result = new ArrayList<Candidate>();
-        for (var bean : model.beans().values()) {
-            result.add(new Candidate(
-                "bean",
-                bean.shortName,
-                bean.fullName(),
-                bean.parent(),
-                bean.getOwnerPackage().name(),
-                bean.getLocator(),
-                name -> setFieldValue(CCLASSINFO_SHORTNAME_FIELD, bean, name),
-                bean
-            ));
-        }
-        for (var enumInfo : model.enums().values()) {
-            result.add(new Candidate(
-                "enum",
-                enumInfo.shortName,
-                enumInfo.fullName(),
-                enumInfo.parent,
-                enumInfo.parent.getOwnerPackage().name(),
-                enumInfo.getLocator(),
-                name -> setFieldValue(CENUMLEAFINFO_SHORTNAME_FIELD, enumInfo, name),
-                null
-            ));
-        }
-        for (var element : model.getAllElements()) {
-            if (!element.hasClass()) {
-                continue;
-            }
-            result.add(new Candidate(
-                "element",
-                element.shortName(),
-                element.fullName(),
-                element.parent,
-                element.getOwnerPackage().name(),
-                element.getLocator(),
-                name -> setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, element, name),
-                null
-            ));
-        }
-        return result;
-    }
-
-    private static Map<CClassInfo, Candidate> beansByClass(List<Candidate> candidates) {
-        var map = new LinkedHashMap<CClassInfo, Candidate>();
-        for (var candidate : candidates) {
-            if (candidate.bean != null) {
-                map.put(candidate.bean, candidate);
-            }
-        }
-        return map;
-    }
-
-    /**
-     * XJC may attach the same {@link com.sun.codemodel.JPackage} through distinct
-     * {@link CClassInfoParent.Package} instances. Normalize to the model cache.
-     */
-    private static CClassInfoParent canonicalParent(Model model, CClassInfoParent parent) {
-        if (parent instanceof CClassInfoParent.Package pkgParent) {
-            return model.getPackage(pkgParent.pkg);
-        }
-        return parent;
-    }
-
-    /** Case-insensitive key so collisions match CodeModel / case-folding filesystems. */
-    private static String normalize(String name) {
-        return name.toLowerCase(Locale.ROOT);
-    }
-
-    private static boolean isPending(Candidate candidate, Map<Candidate, String> names) {
-        return !names.get(candidate).equals(candidate.shortName);
-    }
-
-    private static boolean anyPending(List<Candidate> group, Map<Candidate, String> names) {
-        for (var candidate : group) {
-            if (isPending(candidate, names)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static String parentLabel(CClassInfoParent parent) {
-        var label = parent.fullName();
-        return label == null || label.isEmpty() ? "(default package)" : label;
     }
 
     private void warn(ErrorHandler errorHandler, Locator locator, String message) {
@@ -456,7 +445,9 @@ public class RenameClassPlugin extends AbstractPlugin {
     ) {
     }
 
-    /** Simple-name namespace under one parent (package or outer class). */
+    /**
+     * Simple-name namespace under one parent (package or outer class).
+     */
     private record Slot(CClassInfoParent parent, String name) {
     }
 }

@@ -16,8 +16,8 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/convert-name"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/convert-name"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/convert-name"
            elementFormDefault="qualified">
 
     <xs:complexType name="Person">

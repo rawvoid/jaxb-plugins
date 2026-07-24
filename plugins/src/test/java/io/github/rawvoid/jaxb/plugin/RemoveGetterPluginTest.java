@@ -38,6 +38,17 @@ class RemoveGetterPluginTest extends AbstractXJCMojoTestCase {
 
     private final String optionCmd = optionCommand(RemoveGetterPlugin.class);
 
+    private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
+        var option = pluginClass.getAnnotation(Option.class);
+        return option.prefix() + option.name();
+    }
+
+    private static Set<String> methodNames(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredMethods())
+            .map(Method::getName)
+            .collect(Collectors.toSet());
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("remove-getter.xsd");
@@ -61,16 +72,5 @@ class RemoveGetterPluginTest extends AbstractXJCMojoTestCase {
             assertThat(clazz.getDeclaredField("name")).isNotNull();
             assertThat(clazz.getDeclaredField("active")).isNotNull();
         });
-    }
-
-    private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
-        var option = pluginClass.getAnnotation(Option.class);
-        return option.prefix() + option.name();
-    }
-
-    private static Set<String> methodNames(Class<?> clazz) {
-        return Arrays.stream(clazz.getDeclaredMethods())
-            .map(Method::getName)
-            .collect(Collectors.toSet());
     }
 }

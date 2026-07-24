@@ -38,6 +38,24 @@ class NsPrefixPluginTest extends AbstractXJCMojoTestCase {
     private static final String PKG = "com.github.rawvoid.xjc_plugins.ns_prefix";
     private static final String ITEM = "com\\.github\\.rawvoid\\.xjc_plugins\\.ns_prefix\\.Item";
 
+    private static XmlSchema xmlSchema(Class<?> clazz) {
+        var annotation = clazz.getPackage().getAnnotation(XmlSchema.class);
+        assertThat(annotation).isNotNull();
+        return annotation;
+    }
+
+    private static List<XmlNs> xmlNsFor(Class<?> clazz, String namespace) {
+        return Arrays.stream(xmlSchema(clazz).xmlns())
+            .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
+            .toList();
+    }
+
+    private static String prefixFor(Class<?> clazz, String namespace) {
+        var matched = xmlNsFor(clazz, namespace);
+        assertThat(matched).as("xmlns for %s", namespace).isNotEmpty();
+        return matched.getFirst().prefix();
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("ns-prefix.xsd");
@@ -168,23 +186,5 @@ class NsPrefixPluginTest extends AbstractXJCMojoTestCase {
             assertThat(xmlNsFor(clazz, NS)).hasSize(1);
             assertThat(prefixFor(clazz, NS)).isEqualTo("second");
         });
-    }
-
-    private static XmlSchema xmlSchema(Class<?> clazz) {
-        var annotation = clazz.getPackage().getAnnotation(XmlSchema.class);
-        assertThat(annotation).isNotNull();
-        return annotation;
-    }
-
-    private static List<XmlNs> xmlNsFor(Class<?> clazz, String namespace) {
-        return Arrays.stream(xmlSchema(clazz).xmlns())
-            .filter(xmlns -> namespace.equals(xmlns.namespaceURI()))
-            .toList();
-    }
-
-    private static String prefixFor(Class<?> clazz, String namespace) {
-        var matched = xmlNsFor(clazz, namespace);
-        assertThat(matched).as("xmlns for %s", namespace).isNotEmpty();
-        return matched.getFirst().prefix();
     }
 }

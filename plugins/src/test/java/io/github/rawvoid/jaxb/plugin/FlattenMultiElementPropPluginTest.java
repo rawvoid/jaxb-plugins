@@ -42,6 +42,13 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
 
     private static final String OPTION = "-Xflatten-multi-element-prop";
 
+    private static List<String> fieldNames(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredFields())
+            .map(Field::getName)
+            .filter(n -> !n.contains("$"))
+            .collect(Collectors.toList());
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("flatten-multi-element-prop.xsd");
@@ -107,8 +114,6 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
         });
     }
 
-
-
     @Test
     void flattensChoiceWithClassPreservesNillable() throws Exception {
         testExecute(List.of(OPTION), CHOICE_WITH_CLASS, (source, clazz) -> {
@@ -137,12 +142,5 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
             assertThat(names).containsExactlyInAnyOrder("time2", "note");
             assertThat(clazz.getDeclaredField("time2").getType()).isEqualTo(java.util.List.class);
         });
-    }
-
-    private static List<String> fieldNames(Class<?> clazz) {
-        return Arrays.stream(clazz.getDeclaredFields())
-            .map(Field::getName)
-            .filter(n -> !n.contains("$"))
-            .collect(Collectors.toList());
     }
 }

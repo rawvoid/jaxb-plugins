@@ -203,6 +203,7 @@ Promotes nested beans **and enums** toward package scope one parent level at a t
 Take control of XML namespace to Java package mappings. Define custom mappings and automatically generate JAXB binding files.
 
 **🔥 Use Cases:**
+
 - Map namespaces to meaningful package names
 - Avoid default package naming conflicts
 - Support multiple schema versions

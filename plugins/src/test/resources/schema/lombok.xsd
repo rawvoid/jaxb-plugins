@@ -16,8 +16,8 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/lombok"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/lombok"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/lombok"
            elementFormDefault="qualified">
 
     <!-- Plain bean for default @Data / builder / regex cases. -->

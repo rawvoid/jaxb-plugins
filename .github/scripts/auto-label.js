@@ -21,8 +21,7 @@ module.exports = async ({github, context}) => {
 
     if (sender === 'dependabot[bot]' || /^chore(\(deps.*\))?!?:/.test(title)) {
         label = 'dependencies';
-    }
-    else if (/^feat(\(.*\))?!?:/.test(title)) label = 'feature';
+    } else if (/^feat(\(.*\))?!?:/.test(title)) label = 'feature';
     else if (/^fix(\(.*\))?!?:/.test(title)) label = 'bug';
     else if (/^perf(\(.*\))?!?:/.test(title)) label = 'perf';
     else if (/^refactor(\(.*\))?!?:/.test(title)) label = 'refactor';

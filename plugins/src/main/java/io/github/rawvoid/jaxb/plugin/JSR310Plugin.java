@@ -60,6 +60,28 @@ public class JSR310Plugin extends AbstractPlugin {
     @Option(name = "mapping", description = "Define a type mapping rule (XSD type → Java class + adapter)")
     List<TypeMappingConfig> mappings;
 
+    private static boolean isGDay(QName schemaType) {
+        return schemaType != null && "gDay".equals(schemaType.getLocalPart());
+    }
+
+    static String findCommonPackage(List<String> packages) {
+        var first = packages.getFirst().split("\\.");
+        var commonLength = first.length;
+
+        for (var pkg : packages.subList(1, packages.size())) {
+            var parts = pkg.split("\\.");
+            commonLength = Math.min(commonLength, parts.length);
+            for (int i = 0; i < commonLength; i++) {
+                if (!first[i].equals(parts[i])) {
+                    commonLength = i;
+                    break;
+                }
+            }
+        }
+
+        return String.join(".", java.util.Arrays.copyOf(first, commonLength));
+    }
+
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
         var defaultXsdTypeMapping = xsdBuiltInTypeToJavaMapping();
@@ -427,12 +449,6 @@ public class JSR310Plugin extends AbstractPlugin {
             ._return(JExpr._null());
     }
 
-    @FunctionalInterface
-    public interface AdapterGenerator {
-        void generate(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
-                      JVar str, JVar target, Class<?> targetClass, QName schemaType, String pattern);
-    }
-
     /**
      * Returns a map that maps target Java classes to their corresponding XmlAdapter code generators.
      *
@@ -472,10 +488,6 @@ public class JSR310Plugin extends AbstractPlugin {
         mapping.put(DayOfWeek.class, dayOfWeekGen);
 
         return mapping;
-    }
-
-    private static boolean isGDay(QName schemaType) {
-        return schemaType != null && "gDay".equals(schemaType.getLocalPart());
     }
 
     /**
@@ -523,22 +535,10 @@ public class JSR310Plugin extends AbstractPlugin {
         return commonPackage.isEmpty() ? packages.getFirst() + ".adapter" : commonPackage + ".adapter";
     }
 
-    static String findCommonPackage(List<String> packages) {
-        var first = packages.getFirst().split("\\.");
-        var commonLength = first.length;
-
-        for (var pkg : packages.subList(1, packages.size())) {
-            var parts = pkg.split("\\.");
-            commonLength = Math.min(commonLength, parts.length);
-            for (int i = 0; i < commonLength; i++) {
-                if (!first[i].equals(parts[i])) {
-                    commonLength = i;
-                    break;
-                }
-            }
-        }
-
-        return String.join(".", java.util.Arrays.copyOf(first, commonLength));
+    @FunctionalInterface
+    public interface AdapterGenerator {
+        void generate(JDefinedClass adapterClass, JMethod unmarshal, JMethod marshal,
+                      JVar str, JVar target, Class<?> targetClass, QName schemaType, String pattern);
     }
 
     /**

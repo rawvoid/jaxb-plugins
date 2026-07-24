@@ -37,18 +37,18 @@ import java.lang.reflect.Method;
 public final class LombokSingulars {
 
     private static final Logger log = LoggerFactory.getLogger(LombokSingulars.class);
-
-    /** Cached {@code Singulars.autoSingularize(String)}; {@code null} if resolve failed. */
-    private static final Method AUTO_SINGULARIZE = resolveAutoSingularize();
-
     private static volatile boolean failureLogged;
+    /**
+     * Cached {@code Singulars.autoSingularize(String)}; {@code null} if resolve failed.
+     */
+    private static final Method AUTO_SINGULARIZE = resolveAutoSingularize();
 
     private LombokSingulars() {
     }
 
     /**
      * @return singular form from Lombok, or {@code null} when auto-singularization is refused
-     *         or Lombok cannot be reached
+     * or Lombok cannot be reached
      */
     public static String autoSingularize(String name) {
         if (name == null || name.isEmpty() || AUTO_SINGULARIZE == null) {

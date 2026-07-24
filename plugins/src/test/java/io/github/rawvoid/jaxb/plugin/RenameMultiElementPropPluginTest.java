@@ -41,6 +41,13 @@ class RenameMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
 
     private static final String OPTION = "-Xrename-multi-element-prop";
 
+    private static List<String> fieldNames(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredFields())
+            .map(Field::getName)
+            .filter(n -> !n.contains("$"))
+            .collect(Collectors.toList());
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("rename-multi-element-prop.xsd");
@@ -96,12 +103,5 @@ class RenameMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
             assertThat(names).contains("items");
             assertThat(names).noneMatch(n -> n.equals("rest") || n.equals("content"));
         });
-    }
-
-    private static List<String> fieldNames(Class<?> clazz) {
-        return Arrays.stream(clazz.getDeclaredFields())
-            .map(Field::getName)
-            .filter(n -> !n.contains("$"))
-            .collect(Collectors.toList());
     }
 }

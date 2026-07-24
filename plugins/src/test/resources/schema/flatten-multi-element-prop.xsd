@@ -23,8 +23,8 @@
   - Base + extension element name collision → multi-member rest → flattened
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/flatten-multi-element-prop"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/flatten-multi-element-prop"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/flatten-multi-element-prop"
            elementFormDefault="qualified">
 
     <!-- One unbounded choice → single merged property without the plugin. -->

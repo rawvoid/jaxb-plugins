@@ -45,6 +45,40 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
     private static final String MIXED = PKG.replace(".", "\\.") + "\\.MixedBag";
     private static final String GROUP_SHELL = PKG.replace(".", "\\.") + "\\.GroupShell";
 
+    private static void assertListField(
+        Class<?> owner,
+        String fieldName,
+        Class<?> itemType,
+        String xmlElementName
+    ) throws Exception {
+        var field = owner.getDeclaredField(fieldName);
+        assertThat(List.class.isAssignableFrom(field.getType())).as(fieldName).isTrue();
+        assertThat(listItemType(field)).isEqualTo(itemType);
+
+        var wrapper = field.getAnnotation(XmlElementWrapper.class);
+        assertThat(wrapper).as("@XmlElementWrapper on %s", fieldName).isNotNull();
+
+        var element = field.getAnnotation(XmlElement.class);
+        assertThat(element).as("@XmlElement on %s", fieldName).isNotNull();
+        assertThat(element.name()).isEqualTo(xmlElementName);
+    }
+
+    private static Class<?> listItemType(Field field) {
+        var generic = field.getGenericType();
+        assertThat(generic).isInstanceOf(ParameterizedType.class);
+        var args = ((ParameterizedType) generic).getActualTypeArguments();
+        assertThat(args).hasSize(1);
+        return (Class<?>) args[0];
+    }
+
+    private static Set<String> simpleNames(List<Class<?>> classes) {
+        return classes.stream().map(Class::getSimpleName).collect(Collectors.toSet());
+    }
+
+    private static Set<String> methodNames(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredMethods()).map(Method::getName).collect(Collectors.toSet());
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("element-wrapper.xsd");
@@ -132,6 +166,8 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
         assertThat(simpleNames(classes)).doesNotContain("AliasList");
     }
 
+    // --- helpers ---
+
     @Test
     void removesUnusedWrappersButKeepsReferencedOnes() throws Exception {
         var classes = testExecute(List.of("-Xelement-wrapper"), ".*", null);
@@ -202,41 +238,5 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
             assertThat(List.class.isAssignableFrom(clazz.getDeclaredField("member").getType())).isTrue();
             assertThat(clazz.getDeclaredField("member").getAnnotation(XmlElementWrapper.class)).isNull();
         });
-    }
-
-    // --- helpers ---
-
-    private static void assertListField(
-        Class<?> owner,
-        String fieldName,
-        Class<?> itemType,
-        String xmlElementName
-    ) throws Exception {
-        var field = owner.getDeclaredField(fieldName);
-        assertThat(List.class.isAssignableFrom(field.getType())).as(fieldName).isTrue();
-        assertThat(listItemType(field)).isEqualTo(itemType);
-
-        var wrapper = field.getAnnotation(XmlElementWrapper.class);
-        assertThat(wrapper).as("@XmlElementWrapper on %s", fieldName).isNotNull();
-
-        var element = field.getAnnotation(XmlElement.class);
-        assertThat(element).as("@XmlElement on %s", fieldName).isNotNull();
-        assertThat(element.name()).isEqualTo(xmlElementName);
-    }
-
-    private static Class<?> listItemType(Field field) {
-        var generic = field.getGenericType();
-        assertThat(generic).isInstanceOf(ParameterizedType.class);
-        var args = ((ParameterizedType) generic).getActualTypeArguments();
-        assertThat(args).hasSize(1);
-        return (Class<?>) args[0];
-    }
-
-    private static Set<String> simpleNames(List<Class<?>> classes) {
-        return classes.stream().map(Class::getSimpleName).collect(Collectors.toSet());
-    }
-
-    private static Set<String> methodNames(Class<?> clazz) {
-        return Arrays.stream(clazz.getDeclaredMethods()).map(Method::getName).collect(Collectors.toSet());
     }
 }

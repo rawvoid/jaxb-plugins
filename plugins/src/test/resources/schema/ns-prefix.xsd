@@ -16,8 +16,8 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/ns-prefix"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/ns-prefix"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/ns-prefix"
            elementFormDefault="qualified">
 
     <xs:complexType name="Item">

@@ -28,6 +28,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class PromoteNestedClassPluginTest extends AbstractXJCMojoTestCase {
 
+    private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
+        return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("promote-nested-class.xsd");
@@ -152,10 +156,6 @@ public class PromoteNestedClassPluginTest extends AbstractXJCMojoTestCase {
             .as("OuterInner must stay nested to avoid ObjectFactory createOuterInner clash")
             .isTrue();
         assertThat(outerInner.getEnclosingClass()).isEqualTo(byName.get("OfHolder").getFirst());
-    }
-
-    private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
-        return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
     }
 }
 

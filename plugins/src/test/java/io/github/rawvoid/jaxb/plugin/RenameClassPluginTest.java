@@ -28,6 +28,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
 
+    private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
+        return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
+    }
+
     @BeforeEach
     void setSchema() {
         schemaIncludes = List.of("rename-class.xsd");
@@ -176,9 +180,5 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
             .contains("Address");
         // Promoted EmailAddress is top-level.
         assertThat(byName.get("EmailAddress").getFirst().isMemberClass()).isFalse();
-    }
-
-    private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
-        return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
     }
 }
