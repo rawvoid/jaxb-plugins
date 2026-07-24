@@ -27,10 +27,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Smoke tests for deprecated {@link NamespacePlugin}.
+ * Smoke tests for {@link NamespacePlugin}.
  * Uses dedicated {@code namespace.xsd} only.
  */
-@Deprecated
 class NamespacePluginTest extends AbstractXJCMojoTestCase {
 
     private static final String NS = "https://www.github.com/rawvoid/xjc-plugins/namespace";

@@ -44,8 +44,6 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 
 **Rule of thumb:** collection / property-tree shape → model phase; annotations, getters/setters, adapters, package-info → `run`. State intentional limits in English Javadoc (see `ElementWrapperPlugin`).
 
-**Do not** use deprecated `NamespacePlugin` as a template.
-
 ## Step 2 — Scaffold the plugin
 
 1. Package: `io.github.rawvoid.jaxb.plugin`
@@ -167,7 +165,7 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 | `ElementWrapperPlugin` | `-Xelement-wrapper` | Dual-phase: model flatten + wrapper annotation |
 | `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
 | `NsPrefixPlugin` | `-Xns-prefix` | Nested list configs on `@XmlSchema` |
-| `NamespacePlugin` | `-Xnamespace` | **Deprecated** — do not copy |
+| `NamespacePlugin` | `-Xnamespace` | Custom namespace package/prefix mappings |
 
 Framework types: `AbstractPlugin`, `Option`, `TextParser`.
 
