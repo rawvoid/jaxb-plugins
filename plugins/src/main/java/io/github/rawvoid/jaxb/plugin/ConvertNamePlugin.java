@@ -30,8 +30,8 @@ import java.util.regex.Pattern;
  * XJC plugin for customizing naming conversion logic during JAXB code generation.
  * <p>
  * This plugin allows users to precisely control the names of generated classes, variables,
- * properties, methods, and packages by configuring specific tokens or regular expressions.
- * It implements custom logic by replacing XJC's default {@link NameConverter}.
+ * properties, methods, and packages by configuring literal input matches or regular expressions
+ * on the converted name. It implements custom logic by replacing XJC's default {@link NameConverter}.
  * </p>
  *
  * @author Rawvoid
@@ -84,6 +84,13 @@ public class ConvertNamePlugin extends AbstractPlugin {
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+        validateMappings("class-name", classNameMappings);
+        validateMappings("variable-name", variableNameMappings);
+        validateMappings("interface-name", interfaceNameMappings);
+        validateMappings("property-name", propertyNameMappings);
+        validateMappings("constant-name", constantNameMappings);
+        validateMappings("package-name", packageNameMappings);
+
         NameConverter nameConverter = new NameConverter.Standard() {
             @Override
             public String toClassName(String s) {
@@ -116,13 +123,17 @@ public class ConvertNamePlugin extends AbstractPlugin {
             }
 
             public String convertName(String token, String internalName, List<NameMapping> mappings) {
-                if (mappings == null || mappings.isEmpty()) return internalName;
+                if (mappings == null || mappings.isEmpty()) {
+                    return internalName;
+                }
 
                 for (var config : mappings) {
-                    if (Objects.equals(config.token, token) || Objects.equals(config.token, internalName)) {
-                        return config.name;
-                    } else if (config.regex != null && config.regex.matcher(internalName).matches()) {
-                        return internalName.replaceAll(config.regex.pattern(), config.name);
+                    if (config.input != null) {
+                        if (Objects.equals(config.input, token)) {
+                            return config.to;
+                        }
+                    } else if (config.name != null && config.name.matcher(internalName).matches()) {
+                        return internalName.replaceAll(config.name.pattern(), config.to);
                     }
                 }
 
@@ -137,6 +148,22 @@ public class ConvertNamePlugin extends AbstractPlugin {
         opt.setNameConverter(nameConverter, this);
     }
 
+    private static void validateMappings(String optionName, List<NameMapping> mappings) {
+        if (mappings == null || mappings.isEmpty()) {
+            return;
+        }
+        for (var mapping : mappings) {
+            var hasInput = mapping.input != null;
+            var hasName = mapping.name != null;
+            if (hasInput == hasName) {
+                throw new IllegalArgumentException(
+                    "-%s mapping requires exactly one of -input or -name (not both, not neither)"
+                        .formatted(optionName)
+                );
+            }
+        }
+    }
+
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
         return true;
@@ -145,32 +172,41 @@ public class ConvertNamePlugin extends AbstractPlugin {
     /**
      * Naming mapping rule configuration.
      * <p>
+     * Each rule must set exactly one of {@link #input} or {@link #name}:
+     * </p>
+     * <ul>
+     *   <li>{@code -input} — exact match on the original NameConverter input; replaces with {@link #to} as a whole</li>
+     *   <li>{@code -name} — regex match on the name after standard conversion; replaces via {@code replaceAll}</li>
+     * </ul>
+     * <p>
      * Compact CLI (see {@link Compact}): {@code -class-name=Person->CustomPerson},
      * {@code -class-name=/(.*)_ID/->$1Id}, {@code -package-name=nsUri->java.package}.
      * </p>
      */
-    // More specific regex template first so "/…/->…" is not parsed as token="/…/".
-    @Compact(formats = {"/{regex}/->{name}", "{token}->{name}"})
+    // More specific regex template first so "/…/->…" is not parsed as input="/…/".
+    @Compact(formats = {"/{name}/->{to}", "{input}->{to}"})
     public static class NameMapping {
 
         /**
-         * The original identifier to be converted (e.g., name in XML Schema or namespace URI of a package).
+         * Exact match against the original NameConverter input
+         * (XML local name, enum value, or namespace URI).
+         * When matched, the result is {@link #to} as a whole (no regex replace).
          */
-        @Option(name = "token", description = "The original identifier to match")
-        String token;
+        @Option(name = "input", description = "Exact original NameConverter input to match (XML name or namespace URI)")
+        String input;
 
         /**
-         * Regular expression used to match the internal name.
-         * If matched, it will be replaced with {@link #name}.
+         * Regular expression matching the name after standard conversion.
+         * When matched, replaced with {@link #to} via {@link String#replaceAll}.
          */
-        @Option(name = "regex", description = "Regular expression used to match the internal name")
-        Pattern regex;
+        @Option(name = "name", description = "Regex matching the name after standard conversion")
+        Pattern name;
 
         /**
-         * The target name after conversion.
+         * Target name after conversion. May contain {@code $n} groups when {@link #name} is used.
          */
-        @Option(name = "name", required = true, description = "The target mapping name")
-        String name;
+        @Option(name = "to", required = true, description = "Target name (may contain $n groups when -name is used)")
+        String to;
 
     }
 
