@@ -191,14 +191,14 @@ Replaces the former `-Xns-prefix` plugin.
 
 - Explicit Java package mapping per XML target namespace URI.
 - Optional XML prefix on `@XmlSchema` for that namespace.
-- Package-scoped multi-`xmlns` rules with optional Java package regex filter.
+- Package-scoped multi-`xmlns` prefix mappings with optional Java package regex filter.
 - Package bindings use `schemaLocation="*"` and match by `targetNamespace` (CLI schema order independent).
 
 #### Quick Start
 
 ```bash
 -Xnamespace \
-  -package-map \
+  -package-mapping \
   -ns=http://example.com/schema \
   -package=com.example.schema \
   -prefix=ex
@@ -208,11 +208,11 @@ Replaces the former `-Xns-prefix` plugin.
 
 ```bash
 -Xnamespace \
-  # Compact package map:
-  -package-map=namespaceURI->java.package.name \
-  -package-map=namespaceURI->java.package.name:xmlPrefix \
-  # Structured package map (+ optional xmlns set for that package):
-  -package-map \
+  # Compact package mapping:
+  -package-mapping=namespaceURI->java.package.name \
+  -package-mapping=namespaceURI->java.package.name:xmlPrefix \
+  # Structured package mapping (+ optional xmlns set for that package):
+  -package-mapping \
   -ns=namespaceURI \
   -package=java.package.name \
   -prefix=xmlPrefix \
@@ -220,8 +220,8 @@ Replaces the former `-Xns-prefix` plugin.
   -xmlns \
   -ns=http://third.example.com \
   -prefix=th \
-  # Prefix-only / multi-xmlns without package map (optional package filter):
-  -xmlns-rule \
+  # Prefix-only / multi-xmlns without package mapping (optional package filter):
+  -ns-prefix \
   -package=com\.example\.* \
   -xmlns=namespaceURI->xmlPrefix \
   -xmlns \
@@ -371,7 +371,7 @@ xjc schema.xsd \
     -regex=(.*)_ID \
     -name=$1Id \
   -Xnamespace \
-    -package-map \
+    -package-mapping \
     -ns=http://api.example.com \
     -package=com.example.api
 ```
