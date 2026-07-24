@@ -295,7 +295,7 @@ public abstract class AbstractPlugin extends Plugin {
                 if (textValue != null) {
                     var wholeCollectionParser = getParser(option, fieldType);
                     if (wholeCollectionParser != null) {
-                        setFieldValue(object, field, wholeCollectionParser.parse(option.name(), textValue));
+                        appendParsedCollection(object, field, wholeCollectionParser.parse(option.name(), textValue));
                     } else {
                         j = parseCollectionArgument(object, field, option, textValue, args, j);
                         if (!retainCollectionOptions) {
@@ -471,6 +471,30 @@ public abstract class AbstractPlugin extends Plugin {
         var collection = newCollectionInstance(optionField.getType());
         setFieldValue(object, optionField, collection);
         return collection;
+    }
+
+    /**
+     * Applies a whole-collection TextParser result. If the field already holds a collection
+     * (e.g. after an interleaved earlier appearance of the same option), appends into it so
+     * behavior matches element-wise scalar lists. Always stores a mutable collection instance
+     * for the field type, because parsers often return immutable lists ({@code List.of}, {@code Stream.toList}).
+     */
+    @SuppressWarnings("unchecked")
+    private void appendParsedCollection(Object object, Field optionField, Object parsed) throws Exception {
+        if (!(parsed instanceof Collection<?> parsedCollection)) {
+            throw new BadCommandLineException(
+                "Text parser for option '%s' must return a Collection, but got %s"
+                    .formatted(getFullOptionName(optionField.getAnnotation(Option.class)),
+                        parsed == null ? "null" : parsed.getClass().getName()));
+        }
+        optionField.setAccessible(true);
+        var existing = (Collection<Object>) optionField.get(object);
+        var target = newCollectionInstance(optionField.getType());
+        if (existing != null) {
+            target.addAll(existing);
+        }
+        target.addAll((Collection<Object>) parsedCollection);
+        setFieldValue(object, optionField, target);
     }
 
     private record OptionMatch(Field field, Option option, String textValue) {

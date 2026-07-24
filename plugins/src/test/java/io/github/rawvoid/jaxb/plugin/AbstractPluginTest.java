@@ -226,6 +226,30 @@ class AbstractPluginTest {
     }
 
     @Test
+    void testWholeCollectionTextParserAppendsWhenInterleaved() throws Exception {
+        var plugin = new TestPlugin();
+        plugin.registerTextParser(XAnnotation.class, (optionName, text) ->
+            XAnnotationParser.INSTANCE.parse(text.toString()));
+        plugin.registerTextParser(Pattern.class, (optionName, text) -> Pattern.compile(text.toString()));
+        plugin.registerTextParser("int-list2", (optionName, text) ->
+            Stream.of(text.toString().split(",")).map(Integer::parseInt).toList());
+
+        var args = List.of(
+            "-Xtest-plugin",
+            "-int-list2=1,2",
+            "-config",
+            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest",
+            "-index=0",
+            "-int-list2=3,4",
+            "-int-list=1"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.intList2).containsExactly(1, 2, 3, 4);
+    }
+
+    @Test
     void testAnnotationListGroupOnceAndSameFieldStartsNextItem() throws Exception {
         var plugin = new TestPlugin();
         plugin.registerTextParser(XAnnotation.class, (optionName, text) ->
