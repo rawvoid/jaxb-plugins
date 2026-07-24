@@ -18,6 +18,20 @@ This collection of powerful plugins transforms the way you work with JAXB, givin
 
 Built on a rock-solid foundation with our `AbstractPlugin` class that makes creating new plugins a breeze. Features annotation-based configuration, automatic option parsing, and extensible text parsers.
 
+**Nested list options (e.g. `-package-name`, `-mapping`, `-add-to-class`):**
+
+- Write the **group marker once**, then list as many items as you need:
+
+```bash
+-package-name \
+  -token=http://example.com/a -name=com.example.a \
+  -token=http://example.com/b -name=com.example.b
+```
+
+- A **repeated child field** (e.g. a second `-token=…` after `-name=…`) starts the next list item. You may still repeat the group marker between items if you prefer.
+- **Unused optional fields** on the current item remain open. If the next logical item would begin with such a field (e.g. `-regex` after a `-token/-name` item), restate the group marker so the shapes stay separate.
+- List options at the plugin root may **interleave** with other options (`-package-name … -class-name … -package-name …`).
+
 ---
 
 ## 🎯 Plugin Arsenal
@@ -144,6 +158,7 @@ Take control of how JAXB converts XML names to Java identifiers. Customize class
   -token=originalName \
   -regex=pattern \
   -name=newName
+  # group marker once; repeat -token/-name (or restate the group) for more items
 ```
 
 ---

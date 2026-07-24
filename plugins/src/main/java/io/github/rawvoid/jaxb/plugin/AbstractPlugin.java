@@ -183,6 +183,13 @@ public abstract class AbstractPlugin extends Plugin {
         }
         if (Collection.class.isAssignableFrom(field.getType())) {
             parts.add("[repeatable]");
+            var elementType = getCollectionElementType(field);
+            if (isNestedOptionType(elementType) && !getOptionFields(elementType).isEmpty()) {
+                // Nested-object lists: one group marker covers consecutive items; a repeated
+                // child field starts the next item. Unused optional fields on the current item
+                // still accept values — restate the group marker to separate different shapes.
+                parts.add("[group once; same child field starts next item; restate group to separate shapes]");
+            }
         }
         return parts.toString().lines().toList();
     }
