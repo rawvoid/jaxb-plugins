@@ -126,8 +126,8 @@ Customizes how XJC maps XML element names to Java identifiers (class names, fiel
 -Xconvert-name \
   -class-name=XMLDocument->Document \
   -variable-name \
-  -regex=(.*)_ID \
-  -name=$1Id
+  -name=(.*)_ID \
+  -to=$1Id
 ```
 
 #### Command Options
@@ -140,8 +140,12 @@ Customizes how XJC maps XML element names to Java identifiers (class names, fiel
   -package-name=http://example.com/a->com.example.a \
   # Structured format:
   -variable-name \
-  -regex=(.*)_ID \
-  -name=$1Id
+  -name=(.*)_ID \
+  -to=$1Id \
+  # Or exact match on original NameConverter input:
+  -class-name \
+  -input=Person \
+  -to=CustomPerson
 ```
 
 ---
@@ -365,11 +369,11 @@ xjc schema.xsd \
     -target=.*\.value \
   -Xconvert-name \
     -class-name \
-    -regex=(.*)Type \
-    -name=$1DTO \
+    -name=(.*)Type \
+    -to=$1DTO \
     -variable-name \
-    -regex=(.*)_ID \
-    -name=$1Id \
+    -name=(.*)_ID \
+    -to=$1Id \
   -Xnamespace \
     -package-mapping \
     -ns=http://api.example.com \

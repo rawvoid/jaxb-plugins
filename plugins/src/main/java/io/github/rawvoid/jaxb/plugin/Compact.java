@@ -35,11 +35,11 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  * </p>
  * <pre>
  * {@code
- * @Compact(formats = {"{token}->{name}", "/{regex}/->{name}"})
+ * @Compact(formats = {"/{name}/->{to}", "{input}->{to}"})
  * public static class NameMapping {
- *     @Option(name = "token") String token;
- *     @Option(name = "regex") Pattern regex;
- *     @Option(name = "name", required = true) String name;
+ *     @Option(name = "input") String input;
+ *     @Option(name = "name") Pattern name;
+ *     @Option(name = "to", required = true) String to;
  * }
  * }
  * </pre>
@@ -50,7 +50,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  * </p>
  * <p>
  * Structured multi-arg form remains supported. Values must not contain the literal separators
- * used in a template (e.g. {@code ->}). For {@code /{regex}/->…}, the regex body must not
+ * used in a template (e.g. {@code ->}). For {@code /{name}/->…}, the regex body must not
  * contain an unescaped {@code /}.
  * </p>
  *
@@ -67,7 +67,7 @@ public @interface Compact {
      * Consecutive placeholders require a non-empty separator. Tried in order until one matches.
      * </p>
      *
-     * @return compact format templates, e.g. {@code {"{token}->{name}", "/{regex}/->{name}"}}
+     * @return compact format templates, e.g. {@code {"/{name}/->{to}", "{input}->{to}"}}
      */
     String[] formats();
 

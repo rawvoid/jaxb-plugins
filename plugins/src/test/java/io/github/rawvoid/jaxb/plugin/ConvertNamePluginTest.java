@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * XJC integration tests for {@link ConvertNamePlugin}.
@@ -45,8 +46,8 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xconvert-name",
             "-class-name",
-            "-token=Person",
-            "-name=CustomPerson"
+            "-input=Person",
+            "-to=CustomPerson"
         );
         testExecute(args, PKG + "\\.CustomPerson", (source, clazz) -> {
             assertThat(clazz.getSimpleName()).isEqualTo("CustomPerson");
@@ -58,12 +59,12 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xconvert-name",
             "-property-name",
-            "-token=name",
-            "-name=fullName"
+            "-input=name",
+            "-to=fullName"
         );
         testExecute(args, PKG + "\\.Person", (source, clazz) -> {
             assertThat(clazz.getSimpleName()).isEqualTo("Person");
-            // toPropertyName replaces the token; accessor casing follows the mapping as-is.
+            // toPropertyName replaces the input; accessor casing follows the mapping as-is.
             var methodNames = Arrays.stream(clazz.getDeclaredMethods()).map(m -> m.getName()).toList();
             assertThat(methodNames).anyMatch(n -> n.equalsIgnoreCase("getfullName"));
         });
@@ -74,8 +75,8 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xconvert-name",
             "-package-name",
-            "-token=" + NS,
-            "-name=io.github.rawvoid.custom"
+            "-input=" + NS,
+            "-to=io.github.rawvoid.custom"
         );
         testExecute(args, "io\\.github\\.rawvoid\\.custom\\.Person", (source, clazz) -> {
             assertThat(clazz.getPackageName()).isEqualTo("io.github.rawvoid.custom");
@@ -120,12 +121,12 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testRegexConvert() throws Exception {
+    void testNameRegexConvert() throws Exception {
         var args = List.of(
             "-Xconvert-name",
             "-class-name",
-            "-regex=Per(.*)",
-            "-name=Human$1"
+            "-name=Per(.*)",
+            "-to=Human$1"
         );
         testExecute(args, PKG + "\\.Humanson", (source, clazz) -> {
             // "Person" matches "Per(.*)" with group 1 as "son" → "Humanson"
@@ -134,15 +135,15 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testMixRegexTokenConvert() throws Exception {
+    void testMixNameAndInputConvert() throws Exception {
         var args = List.of(
             "-Xconvert-name",
             "-class-name",
-            "-regex=Per(.*)",
-            "-name=Human$1",
+            "-name=Per(.*)",
+            "-to=Human$1",
             "-class-name",
-            "-token=RootType",
-            "-name=Root"
+            "-input=RootType",
+            "-to=Root"
         );
         List<String> list = new ArrayList<>();
         testExecute(args, PKG + "\\.(Humanson|Root)", (source, clazz) -> {
@@ -154,14 +155,14 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void testClassNameGroupMarkerOnce() throws Exception {
-        // Same child field (-token) starts the next list item without repeating -class-name.
+        // Same child field (-input) starts the next list item without repeating -class-name.
         var args = List.of(
             "-Xconvert-name",
             "-class-name",
-            "-token=Person",
-            "-name=CustomPerson",
-            "-token=RootType",
-            "-name=Root"
+            "-input=Person",
+            "-to=CustomPerson",
+            "-input=RootType",
+            "-to=Root"
         );
         List<String> list = new ArrayList<>();
         testExecute(args, PKG + "\\.(CustomPerson|Root)", (source, clazz) -> {
@@ -176,14 +177,14 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xconvert-name",
             "-package-name",
-            "-token=" + NS,
-            "-name=io.github.rawvoid.custom",
+            "-input=" + NS,
+            "-to=io.github.rawvoid.custom",
             "-class-name",
-            "-token=Person",
-            "-name=CustomPerson",
+            "-input=Person",
+            "-to=CustomPerson",
             "-package-name",
-            "-token=https://unused.example/ns",
-            "-name=io.github.rawvoid.ignored"
+            "-input=https://unused.example/ns",
+            "-to=io.github.rawvoid.ignored"
         );
         testExecute(args, "io\\.github\\.rawvoid\\.custom\\.CustomPerson", (source, clazz) -> {
             assertThat(clazz.getPackageName()).isEqualTo("io.github.rawvoid.custom");
@@ -196,8 +197,8 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
         var args = List.of(
             "-Xconvert-name",
             "-constant-name",
-            "-token=red",
-            "-name=SCARLET"
+            "-input=red",
+            "-to=SCARLET"
         );
         testExecute(args, PKG + "\\.Color", (source, clazz) -> {
             assertThat(clazz.isEnum()).isTrue();
@@ -208,17 +209,59 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testVariableNameConvert() throws Exception {
+    void testVariableNameConvertByInput() throws Exception {
+        // XJC feeds toVariableName the property name (already toPropertyName'd), e.g. "Name" for element "name".
         var args = List.of(
             "-Xconvert-name",
             "-variable-name",
-            "-token=name",
-            "-name=fullName"
+            "-input=Name",
+            "-to=fullName"
         );
         testExecute(args, PKG + "\\.Person", (source, clazz) -> {
             var fieldNames = Arrays.stream(clazz.getDeclaredFields()).map(f -> f.getName()).toList();
             assertThat(fieldNames).contains("fullName");
             assertThat(fieldNames).doesNotContain("name");
         });
+    }
+
+    @Test
+    void testVariableNameConvertByNameRegex() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-variable-name",
+            "-name=name",
+            "-to=fullName"
+        );
+        testExecute(args, PKG + "\\.Person", (source, clazz) -> {
+            var fieldNames = Arrays.stream(clazz.getDeclaredFields()).map(f -> f.getName()).toList();
+            assertThat(fieldNames).contains("fullName");
+            assertThat(fieldNames).doesNotContain("name");
+        });
+    }
+
+    @Test
+    void testRejectsBothInputAndName() {
+        var plugin = new ConvertNamePlugin();
+        var args = new String[]{
+            "-Xconvert-name",
+            "-class-name",
+            "-input=Person",
+            "-name=Person",
+            "-to=CustomPerson"
+        };
+        assertThatThrownBy(() -> plugin.parseArgument(null, args, 0))
+            .hasMessageContaining("exactly one of -input or -name");
+    }
+
+    @Test
+    void testRejectsNeitherInputNorName() {
+        var plugin = new ConvertNamePlugin();
+        var args = new String[]{
+            "-Xconvert-name",
+            "-class-name",
+            "-to=CustomPerson"
+        };
+        assertThatThrownBy(() -> plugin.parseArgument(null, args, 0))
+            .hasMessageContaining("exactly one of -input or -name");
     }
 }
