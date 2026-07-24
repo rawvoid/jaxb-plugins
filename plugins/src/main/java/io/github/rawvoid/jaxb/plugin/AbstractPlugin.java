@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Abstract base class for JAXB XJC plugins that provides annotation-based command line option parsing functionality.
@@ -167,9 +168,9 @@ public abstract class AbstractPlugin extends Plugin {
 
         if (isCollection) {
             var elementType = getCollectionElementType(optionField);
-            var compact = elementType.getAnnotation(Compact.class);
+            var compact = resolveCompact(optionField, elementType);
             if (compact != null) {
-                optionCmd.append(delimiter).append('<').append(compact.format()).append('>');
+                optionCmd.append(delimiter).append('<').append(compactFormatsUsage(compact)).append('>');
                 return optionCmd.toString();
             }
             if (getOptionFields(elementType).isEmpty()) {
@@ -188,9 +189,9 @@ public abstract class AbstractPlugin extends Plugin {
             placeholder = typePlaceholder(fieldType);
         }
         placeholder = placeholder == null ? "value" : placeholder;
-        var compact = fieldType.getAnnotation(Compact.class);
+        var compact = resolveCompact(optionField, fieldType);
         if (compact != null) {
-            optionCmd.append(delimiter).append('<').append(compact.format()).append('>');
+            optionCmd.append(delimiter).append('<').append(compactFormatsUsage(compact)).append('>');
         } else {
             optionCmd.append(delimiter).append('<').append(placeholder).append('>');
         }
@@ -211,7 +212,7 @@ public abstract class AbstractPlugin extends Plugin {
         if (Collection.class.isAssignableFrom(field.getType())) {
             parts.add("[repeatable]");
             var elementType = getCollectionElementType(field);
-            if (elementType.getAnnotation(Compact.class) != null) {
+            if (resolveCompact(field, elementType) != null) {
                 parts.add("[compact]");
             }
             if (isNestedOptionType(elementType) && !getOptionFields(elementType).isEmpty()) {
@@ -220,7 +221,7 @@ public abstract class AbstractPlugin extends Plugin {
                 // still accept values — restate the group marker to separate different shapes.
                 parts.add("[group once; same child field starts next item; restate group to separate shapes]");
             }
-        } else if (field.getType().getAnnotation(Compact.class) != null) {
+        } else if (resolveCompact(field, field.getType()) != null) {
             parts.add("[compact]");
         }
         return parts.toString().lines().toList();
@@ -322,19 +323,31 @@ public abstract class AbstractPlugin extends Plugin {
             if (isBooleanType(fieldType) && textValue == null) {
                 setFieldValue(object, field, true);
             } else if (isCollection) {
-                // A TextParser registered for the option name or collection field type
-                // may produce the entire collection from one text value (e.g. "1,2,3").
+                // Nested element types (including @Compact DTOs) always parse one element per
+                // -name=value. Whole-collection TextParsers (e.g. int-list2=1,2,3) are registered
+                // by option name for scalar element lists only — never for nested DTOs, so that
+                // field-level @Compact (also by option name) is not mistaken for a whole-list parser.
                 if (textValue != null) {
-                    var wholeCollectionParser = getParser(option, fieldType);
-                    if (wholeCollectionParser != null) {
-                        appendParsedCollection(object, field, wholeCollectionParser.parse(option.name(), textValue));
-                    } else {
-                        j = parseCollectionArgument(object, field, option, textValue, args, j);
-                        if (!retainCollectionOptions) {
-                            remaining.remove(field);
+                    var elementType = getCollectionElementType(field);
+                    if (!isNestedOptionType(elementType)) {
+                        var wholeCollectionParser = textParsersByOptionName.get(option.name());
+                        if (wholeCollectionParser == null) {
+                            wholeCollectionParser = textParsersByOptionType.get(fieldType);
                         }
-                        continue;
+                        if (wholeCollectionParser != null) {
+                            appendParsedCollection(object, field, wholeCollectionParser.parse(option.name(), textValue));
+                            if (!retainCollectionOptions) {
+                                remaining.remove(field);
+                            }
+                            j++;
+                            continue;
+                        }
                     }
+                    j = parseCollectionArgument(object, field, option, textValue, args, j);
+                    if (!retainCollectionOptions) {
+                        remaining.remove(field);
+                    }
+                    continue;
                 } else {
                     j = parseCollectionArgument(object, field, option, null, args, j);
                     if (!retainCollectionOptions) {
@@ -754,41 +767,71 @@ public abstract class AbstractPlugin extends Plugin {
     }
 
     /**
-     * Walks {@code @Option} nested types and registers {@link Compact} text parsers.
-     * Does not override a type parser already registered by the plugin.
+     * Walks {@code @Option} nested types and list fields; registers {@link Compact} text parsers.
+     * Type-level parsers are registered by element type; field-level {@code @Compact} by option name
+     * (takes precedence via {@link #getParser}). Does not override an already-registered type parser.
      */
     private void registerCompactParsersFrom(Class<?> type) {
         if (!isNestedOptionType(type)) {
             return;
         }
-        var compact = type.getAnnotation(Compact.class);
-        if (compact != null && !textParsersByOptionType.containsKey(type)) {
-            registerCompactParser(type, compact);
+        var typeCompact = type.getAnnotation(Compact.class);
+        if (typeCompact != null && !textParsersByOptionType.containsKey(type)) {
+            registerCompactParserByType(type, typeCompact);
         }
         for (var field : getOptionFields(type)) {
             var fieldType = field.getType();
             if (Collection.class.isAssignableFrom(fieldType)) {
-                registerCompactParsersFrom(getCollectionElementType(field));
+                var elementType = getCollectionElementType(field);
+                registerCompactParsersFrom(elementType);
+                var fieldCompact = field.getAnnotation(Compact.class);
+                if (fieldCompact != null) {
+                    var option = field.getAnnotation(Option.class);
+                    registerTextParser(option.name(), createCompactParser(elementType, fieldCompact));
+                }
             } else if (isNestedOptionType(fieldType)) {
                 registerCompactParsersFrom(fieldType);
+                var fieldCompact = field.getAnnotation(Compact.class);
+                if (fieldCompact != null) {
+                    var option = field.getAnnotation(Option.class);
+                    registerTextParser(option.name(), createCompactParser(fieldType, fieldCompact));
+                }
             }
         }
     }
 
     @SuppressWarnings("unchecked")
-    private void registerCompactParser(Class<?> type, Compact compact) {
+    private void registerCompactParserByType(Class<?> type, Compact compact) {
         var typed = (Class<Object>) type;
         registerTextParser(typed, createCompactParser(typed, compact));
     }
 
+    private Compact resolveCompact(Field optionField, Class<?> nestedType) {
+        var onField = optionField.getAnnotation(Compact.class);
+        if (onField != null) {
+            return onField;
+        }
+        return nestedType.getAnnotation(Compact.class);
+    }
+
+    private static String compactFormatsUsage(Compact compact) {
+        return String.join("|", compact.formats());
+    }
+
     private <T> TextParser<T> createCompactParser(Class<T> type, Compact compact) {
-        var compiled = compileCompactFormat(type, compact.format());
-        return (optionName, text) -> parseCompact(type, compiled, optionName, text.toString());
+        var formats = compact.formats();
+        if (formats.length == 0) {
+            throw new IllegalStateException("@Compact on %s requires a non-empty formats array".formatted(type.getName()));
+        }
+        var compiledList = Arrays.stream(formats)
+            .map(format -> compileCompactFormat(type, format))
+            .toList();
+        return (optionName, text) -> parseCompact(type, compiledList, optionName, text.toString());
     }
 
     private CompiledCompact compileCompactFormat(Class<?> type, String format) {
         if (format == null || format.isEmpty()) {
-            throw new IllegalStateException("@Compact on %s requires a non-empty format".formatted(type.getName()));
+            throw new IllegalStateException("@Compact on %s contains an empty format entry".formatted(type.getName()));
         }
         var fieldsByOptionName = new HashMap<String, Field>();
         for (var field : getOptionFields(type)) {
@@ -822,59 +865,71 @@ public abstract class AbstractPlugin extends Plugin {
         return new CompiledCompact(format, List.copyOf(optionNames), List.copyOf(literals), Map.copyOf(fieldsByOptionName));
     }
 
-    private <T> T parseCompact(Class<T> type, CompiledCompact compiled, String optionName, String text) throws Exception {
-        var values = splitCompactValues(compiled, text, optionName);
-        var instance = newInstance(type);
-        for (var i = 0; i < compiled.optionNames().size(); i++) {
-            var nestedOptionName = compiled.optionNames().get(i);
-            var field = compiled.fieldsByOptionName().get(nestedOptionName);
-            var option = field.getAnnotation(Option.class);
-            var parser = getParser(option, field.getType());
-            if (parser == null) {
-                throw newExceptionForNoParser(option, field.getType());
+    private <T> T parseCompact(Class<T> type, List<CompiledCompact> templates, String optionName, String text)
+        throws Exception {
+        for (var compiled : templates) {
+            var values = trySplitCompactValues(compiled, text);
+            if (values == null) {
+                continue;
             }
-            setFieldValue(instance, field, parser.parse(option.name(), values.get(i)));
+            var instance = newInstance(type);
+            for (var i = 0; i < compiled.optionNames().size(); i++) {
+                var nestedOptionName = compiled.optionNames().get(i);
+                var field = compiled.fieldsByOptionName().get(nestedOptionName);
+                var option = field.getAnnotation(Option.class);
+                var parser = getParser(option, field.getType());
+                if (parser == null) {
+                    throw newExceptionForNoParser(option, field.getType());
+                }
+                setFieldValue(instance, field, parser.parse(option.name(), values.get(i)));
+            }
+            return instance;
         }
-        return instance;
+        var expected = templates.stream().map(CompiledCompact::format).collect(Collectors.joining("' | '"));
+        throw new BadCommandLineException(
+            "Invalid compact value for option '-%s': expected format '%s', got '%s'"
+                .formatted(optionName, expected, text));
     }
 
-    private static List<String> splitCompactValues(CompiledCompact compiled, String text, String optionName)
-        throws BadCommandLineException {
+    /**
+     * @return placeholder values if {@code text} matches the template; {@code null} otherwise
+     */
+    private static List<String> trySplitCompactValues(CompiledCompact compiled, String text) {
         var literals = compiled.literals();
         var optionNames = compiled.optionNames();
         var prefix = literals.getFirst();
         if (!text.startsWith(prefix)) {
-            throw new BadCommandLineException(compactParseError(optionName, compiled.format(), text));
+            return null;
         }
         var cursor = prefix.length();
         var values = new ArrayList<String>(optionNames.size());
         for (var i = 0; i < optionNames.size(); i++) {
             var nextLiteral = literals.get(i + 1);
+            String value;
             if (nextLiteral.isEmpty()) {
-                // Last placeholder with empty suffix: take the rest.
                 if (i != optionNames.size() - 1) {
-                    throw new BadCommandLineException(compactParseError(optionName, compiled.format(), text));
+                    return null;
                 }
-                values.add(text.substring(cursor));
+                value = text.substring(cursor);
                 cursor = text.length();
             } else {
                 var sepAt = text.indexOf(nextLiteral, cursor);
                 if (sepAt < 0) {
-                    throw new BadCommandLineException(compactParseError(optionName, compiled.format(), text));
+                    return null;
                 }
-                values.add(text.substring(cursor, sepAt));
+                value = text.substring(cursor, sepAt);
                 cursor = sepAt + nextLiteral.length();
             }
+            // Empty placeholders are not a match (helps more-specific templates win cleanly).
+            if (value.isEmpty()) {
+                return null;
+            }
+            values.add(value);
         }
         if (cursor != text.length()) {
-            throw new BadCommandLineException(compactParseError(optionName, compiled.format(), text));
+            return null;
         }
         return values;
-    }
-
-    private static String compactParseError(String optionName, String format, String text) {
-        return "Invalid compact value for option '-%s': expected format '%s', got '%s'"
-            .formatted(optionName, format, text);
     }
 
     private record CompiledCompact(

@@ -19,49 +19,56 @@ package io.github.rawvoid.jaxb.plugin;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
+import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
- * Declares a compact single-text encoding for a nested option type.
+ * Declares compact single-text encoding(s) for a nested option type (or a specific list field).
  * <p>
- * When a nested type is annotated with {@code @Compact}, {@link AbstractPlugin} registers a
- * {@link TextParser} for that type so {@code List} (or single) options can accept
+ * When present, {@link AbstractPlugin} registers a {@link TextParser} so options can accept
  * {@code -option=value} form. Placeholders refer to nested {@link Option#name()} values.
+ * Templates are tried <strong>in declaration order</strong>; put more specific patterns first.
  * </p>
  * <p>
- * Example:
+ * Type-level example:
  * </p>
  * <pre>
  * {@code
- * @Compact(format = "{token}->{name}")
+ * @Compact(formats = {"{token}->{name}", "/{regex}/->{name}"})
  * public static class NameMapping {
  *     @Option(name = "token") String token;
+ *     @Option(name = "regex") Pattern regex;
  *     @Option(name = "name", required = true) String name;
  * }
  * }
  * </pre>
- * CLI: {@code -package-name=http://example.com/ns->com.example.pkg}
+ * CLI: {@code -class-name=Person->Human} or {@code -class-name=/(.*)_ID/->$1Id}
  * <p>
- * Structured multi-arg form ({@code -package-name -token=… -name=…}) remains supported.
- * Values must not contain the literal separators used in the format (e.g. {@code ->}).
+ * Field-level {@code @Compact} on a {@code List} option overrides the element type's templates
+ * for that option only (registered by option name).
+ * </p>
+ * <p>
+ * Structured multi-arg form remains supported. Values must not contain the literal separators
+ * used in a template (e.g. {@code ->}). For {@code /{regex}/->…}, the regex body must not
+ * contain an unescaped {@code /}.
  * </p>
  *
  * @author Rawvoid
  */
 @Retention(RUNTIME)
-@Target(TYPE)
+@Target({TYPE, FIELD})
 public @interface Compact {
 
     /**
-     * Template for one element as a single text value.
+     * One or more templates for a single element as text.
      * <p>
-     * Placeholders are {@code {optionName}} for nested {@link Option} fields; text outside
-     * braces is a literal separator. Consecutive placeholders require a non-empty separator.
+     * Placeholders are {@code {optionName}}; text outside braces is a literal separator.
+     * Consecutive placeholders require a non-empty separator. Tried in order until one matches.
      * </p>
      *
-     * @return compact format template, e.g. {@code "{token}->{name}"}
+     * @return compact format templates, e.g. {@code {"{token}->{name}", "/{regex}/->{name}"}}
      */
-    String format();
+    String[] formats();
 
 }
