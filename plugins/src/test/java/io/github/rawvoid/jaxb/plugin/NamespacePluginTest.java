@@ -58,4 +58,29 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
                 .forEach(xmlns -> assertThat(xmlns.prefix()).isEqualTo("n1"));
         });
     }
+
+    @Test
+    void mapsNamespaceCompactWithPrefix() throws Exception {
+        var args = List.of(
+            "-Xnamespace",
+            "-mapping=" + NS + "->pkg1:n1"
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+            Arrays.stream(clazz.getPackage().getAnnotation(XmlSchema.class).xmlns())
+                .filter(xmlns -> NS.equals(xmlns.namespaceURI()))
+                .forEach(xmlns -> assertThat(xmlns.prefix()).isEqualTo("n1"));
+        });
+    }
+
+    @Test
+    void mapsNamespaceCompactPackageOnly() throws Exception {
+        var args = List.of(
+            "-Xnamespace",
+            "-mapping=" + NS + "->pkg1"
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+        });
+    }
 }

@@ -181,7 +181,12 @@ public class NamespacePlugin extends AbstractPlugin {
 
     /**
      * Naming mapping rule configuration.
+     * <p>
+     * Compact: {@code -mapping=http://a.com->com.example.a} or
+     * {@code -mapping=http://a.com->com.example.a:prefix} (more specific template first).
+     * </p>
      */
+    @Compact(formats = {"{ns}->{package}:{prefix}", "{ns}->{package}"})
     public static class NamespaceMappingConfig {
 
         @Option(name = "ns", required = true, description = "XML target namespace URI (e.g., http://example.com/my-schema)")

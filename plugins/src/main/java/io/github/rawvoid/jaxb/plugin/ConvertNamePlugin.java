@@ -144,7 +144,13 @@ public class ConvertNamePlugin extends AbstractPlugin {
 
     /**
      * Naming mapping rule configuration.
+     * <p>
+     * Compact CLI (see {@link Compact}): {@code -class-name=Person->CustomPerson},
+     * {@code -class-name=/(.*)_ID/->$1Id}, {@code -package-name=nsUri->java.package}.
+     * </p>
      */
+    // More specific regex template first so "/…/->…" is not parsed as token="/…/".
+    @Compact(formats = {"/{regex}/->{name}", "{token}->{name}"})
     public static class NameMapping {
 
         /**

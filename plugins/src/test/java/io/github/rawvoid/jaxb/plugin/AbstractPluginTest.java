@@ -154,6 +154,148 @@ class AbstractPluginTest {
     }
 
     @Test
+    void testCompactMappingSingleAndRepeated() throws Exception {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name=ns1->pkg1",
+            "-package-name=ns2->pkg2"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.packageNames).hasSize(2);
+        assertThat(plugin.packageNames.get(0).token).isEqualTo("ns1");
+        assertThat(plugin.packageNames.get(0).name).isEqualTo("pkg1");
+        assertThat(plugin.packageNames.get(1).token).isEqualTo("ns2");
+        assertThat(plugin.packageNames.get(1).name).isEqualTo("pkg2");
+    }
+
+    @Test
+    void testCompactAndStructuredMappingsAppend() throws Exception {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name=ns1->pkg1",
+            "-package-name",
+            "-token=ns2",
+            "-name=pkg2",
+            "-class-name=Person->Human"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.packageNames).hasSize(2);
+        assertThat(plugin.packageNames.get(0).name).isEqualTo("pkg1");
+        assertThat(plugin.packageNames.get(1).name).isEqualTo("pkg2");
+        assertThat(plugin.classNames).hasSize(1);
+        assertThat(plugin.classNames.getFirst().token).isEqualTo("Person");
+        assertThat(plugin.classNames.getFirst().name).isEqualTo("Human");
+    }
+
+    @Test
+    void testCompactInvalidFormatThrows() {
+        var plugin = new MappingPlugin();
+        var args = List.of(
+            "-Xmapping",
+            "-package-name=missing-arrow"
+        ).toArray(new String[0]);
+
+        assertThatThrownBy(() -> plugin.parseArgument(new Options(), args, 0))
+            .isInstanceOf(BadCommandLineException.class)
+            .hasMessageContaining("Invalid compact value");
+    }
+
+    @Test
+    void testCompactUsageShowsFormat() {
+        var plugin = new MappingPlugin();
+        var usage = plugin.getUsage();
+        assertThat(usage).contains("-package-name=<{token}->{name}>");
+        assertThat(usage).contains("[compact]");
+    }
+
+    @Test
+    void testCompactMultiTemplateTriesInOrder() throws Exception {
+        var plugin = new MultiFormatPlugin();
+        var args = List.of(
+            "-Xmulti-format",
+            "-map=ns1->pkg1",
+            "-map=/foo.*/->bar"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.maps).hasSize(2);
+        assertThat(plugin.maps.get(0).token).isEqualTo("ns1");
+        assertThat(plugin.maps.get(0).name).isEqualTo("pkg1");
+        assertThat(plugin.maps.get(0).regex).isNull();
+        assertThat(plugin.maps.get(1).token).isNull();
+        assertThat(plugin.maps.get(1).regex.pattern()).isEqualTo("foo.*");
+        assertThat(plugin.maps.get(1).name).isEqualTo("bar");
+    }
+
+    @Test
+    void testFieldLevelCompactOverridesType() throws Exception {
+        var plugin = new FieldCompactPlugin();
+        var args = List.of(
+            "-Xfield-compact",
+            "-default-map=a->b",
+            "-legacy-map=c:d"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.defaultMap).hasSize(1);
+        assertThat(plugin.defaultMap.getFirst().token).isEqualTo("a");
+        assertThat(plugin.defaultMap.getFirst().name).isEqualTo("b");
+        assertThat(plugin.legacyMap).hasSize(1);
+        assertThat(plugin.legacyMap.getFirst().token).isEqualTo("c");
+        assertThat(plugin.legacyMap.getFirst().name).isEqualTo("d");
+    }
+
+    @Option(prefix = "-X", name = "multi-format", description = "Multi-template compact")
+    private static class MultiFormatPlugin extends AbstractPlugin {
+
+        @Option(name = "map", description = "Mappings")
+        List<Entry> maps;
+
+        @Override
+        public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
+            return true;
+        }
+
+        // More specific regex template first.
+        @Compact(formats = {"/{regex}/->{name}", "{token}->{name}"})
+        private static class Entry {
+            @Option(name = "token") String token;
+            @Option(name = "regex") Pattern regex;
+            @Option(name = "name", required = true) String name;
+        }
+    }
+
+    @Option(prefix = "-X", name = "field-compact", description = "Field-level compact override")
+    private static class FieldCompactPlugin extends AbstractPlugin {
+
+        @Option(name = "default-map", description = "Uses type-level compact")
+        List<Pair> defaultMap;
+
+        @Option(name = "legacy-map", description = "Field-level compact override")
+        @Compact(formats = {"{token}:{name}"})
+        List<Pair> legacyMap;
+
+        @Override
+        public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
+            return true;
+        }
+
+        @Compact(formats = {"{token}->{name}"})
+        private static class Pair {
+            @Option(name = "token") String token;
+            @Option(name = "name", required = true) String name;
+        }
+    }
+
+    @Test
     void testNestedListRepeatedGroupMarkerStillWorks() throws Exception {
         var plugin = new MappingPlugin();
         var args = List.of(
@@ -293,6 +435,7 @@ class AbstractPluginTest {
             return true;
         }
 
+        @Compact(formats = {"{token}->{name}"})
         private static class NameMapping {
 
             @Option(name = "token", description = "Source token")

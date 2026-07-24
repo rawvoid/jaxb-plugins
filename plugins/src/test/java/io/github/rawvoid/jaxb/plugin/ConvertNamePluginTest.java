@@ -83,6 +83,43 @@ public class ConvertNamePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void testPackageNameConvertCompact() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-package-name=" + NS + "->io.github.rawvoid.custom"
+        );
+        testExecute(args, "io\\.github\\.rawvoid\\.custom\\.Person", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("io.github.rawvoid.custom");
+        });
+    }
+
+    @Test
+    void testClassNameConvertCompact() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-class-name=Person->CustomPerson",
+            "-class-name=RootType->Root"
+        );
+        List<String> list = new ArrayList<>();
+        testExecute(args, PKG + "\\.(CustomPerson|Root)", (source, clazz) -> {
+            list.add(clazz.getSimpleName());
+        });
+        assertThat(list).containsExactlyInAnyOrder("CustomPerson", "Root");
+    }
+
+    @Test
+    void testClassNameConvertCompactRegex() throws Exception {
+        var args = List.of(
+            "-Xconvert-name",
+            "-class-name=/(Per)(.*)/->Human$2"
+        );
+        // "Person" → groups Per, son → Human + son = Humanson (same as structured regex test intent)
+        testExecute(args, PKG + "\\.Humanson", (source, clazz) -> {
+            assertThat(clazz.getSimpleName()).isEqualTo("Humanson");
+        });
+    }
+
+    @Test
     void testRegexConvert() throws Exception {
         var args = List.of(
             "-Xconvert-name",
