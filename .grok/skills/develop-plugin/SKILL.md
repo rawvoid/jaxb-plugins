@@ -93,7 +93,7 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 
 - Custom parse types: `registerTextParser(Class, TextParser)` or by option name in the constructor (`AnnotatePlugin` + `XAnnotation`).
 - After parse + defaults + required checks: override `postParseArgument(Options, int)` for side effects or multi-field validation.
-- Nested / repeatable configs: `NsPrefixPlugin` (`List<PackageXmlNsConfig>`), `JSR310Plugin` (`List<TypeMappingConfig>`), `AnnotatePlugin` (add/remove groups).
+- Nested / repeatable configs: `NamespacePlugin` (`List<PackageMapConfig>` / `List<XmlNsRuleConfig>`), `JSR310Plugin` (`List<TypeMappingConfig>`), `AnnotatePlugin` (add/remove groups).
 
 ### Utils (reuse before reinventing)
 
@@ -172,8 +172,7 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 | `ConvertNamePlugin`        | `-Xconvert-name`         | `postParseArgument` + `NameConverter`             |
 | `ElementWrapperPlugin`     | `-Xelement-wrapper`      | Dual-phase: model flatten + wrapper annotation    |
 | `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
-| `NsPrefixPlugin`           | `-Xns-prefix`            | Nested list configs on `@XmlSchema`               |
-| `NamespacePlugin`          | `-Xnamespace`            | Custom namespace package/prefix mappings          |
+| `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes |
 
 Framework types: `AbstractPlugin`, `Option`, `TextParser`.
 
