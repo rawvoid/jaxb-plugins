@@ -17,36 +17,6 @@ A suite of extensible XJC (JAXB) plugins designed to streamline XML-to-Java bind
 
 ---
 
-## Core Configuration Syntax
-
-Plugins built on the underlying `AbstractPlugin` framework support two command-line syntax styles for nested options (e.g., `-package-name`, `-mapping`, `-add-to-class`):
-
-### Compact Syntax
-Available for options marked with `@Compact(formats=…)` (e.g., name conversion mappings):
-
-```bash
--package-name=http://example.com/a->com.example.a \
--package-name=http://example.com/b->com.example.b \
--class-name=/(.*)_ID/->$1Id
-```
-
-- Templates are evaluated sequentially (place specific patterns before general ones).
-- Field-level `@Compact` declarations override type-level defaults.
-
-### Structured Syntax
-Allows defining a group marker once, followed by multiple flag pairs:
-
-```bash
--package-name \
-  -token=http://example.com/a -name=com.example.a \
-  -token=http://example.com/b -name=com.example.b
-```
-
-- Repeating a child field (e.g., a second `-token=…` after `-name=…`) starts a new item in the list.
-- Unused optional fields remain open. Restate the group marker when necessary to prevent option ambiguity.
-- Root-level list options can interleave with other plugin flags (e.g., `-package-name … -class-name … -package-name …`).
-
----
 
 ## Available Plugins
 
