@@ -27,6 +27,7 @@ Instructions for AI assistants working in this repository.
 
 - **Conventional Commits**: Git commit messages and PR titles MUST strictly adhere to the Conventional Commits specification.
 - **Atomic Local Commits**: Commit locally as coherent, verified units of work (feature or fix + tests green). Avoid combining unrelated changes; do not force a commit after every exploratory substep.
+- **Commit when done**: After a coherent unit of work is complete and verified (relevant tests green when code changed), create a local commit using Conventional Commits. Do **not** wait for the user to ask. Applies to any meaningful change set, including docs-only. Skip auto-commit if the user asked not to commit, if verification failed, or if there are no meaningful changes. Still never push or open PRs unless explicitly instructed.
 - **Remote Operations**: **NEVER** `git push`, force-push, amend published history, or open/update PRs unless explicitly instructed by the user.
 - **Secrets**: **NEVER** commit secrets, tokens, or credentials.
 
@@ -34,4 +35,4 @@ Instructions for AI assistants working in this repository.
 
 - **Language**: Reply in the user's language.
 - **Clarity**: State trade-offs concisely. Ask when requirements or design choices are ambiguous; otherwise proceed once the direction is clear within the workflow rules above.
-- **Completion**: When done, briefly report what changed and how it was verified (e.g., test command run).
+- **Completion**: When done, briefly report what changed, how it was verified (e.g., test command run), and the local commit hash if a commit was created.
