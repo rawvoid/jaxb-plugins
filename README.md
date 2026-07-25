@@ -72,14 +72,30 @@ Maps XSD date and time types to modern `java.time` classes.
 
 ### Validation Plugin (`-Xvalidation`)
 
-Generates Bean Validation (JSR-380) constraint annotations (`jakarta.validation.constraints.*` or legacy `javax.validation.constraints.*`) on generated class fields based on XSD schema constraints (`minOccurs`, `maxOccurs`, `nillable`, `minLength`, `maxLength`, `pattern`, numeric bounds, and digits), as well as `@Valid` for cascade validation.
+Generates Bean Validation (JSR-380) constraint annotations on generated class fields from XSD multiplicity and simple-type facets. Supports `jakarta.validation` (default) and legacy `javax.validation`.
 
-#### Key Features
+#### Mapping
 
-- **Standard Mapping**: Automatically converts XSD facets and multiplicity into `@NotNull`, `@Size`, `@Pattern`, `@Min`, `@Max`, `@DecimalMin`, `@DecimalMax`, `@Digits`, and `@Valid`.
-- **Modern Defaults**: Uses `jakarta.validation` by default (Java 21+ / Jakarta EE 10 / Spring Boot 3+).
-- **Legacy Compatibility**: Supports switching to `javax.validation` via `-api=javax`.
-- **Filtering & Controls**: Class/field regular expression filtering and a `-disable-valid=true` escape hatch.
+| XSD | Annotation |
+|:----|:-----------|
+| Element `minOccurs≥1` (non-nillable, non-primitive) | `@NotNull` |
+| Element `nillable="true"` | no `@NotNull` |
+| Attribute `use="required"` | `@NotNull` |
+| Collection `minOccurs` / `maxOccurs` | `@NotNull` + `@Size` |
+| `minLength` / `maxLength` / `length` (string fields) | `@Size` |
+| `pattern` | `@Pattern` |
+| `minInclusive` / `maxInclusive` | `@Min` / `@Max` or `@DecimalMin` / `@DecimalMax` |
+| `minExclusive` / `maxExclusive` | `@DecimalMin` / `@DecimalMax(inclusive=false)` |
+| `totalDigits` / `fractionDigits` (user-declared) | `@Digits` |
+| Complex type / `List` of complex | `@Valid` |
+| simpleContent (`@XmlValue`) facets | same as simple type |
+
+#### Intentional limitations
+
+- No mapping for `enumeration`, `whiteSpace`, or `fixed`.
+- Collection **item** length/pattern is not expressed (`@Size` on a list is multiplicity only).
+- Facets are taken from the **user restriction chain** only; built-in XML Schema facets (e.g. `xs:integer` `fractionDigits`) are ignored.
+- Annotations are applied to **fields** only (JAXB default `FIELD` access).
 
 #### Quick Start
 
