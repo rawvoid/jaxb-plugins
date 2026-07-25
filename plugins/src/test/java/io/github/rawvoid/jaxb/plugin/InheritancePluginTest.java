@@ -29,18 +29,18 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * XJC integration tests for {@link TypeParentPlugin}.
- * Uses {@code type-parent.xsd}.
+ * XJC integration tests for {@link InheritancePlugin}.
+ * Uses {@code inheritance.xsd}.
  */
-class TypeParentPluginTest extends AbstractXJCMojoTestCase {
+class InheritancePluginTest extends AbstractXJCMojoTestCase {
 
-    private static final String PKG = "com.github.rawvoid.xjc_plugins.type_parent";
+    private static final String PKG = "com.github.rawvoid.xjc_plugins.inheritance";
     private static final String USER_REQUEST_FILTER = PKG.replace(".", "\\.") + "\\.UserRequestType";
     private static final String USER_RESPONSE_FILTER = PKG.replace(".", "\\.") + "\\.UserResponseType";
     private static final String BASE_DATA_FILTER = PKG.replace(".", "\\.") + "\\.BaseDataType";
     private static final String EXTENDED_DATA_FILTER = PKG.replace(".", "\\.") + "\\.ExtendedDataType";
 
-    private final String optionCmd = optionCommand(TypeParentPlugin.class);
+    private final String optionCmd = optionCommand(InheritancePlugin.class);
 
     private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
         var option = pluginClass.getAnnotation(Option.class);
@@ -49,12 +49,12 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
 
     @BeforeEach
     void setSchema() {
-        schemaIncludes = List.of("type-parent.xsd");
+        schemaIncludes = List.of("inheritance.xsd");
     }
 
     @Test
     void testUsage() {
-        var usage = new TypeParentPlugin().getUsage();
+        var usage = new InheritancePlugin().getUsage();
         assertThat(usage).isNotNull();
         assertThat(usage).contains("-serial-version-uid");
         assertThat(usage).doesNotContain("-class-name");

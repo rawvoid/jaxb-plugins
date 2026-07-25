@@ -16,8 +16,8 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/type-parent"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/type-parent"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/inheritance"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/inheritance"
            elementFormDefault="qualified">
 
     <xs:element name="UserRequest" type="tns:UserRequestType"/>

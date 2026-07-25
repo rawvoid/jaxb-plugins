@@ -177,7 +177,7 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 | `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes |
 | `JacksonPlugin`            | `-Xjackson`              | Class-level Jackson defaults (`@JsonInclude`, ignoreUnknown) + `-anno` |
 | `ValidationPlugin`         | `-Xvalidation`           | Bean Validation constraints (@NotNull, @Size, @Valid, etc.) |
-| `TypeParentPlugin`         | `-Xtype-parent`          | Interface (`implements`) and superclass (`extends`) injection |
+| `InheritancePlugin`        | `-Xinheritance`          | Interface (`implements`) and superclass (`extends`) injection |
 
 Framework types: `AbstractPlugin`, `Option`, `TextParser`.
 

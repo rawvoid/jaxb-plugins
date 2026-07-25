@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 
 /**
  * Injects interface implementations ({@code implements}) and superclasses ({@code extends})
- * into generated JAXB classes.
+ * into generated JAXB classes (Java supertypes / inheritance edges).
  *
  * <p>Application order per class: {@code -serializable} (optional UID), then {@code -interface}
  * rules in declaration order (cumulative), then {@code -super-class} rules in declaration order
@@ -42,10 +42,10 @@ import java.util.regex.Pattern;
  *
  * <p>Compact CLI examples:</p>
  * <pre>{@code
- * -Xtype-parent -serializable=true
- * -Xtype-parent -serializable=true -serial-version-uid=42
- * -Xtype-parent -interface=.*Request->com.example.BaseRequest
- * -Xtype-parent -super-class=.*Dto->com.example.AbstractDto
+ * -Xinheritance -serializable=true
+ * -Xinheritance -serializable=true -serial-version-uid=42
+ * -Xinheritance -interface=.*Request->com.example.BaseRequest
+ * -Xinheritance -super-class=.*Dto->com.example.AbstractDto
  * }</pre>
  *
  * <p><b>Intentional limits:</b></p>
@@ -64,16 +64,16 @@ import java.util.regex.Pattern;
  *
  * @author Rawvoid
  */
-@Option(name = "Xtype-parent", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
-public class TypeParentPlugin extends AbstractPlugin {
+@Option(name = "Xinheritance", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
+public class InheritancePlugin extends AbstractPlugin {
 
     private static final String OBJECT_FQCN = "java.lang.Object";
 
     @Option(name = "interface", description = "Interface mapping rules (compact format: pattern->Interface FQCN)")
-    List<TypeParentConfig> interfaces;
+    List<InheritanceConfig> interfaces;
 
     @Option(name = "super-class", description = "Superclass mapping rules (compact format: pattern->SuperClass FQCN)")
-    List<TypeParentConfig> superClasses;
+    List<InheritanceConfig> superClasses;
 
     @Option(name = "serializable", defaultValue = "false",
         description = "Add implements java.io.Serializable and serialVersionUID when missing")
@@ -84,7 +84,7 @@ public class TypeParentPlugin extends AbstractPlugin {
     Long serialVersionUid;
 
     @Compact(formats = {"/{name}/->{to}", "{name}->{to}"})
-    public static class TypeParentConfig {
+    public static class InheritanceConfig {
 
         @Option(name = "name", required = true, description = "Regex pattern matching fully-qualified class names")
         Pattern name;

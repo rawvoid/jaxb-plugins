@@ -130,9 +130,9 @@ Add `jakarta.validation:jakarta.validation-api` (preferred) or `javax.validation
 
 ---
 
-### Type Parent Plugin (`-Xtype-parent`)
+### Inheritance Plugin (`-Xinheritance`)
 
-Injects interface implementations (`implements`) and superclasses (`extends`) into generated JAXB classes, with optional `Serializable` support.
+Injects Java supertypes into generated JAXB classes: interface implementations (`implements`) and superclasses (`extends`), with optional `Serializable` support. Similar in spirit to the jaxb-tools inheritance plugin.
 
 #### Key Features
 
@@ -149,7 +149,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 #### Quick Start
 
 ```bash
--Xtype-parent \
+-Xinheritance \
   -serializable=true \
   -serial-version-uid=1 \
   -interface=.*Request->com.example.BaseRequest \
@@ -159,7 +159,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 #### Command Options
 
 ```bash
--Xtype-parent \
+-Xinheritance \
   -interface=pattern->InterfaceFQCN \    # Compact interface mapping (repeatable)
   -super-class=pattern->SuperClassFQCN \ # Compact superclass mapping (repeatable)
   -serializable=true \                  # Add Serializable + serialVersionUID when missing
@@ -169,7 +169,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 Structured form is also supported:
 
 ```bash
--Xtype-parent -interface -name=.*Request -to=com.example.BaseRequest
+-Xinheritance -interface -name=.*Request -to=com.example.BaseRequest
 ```
 
 | Option                | Default  | Description                                                            |
