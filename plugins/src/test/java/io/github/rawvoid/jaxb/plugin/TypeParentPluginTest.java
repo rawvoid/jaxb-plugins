@@ -56,6 +56,7 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
     void testUsage() {
         var usage = new TypeParentPlugin().getUsage();
         assertThat(usage).isNotNull();
+        assertThat(usage).contains("-serial-version-uid");
         assertThat(usage).doesNotContain("-class-name");
     }
 
@@ -79,22 +80,32 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void serializableShortcutFixedUid() throws Exception {
+    void serializableShortcutDefaultUid() throws Exception {
         var args = List.of(optionCmd, "-serializable=true");
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(source).contains("implements Serializable");
             assertThat(source).contains("private static final long serialVersionUID = 1L;");
             assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
+            assertSerialVersionUid(clazz, 1L);
+        });
+    }
 
-            try {
-                var field = clazz.getDeclaredField("serialVersionUID");
-                assertThat(Modifier.isStatic(field.getModifiers())).isTrue();
-                assertThat(Modifier.isFinal(field.getModifiers())).isTrue();
-                field.setAccessible(true);
-                assertThat(field.getLong(null)).isEqualTo(1L);
-            } catch (ReflectiveOperationException ex) {
-                throw new AssertionError(ex);
-            }
+    @Test
+    void serializableCustomUid() throws Exception {
+        var args = List.of(optionCmd, "-serializable=true", "-serial-version-uid=42");
+        testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
+            assertThat(source).contains("private static final long serialVersionUID = 42L;");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
+            assertSerialVersionUid(clazz, 42L);
+        });
+    }
+
+    @Test
+    void serialVersionUidIgnoredWithoutSerializable() throws Exception {
+        var args = List.of(optionCmd, "-serial-version-uid=99");
+        testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
+            assertThat(source).doesNotContain("serialVersionUID");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isFalse();
         });
     }
 
@@ -198,5 +209,17 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
             assertThat(Cloneable.class.isAssignableFrom(clazz)).isFalse();
             assertThat(source).doesNotContain("Cloneable");
         });
+    }
+
+    private static void assertSerialVersionUid(Class<?> clazz, long expected) {
+        try {
+            var field = clazz.getDeclaredField("serialVersionUID");
+            assertThat(Modifier.isStatic(field.getModifiers())).isTrue();
+            assertThat(Modifier.isFinal(field.getModifiers())).isTrue();
+            field.setAccessible(true);
+            assertThat(field.getLong(null)).isEqualTo(expected);
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError(ex);
+        }
     }
 }

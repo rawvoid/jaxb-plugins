@@ -34,11 +34,14 @@ import java.util.regex.Pattern;
  * Injects interface implementations ({@code implements}) and superclasses ({@code extends})
  * into generated JAXB classes.
  *
- * <p>Target classes are selected by each rule's left-hand pattern (no global class filter).</p>
+ * <p>Application order per class: {@code -serializable} (optional UID), then {@code -interface}
+ * rules in declaration order (cumulative), then {@code -super-class} rules in declaration order
+ * (first-wins). Target classes are selected by each rule's left-hand pattern.</p>
  *
  * <p>Compact CLI examples:</p>
  * <pre>{@code
  * -Xtype-parent -serializable=true
+ * -Xtype-parent -serializable=true -serial-version-uid=42
  * -Xtype-parent -interface=.*Request->com.example.BaseRequest
  * -Xtype-parent -super-class=.*Dto->com.example.AbstractDto
  * }</pre>
@@ -48,8 +51,8 @@ import java.util.regex.Pattern;
  *   <li>Bean classes only ({@code outline.getClasses()}); enums are not modified.</li>
  *   <li>Does not replace an existing non-{@code Object} superclass (XSD inheritance or a prior
  *       matching {@code -super-class} rule). Multiple matching super-class rules are first-wins.</li>
- *   <li>{@code -serializable} adds {@link Serializable} and a fixed {@code serialVersionUID = 1L}
- *       when the field is absent; does not overwrite an existing field.</li>
+ *   <li>{@code -serializable} adds {@link Serializable} and {@code serialVersionUID} (default
+ *       {@code 1L}, overridable via {@code -serial-version-uid}) when the field is absent.</li>
  *   <li>Interface injection is cumulative and skips duplicates already present on the class.</li>
  *   <li>Does not validate that {@code -interface}/{@code -super-class} targets are interfaces/classes
  *       or resolvable at generation time; invalid FQCNs fail later at Java compile.</li>
@@ -64,7 +67,6 @@ public class TypeParentPlugin extends AbstractPlugin {
     private static final Logger log = LoggerFactory.getLogger(TypeParentPlugin.class);
 
     private static final String OBJECT_FQCN = "java.lang.Object";
-    private static final long DEFAULT_SERIAL_VERSION_UID = 1L;
 
     @Option(name = "interface", description = "Interface mapping rules (compact format: pattern->Interface FQCN)")
     List<TypeParentConfig> interfaces;
@@ -73,8 +75,12 @@ public class TypeParentPlugin extends AbstractPlugin {
     List<TypeParentConfig> superClasses;
 
     @Option(name = "serializable", defaultValue = "false",
-        description = "Add implements java.io.Serializable and a fixed serialVersionUID = 1L when missing")
+        description = "Add implements java.io.Serializable and serialVersionUID when missing")
     Boolean serializable;
+
+    @Option(name = "serial-version-uid", defaultValue = "1",
+        description = "serialVersionUID value used when -serializable is true (default: 1)")
+    Long serialVersionUid;
 
     @Compact(formats = {"/{name}/->{to}", "{name}->{to}"})
     public static class TypeParentConfig {
@@ -90,6 +96,7 @@ public class TypeParentPlugin extends AbstractPlugin {
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
         var codeModel = outline.getCodeModel();
         var isSerializable = Boolean.TRUE.equals(serializable);
+        var uid = serialVersionUid != null ? serialVersionUid : 1L;
 
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
@@ -103,7 +110,7 @@ public class TypeParentPlugin extends AbstractPlugin {
                         JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
                         codeModel.LONG,
                         "serialVersionUID",
-                        JExpr.lit(DEFAULT_SERIAL_VERSION_UID)
+                        JExpr.lit(uid)
                     );
                 }
             }
