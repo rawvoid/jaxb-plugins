@@ -137,7 +137,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 #### Key Features
 
 - **Interface Implementation**: Adds `implements InterfaceFQCN` via compact or structured mapping. Accumulates multiple interfaces without duplicates. Select targets with each rule's left-hand pattern.
-- **Superclass Extension**: Adds `extends SuperClassFQCN` only when the class currently extends `Object` (preserves XSD inheritance). Multiple matching rules are first-wins.
+- **Superclass Extension**: Adds `extends SuperClassFQCN` only when the class currently extends `Object` (preserves XSD inheritance). Multiple matching rules are **first-wins**; further matches or existing non-`Object` parents emit XJC **warnings**.
 - **Serializable Shortcut**: Adds `implements java.io.Serializable` and `serialVersionUID` when missing. Default UID is `1L` (reproducible); override with `-serial-version-uid`.
 
 #### Application order (per class)

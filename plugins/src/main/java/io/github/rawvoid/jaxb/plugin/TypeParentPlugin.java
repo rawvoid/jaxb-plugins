@@ -16,15 +16,17 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.codemodel.JCodeModel;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.codemodel.JExpr;
 import com.sun.codemodel.JMod;
 import com.sun.tools.xjc.Options;
+import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
+import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
 
 import java.io.Serializable;
 import java.util.List;
@@ -50,7 +52,8 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>Bean classes only ({@code outline.getClasses()}); enums are not modified.</li>
  *   <li>Does not replace an existing non-{@code Object} superclass (XSD inheritance or a prior
- *       matching {@code -super-class} rule). Multiple matching super-class rules are first-wins.</li>
+ *       matching {@code -super-class} rule). Multiple matching super-class rules are first-wins;
+ *       skips are reported as XJC warnings.</li>
  *   <li>{@code -serializable} adds {@link Serializable} and {@code serialVersionUID} (default
  *       {@code 1L}, overridable via {@code -serial-version-uid}) when the field is absent.</li>
  *   <li>Interface injection is cumulative and skips duplicates already present on the class.</li>
@@ -63,8 +66,6 @@ import java.util.regex.Pattern;
  */
 @Option(name = "Xtype-parent", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
 public class TypeParentPlugin extends AbstractPlugin {
-
-    private static final Logger log = LoggerFactory.getLogger(TypeParentPlugin.class);
 
     private static final String OBJECT_FQCN = "java.lang.Object";
 
@@ -127,23 +128,43 @@ public class TypeParentPlugin extends AbstractPlugin {
             }
 
             if (superClasses != null) {
-                for (var config : superClasses) {
-                    if (config.name != null && config.to != null && config.name.matcher(implClass.fullName()).matches()) {
-                        var superClassFqcn = config.to.trim();
-                        if (!superClassFqcn.isEmpty()) {
-                            var currentSuper = implClass._extends();
-                            if (currentSuper == null || OBJECT_FQCN.equals(currentSuper.fullName())) {
-                                implClass._extends(codeModel.ref(superClassFqcn));
-                            } else {
-                                log.debug("Skipping super-class '{}' for '{}': already extends '{}'",
-                                    superClassFqcn, implClass.fullName(), currentSuper.fullName());
-                            }
-                        }
-                    }
-                }
+                applySuperClasses(classOutline, implClass, codeModel, errorHandler);
             }
         }
         return true;
+    }
+
+    private void applySuperClasses(
+        ClassOutline classOutline,
+        JDefinedClass implClass,
+        JCodeModel codeModel,
+        ErrorHandler errorHandler
+    ) throws SAXException {
+        for (var config : superClasses) {
+            if (config.name == null || config.to == null || !config.name.matcher(implClass.fullName()).matches()) {
+                continue;
+            }
+            var superClassFqcn = config.to.trim();
+            if (superClassFqcn.isEmpty()) {
+                continue;
+            }
+            var currentSuper = implClass._extends();
+            if (currentSuper == null || OBJECT_FQCN.equals(currentSuper.fullName())) {
+                implClass._extends(codeModel.ref(superClassFqcn));
+            } else {
+                warn(errorHandler, locatorOf(classOutline),
+                    "Skipping super-class '%s' for '%s': already extends '%s'"
+                        .formatted(superClassFqcn, implClass.fullName(), currentSuper.fullName()));
+            }
+        }
+    }
+
+    private static Locator locatorOf(ClassOutline classOutline) {
+        return classOutline.target != null ? classOutline.target.getLocator() : null;
+    }
+
+    private void warn(ErrorHandler errorHandler, Locator locator, String message) throws SAXException {
+        errorHandler.warning(new SAXParseException(message, locator));
     }
 
     private boolean lacksInterface(JDefinedClass implClass, String interfaceFqcn) {
