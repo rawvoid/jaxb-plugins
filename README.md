@@ -97,12 +97,12 @@ Generates Bean Validation (JSR-380) constraint annotations (`jakarta.validation.
   -disable-valid=true                  # Optional: disable @Valid on nested/collection properties (default: false)
 ```
 
-| Option | Default | Description |
-|:-------|:--------|:------------|
-| `-api` | `jakarta` | Validation API package mode (`jakarta` or `javax`) |
-| `-class-name` | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
-| `-field-name` | *(all fields)* | Regex matched against field names (repeatable) |
-| `-disable-valid` | `false` | When `true`, omits `@Valid` cascade validation annotations |
+| Option           | Default         | Description                                                    |
+|:-----------------|:----------------|:---------------------------------------------------------------|
+| `-api`           | `jakarta`       | Validation API package mode (`jakarta` or `javax`)             |
+| `-class-name`    | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
+| `-field-name`    | *(all fields)*  | Regex matched against field names (repeatable)                 |
+| `-disable-valid` | `false`         | When `true`, omits `@Valid` cascade validation annotations     |
 
 ---
 
@@ -135,13 +135,12 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
   -class-name=.*UserType               # Optional regex filter for matching FQCN (repeatable)
 ```
 
-| Option | Default | Description |
-|:-------|:--------|:------------|
-| `-interface` | *(none)* | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces |
-| `-super-class` | *(none)* | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses |
-| `-serializable` | `false` | When `true`, injects `Serializable` interface and random `serialVersionUID` field |
-| `-class-name` | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
-
+| Option          | Default         | Description                                                                       |
+|:----------------|:----------------|:----------------------------------------------------------------------------------|
+| `-interface`    | *(none)*        | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces            |
+| `-super-class`  | *(none)*        | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses            |
+| `-serializable` | `false`         | When `true`, injects `Serializable` interface and random `serialVersionUID` field |
+| `-class-name`   | *(all classes)* | Regex matched against fully-qualified class names (repeatable)                    |
 
 ---
 
@@ -368,12 +367,12 @@ Adds common Jackson annotations on generated classes. Zero-config replaces the u
   -anno=@com.fasterxml.jackson.annotation.JsonPropertyOrder({"id","name"})
 ```
 
-| Option | Default | Description |
-|:-------|:--------|:------------|
-| `-include` | `NON_NULL` | `JsonInclude.Include` name, or `none` to omit `@JsonInclude` |
-| `-ignore-unknown` | `true` | When `true`, add `@JsonIgnoreProperties(ignoreUnknown = true)` |
-| `-class-name` | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
-| `-anno` | *(none)* | Extra class-level annotation via annox syntax (repeatable) |
+| Option            | Default         | Description                                                    |
+|:------------------|:----------------|:---------------------------------------------------------------|
+| `-include`        | `NON_NULL`      | `JsonInclude.Include` name, or `none` to omit `@JsonInclude`   |
+| `-ignore-unknown` | `true`          | When `true`, add `@JsonIgnoreProperties(ignoreUnknown = true)` |
+| `-class-name`     | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
+| `-anno`           | *(none)*        | Extra class-level annotation via annox syntax (repeatable)     |
 
 #### Intentional limitations (MVP)
 
@@ -517,7 +516,7 @@ Configure `jaxb-maven-plugin` with desired plugin arguments:
       </plugin>
     </plugins>
     <args>
-      <arg>-Xjsr310</arg>
+      <arg>-Xjava-time</arg>
       <arg>-Xannotate</arg>
       <arg>-Xconvert-name</arg>
       <arg>-Xnamespace</arg>
@@ -531,7 +530,7 @@ Configure `jaxb-maven-plugin` with desired plugin arguments:
 ```bash
 xjc -d src -p com.example \
     -extension \
-    -Xjsr310 \
+    -Xjava-time \
     -Xannotate \
     -Xconvert-name \
     -Xnamespace \
@@ -549,7 +548,7 @@ xjc schema.xsd \
   -d src/main/java \
   -p com.example.api \
   -extension \
-  -Xjsr310 \
+  -Xjava-time \
     -adapter-package=com.example.adapters \
     -type-mapping \
     -xsd-type=dateTime \
