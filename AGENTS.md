@@ -11,7 +11,7 @@ Instructions for AI assistants working in this repository.
 
 ## 2. Code & Research
 
-- **Simplicity & Elegance**: Avoid over-engineering, over-coding, and speculative abstractions. Keep architecture flat and control flow obvious. Write concise, readable, and elegant code with clear structure. Drop unused branches and defensive code for impossible states.
+- **Simplicity & Elegance**: Avoid over-engineering, unnecessary code, and speculative abstractions. Keep architecture flat and control flow obvious. Write concise, readable, and elegant code with clear structure. Drop unused branches and defensive code for impossible states.
 - **Modern Java**: Target **Java 21+**. Use current Java features (`var` for obvious types, records, pattern matching, sequenced collections, text blocks) when they improve clarity.
 - **Dependencies**: Do NOT introduce new external libraries or frameworks without explicit user approval.
 - **Class Imports**: In Java sources and Javadoc, prefer explicit `import` statements over fully qualified names. Use FQCN only on name collision or in non-source contexts (SPI files, diagnostic strings, config that requires a type name).
@@ -20,14 +20,14 @@ Instructions for AI assistants working in this repository.
 
 ## 3. Testing & Verification
 
-- **Execution Requirement**: Always run and verify the smallest relevant Maven test suite before declaring work done (e.g., `mvn test` or `mvn test -Dtest=...`).
+- **Execution Requirement**: When code or tests change, run and verify the smallest relevant Maven test suite before declaring work done (e.g., `mvn test` or `mvn test -Dtest=...`). Docs-only or other non-code changes do not require a test run unless they affect the build or CI.
 - **Test Integrity**: **NEVER** delete failing tests or comment out broken assertions to pass build checks.
 
 ## 4. Git & Remote Actions
 
-- **Conventional Commits**: Git commit messages and PR titles MUST strictly adhere to the Conventional Commits specification.
-- **Atomic Local Commits**: Commit locally as coherent, verified units of work (feature or fix + tests green). Avoid combining unrelated changes; do not force a commit after every exploratory substep.
-- **Commit when done**: After a coherent unit of work is complete and verified (relevant tests green when code changed), create a local commit using Conventional Commits. Do **not** wait for the user to ask. Applies to any meaningful change set, including docs-only. Skip auto-commit if the user asked not to commit, if verification failed, or if there are no meaningful changes. Still never push or open PRs unless explicitly instructed.
+- **Conventional Commits**: Git commit messages and PR titles MUST adhere to the Conventional Commits specification.
+- **Atomic Local Commits**: Commit locally as coherent, verified units of work (tests green when code changed). Avoid combining unrelated changes; do not force a commit after every exploratory substep.
+- **Commit when done**: After a coherent unit of work is complete and verified (relevant tests green when code changed), create a local commit using Conventional Commits. Do **not** wait for the user to ask. Applies to any meaningful change set, including docs-only. Skip auto-commit if the user asked not to commit, if verification failed, or if there are no meaningful changes.
 - **Remote Operations**: **NEVER** `git push`, force-push, amend published history, or open/update PRs unless explicitly instructed by the user.
 - **Secrets**: **NEVER** commit secrets, tokens, or credentials.
 
