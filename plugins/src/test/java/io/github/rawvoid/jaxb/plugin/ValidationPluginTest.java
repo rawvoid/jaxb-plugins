@@ -17,22 +17,34 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * XJC integration tests for {@link ValidationPlugin}.
- * Uses {@code validation.xsd}.
+ * Uses dedicated {@code validation.xsd} only.
  */
 class ValidationPluginTest extends AbstractXJCMojoTestCase {
 
-    private static final String PKG = "com.example.validation";
-    private static final String USER_TYPE_FILTER = PKG + "\\.UserType";
-    private static final String ADDRESS_TYPE_FILTER = PKG + "\\.AddressType";
+    private static final String PKG = "com.github.rawvoid.xjc_plugins.validation";
+    private static final String USER = PKG + "\\.UserType";
+    private static final String ADDRESS = PKG + "\\.AddressType";
+    private static final String ITEM = PKG + "\\.ItemType";
+    private static final String PLAIN = PKG + "\\.PlainType";
 
     private final String optionCmd = optionCommand(ValidationPlugin.class);
 
@@ -53,74 +65,186 @@ class ValidationPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void baselineWithoutPlugin() throws Exception {
-        testExecute(List.of(), USER_TYPE_FILTER, (source, clazz) -> {
+        testExecute(List.of(), USER, (source, clazz) -> {
             assertThat(source).doesNotContain("jakarta.validation");
             assertThat(source).doesNotContain("javax.validation");
-            assertThat(source).doesNotContain("@NotNull");
-            assertThat(source).doesNotContain("@Size");
-            assertThat(source).doesNotContain("@Pattern");
-            assertThat(source).doesNotContain("@Valid");
+            assertThat(field(clazz, "username").getAnnotation(NotNull.class)).isNull();
+            assertThat(field(clazz, "username").getAnnotation(Size.class)).isNull();
         });
     }
 
     @Test
-    void defaultJakartaValidation() throws Exception {
-        testExecute(List.of(optionCmd), USER_TYPE_FILTER, (source, clazz) -> {
+    void defaultJakartaFieldMappings() throws Exception {
+        testExecute(List.of(optionCmd), USER, (source, clazz) -> {
             assertThat(source).contains("jakarta.validation.constraints.");
-            assertThat(source).contains("@NotNull");
-            assertThat(source).contains("@Size");
-            assertThat(source).contains("@Pattern");
-            assertThat(source).contains("@Min");
-            assertThat(source).contains("@Max");
-            assertThat(source).contains("@Digits");
-            assertThat(source).contains("@DecimalMin");
-            assertThat(source).contains("@Valid");
+
+            // username: required + min/max length
+            var username = field(clazz, "username");
+            assertThat(username.getAnnotation(NotNull.class)).isNotNull();
+            var usernameSize = username.getAnnotation(Size.class);
+            assertThat(usernameSize).isNotNull();
+            assertThat(usernameSize.min()).isEqualTo(3);
+            assertThat(usernameSize.max()).isEqualTo(20);
+
+            // email: required + pattern
+            var email = field(clazz, "email");
+            assertThat(email.getAnnotation(NotNull.class)).isNotNull();
+            var emailPattern = email.getAnnotation(Pattern.class);
+            assertThat(emailPattern).isNotNull();
+            assertThat(emailPattern.regexp()).contains("@");
+
+            // bio: optional maxLength only
+            var bio = field(clazz, "bio");
+            assertThat(bio.getAnnotation(NotNull.class)).isNull();
+            var bioSize = bio.getAnnotation(Size.class);
+            assertThat(bioSize).isNotNull();
+            assertThat(bioSize.max()).isEqualTo(200);
+
+            // age: min/max on integer restriction — no inherited @Digits
+            var age = field(clazz, "age");
+            assertThat(age.getType()).isEqualTo(int.class);
+            assertThat(age.getAnnotation(NotNull.class)).isNull(); // primitive
+            assertThat(age.getAnnotation(Min.class).value()).isEqualTo(18L);
+            assertThat(age.getAnnotation(Max.class).value()).isEqualTo(120L);
+            assertThat(age.getAnnotation(Digits.class)).isNull();
+
+            // salary: exclusive min + digits
+            var salary = field(clazz, "salary");
+            var decMin = salary.getAnnotation(DecimalMin.class);
+            assertThat(decMin).isNotNull();
+            assertThat(decMin.value()).isEqualTo("0");
+            assertThat(decMin.inclusive()).isFalse();
+            var digits = salary.getAnnotation(Digits.class);
+            assertThat(digits).isNotNull();
+            assertThat(digits.integer()).isEqualTo(8);
+            assertThat(digits.fraction()).isEqualTo(2);
+
+            // roles: collection bounds
+            var roles = field(clazz, "roles");
+            assertThat(roles.getAnnotation(NotNull.class)).isNotNull();
+            var rolesSize = roles.getAnnotation(Size.class);
+            assertThat(rolesSize.min()).isEqualTo(1);
+            assertThat(rolesSize.max()).isEqualTo(5);
+            assertThat(roles.getAnnotation(Valid.class)).isNull();
+
+            // address + contacts: cascade
+            assertThat(field(clazz, "address").getAnnotation(NotNull.class)).isNotNull();
+            assertThat(field(clazz, "address").getAnnotation(Valid.class)).isNotNull();
+            assertThat(field(clazz, "contacts").getAnnotation(Valid.class)).isNotNull();
+            assertThat(field(clazz, "contacts").getAnnotation(Size.class)).isNull();
+
+            // nillable required
+            assertThat(field(clazz, "note").getAnnotation(NotNull.class)).isNull();
+
+            // unbounded min=1 collection
+            var items = field(clazz, "items");
+            assertThat(items.getAnnotation(NotNull.class)).isNotNull();
+            var itemsSize = items.getAnnotation(Size.class);
+            assertThat(itemsSize).isNotNull();
+            assertThat(itemsSize.min()).isEqualTo(1);
+            assertThat(itemsSize.max()).isEqualTo(Integer.MAX_VALUE); // default when max omitted
+            assertThat(items.getAnnotation(Valid.class)).isNotNull();
+
+            // collection multiplicity only (item length not applied)
+            var codes = field(clazz, "codes");
+            var codesSize = codes.getAnnotation(Size.class);
+            assertThat(codesSize).isNotNull();
+            assertThat(codesSize.max()).isEqualTo(3);
+            assertThat(codesSize.min()).isEqualTo(0);
         });
     }
 
     @Test
-    void javaxValidationMode() throws Exception {
-        var args = List.of(optionCmd, "-api=javax");
-        testExecute(args, USER_TYPE_FILTER, (source, clazz) -> {
-            assertThat(source).contains("javax.validation.constraints.");
-            assertThat(source).doesNotContain("jakarta.validation");
-            assertThat(source).contains("@NotNull");
-            assertThat(source).contains("@Size");
-            assertThat(source).contains("@Valid");
+    void addressRequiredFields() throws Exception {
+        testExecute(List.of(optionCmd), ADDRESS, (source, clazz) -> {
+            assertThat(field(clazz, "street").getAnnotation(NotNull.class)).isNotNull();
+            assertThat(field(clazz, "city").getAnnotation(NotNull.class)).isNotNull();
         });
+    }
+
+    @Test
+    void attributeAndValueProperty() throws Exception {
+        testExecute(List.of(optionCmd), ITEM, (source, clazz) -> {
+            // @XmlValue facets
+            var value = field(clazz, "value");
+            var valueSize = value.getAnnotation(Size.class);
+            assertThat(valueSize).isNotNull();
+            assertThat(valueSize.min()).isEqualTo(1);
+            assertThat(valueSize.max()).isEqualTo(8);
+            assertThat(value.getAnnotation(Pattern.class).regexp()).isEqualTo("[A-Z]+");
+
+            // required attribute
+            assertThat(field(clazz, "lang").getAnnotation(NotNull.class)).isNotNull();
+
+            // optional attribute with numeric bounds (Integer — no NotNull)
+            var priority = field(clazz, "priority");
+            assertThat(priority.getAnnotation(NotNull.class)).isNull();
+            assertThat(priority.getAnnotation(Min.class).value()).isEqualTo(1L);
+            assertThat(priority.getAnnotation(Max.class).value()).isEqualTo(9L);
+            assertThat(priority.getAnnotation(Digits.class)).isNull();
+        });
+    }
+
+    @Test
+    void prefersJakartaWhenBothApisPresent() throws Exception {
+        // Test classpath provides both APIs; auto-detect must prefer jakarta.
+        testExecute(List.of(optionCmd), USER, (source, clazz) -> {
+            assertThat(source).contains("jakarta.validation.constraints.");
+            assertThat(source).doesNotContain("javax.validation");
+            assertThat(field(clazz, "username").getAnnotation(NotNull.class)).isNotNull();
+            assertThat(field(clazz, "address").getAnnotation(Valid.class)).isNotNull();
+        });
+    }
+
+    @Test
+    void chooseValidationApiPrefersJakarta() throws Exception {
+        assertThat(ValidationPlugin.chooseValidationApi(true, true)).isEqualTo("jakarta");
+        assertThat(ValidationPlugin.chooseValidationApi(true, false)).isEqualTo("jakarta");
+        assertThat(ValidationPlugin.chooseValidationApi(false, true)).isEqualTo("javax");
+    }
+
+    @Test
+    void chooseValidationApiFailsWhenNeitherPresent() {
+        assertThatThrownBy(() -> ValidationPlugin.chooseValidationApi(false, false))
+            .isInstanceOf(com.sun.tools.xjc.BadCommandLineException.class)
+            .hasMessageContaining("Bean Validation API not found");
     }
 
     @Test
     void disableValidOption() throws Exception {
-        var args = List.of(optionCmd, "-disable-valid=true");
-        testExecute(args, USER_TYPE_FILTER, (source, clazz) -> {
-            assertThat(source).contains("@NotNull");
-            assertThat(source).contains("@Size");
-            assertThat(source).doesNotContain("@Valid");
+        testExecute(List.of(optionCmd, "-disable-valid=true"), USER, (source, clazz) -> {
+            assertThat(field(clazz, "username").getAnnotation(NotNull.class)).isNotNull();
+            assertThat(field(clazz, "address").getAnnotation(Valid.class)).isNull();
+            assertThat(field(clazz, "contacts").getAnnotation(Valid.class)).isNull();
+            assertThat(field(clazz, "items").getAnnotation(Valid.class)).isNull();
         });
     }
 
     @Test
     void classNameFilter() throws Exception {
         var args = List.of(optionCmd, "-class-name=.*UserType");
-        testExecute(args, USER_TYPE_FILTER, (source, clazz) -> {
-            assertThat(source).contains("@NotNull");
-        });
-        testExecute(args, ADDRESS_TYPE_FILTER, (source, clazz) -> {
-            assertThat(source).doesNotContain("@NotNull");
-            assertThat(source).doesNotContain("@Size");
-        });
+        testExecute(args, USER, (source, clazz) ->
+            assertThat(field(clazz, "username").getAnnotation(NotNull.class)).isNotNull());
+        testExecute(args, PLAIN, (source, clazz) ->
+            assertThat(field(clazz, "label").getAnnotation(NotNull.class)).isNull());
+        testExecute(args, ADDRESS, (source, clazz) ->
+            assertThat(field(clazz, "street").getAnnotation(NotNull.class)).isNull());
     }
 
     @Test
     void fieldNameFilter() throws Exception {
-        var args = List.of(optionCmd, "-field-name=username");
-        testExecute(args, USER_TYPE_FILTER, (source, clazz) -> {
-            assertThat(source).contains("@NotNull");
-            assertThat(source).contains("@Size");
-            // Bio, email, age, salary fields skipped by filter
-            assertThat(source).doesNotContain("@Pattern");
-            assertThat(source).doesNotContain("@Min");
+        testExecute(List.of(optionCmd, "-field-name=username"), USER, (source, clazz) -> {
+            assertThat(field(clazz, "username").getAnnotation(NotNull.class)).isNotNull();
+            assertThat(field(clazz, "username").getAnnotation(Size.class)).isNotNull();
+            assertThat(field(clazz, "email").getAnnotation(Pattern.class)).isNull();
+            assertThat(field(clazz, "age").getAnnotation(Min.class)).isNull();
+            assertThat(field(clazz, "address").getAnnotation(Valid.class)).isNull();
         });
+    }
+
+    private static Field field(Class<?> clazz, String name) throws NoSuchFieldException {
+        var f = clazz.getDeclaredField(name);
+        f.setAccessible(true);
+        return f;
     }
 }

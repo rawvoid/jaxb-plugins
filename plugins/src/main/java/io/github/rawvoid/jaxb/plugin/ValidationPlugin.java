@@ -16,34 +16,53 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.JDefinedClass;
+import com.sun.codemodel.JCodeModel;
 import com.sun.codemodel.JFieldVar;
+import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
+import com.sun.tools.xjc.model.CAttributePropertyInfo;
 import com.sun.tools.xjc.model.CClassInfo;
+import com.sun.tools.xjc.model.CElementPropertyInfo;
 import com.sun.tools.xjc.model.CPropertyInfo;
+import com.sun.tools.xjc.model.CValuePropertyInfo;
 import com.sun.tools.xjc.outline.Outline;
-import com.sun.xml.xsom.*;
+import com.sun.xml.xsom.XSAttributeDecl;
+import com.sun.xml.xsom.XSAttributeUse;
+import com.sun.xml.xsom.XSElementDecl;
+import com.sun.xml.xsom.XSFacet;
+import com.sun.xml.xsom.XSParticle;
+import com.sun.xml.xsom.XSSimpleType;
 import io.github.rawvoid.jaxb.utils.AnnotationUtils;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
+import javax.xml.XMLConstants;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Generates Jakarta Bean Validation (JSR-380) or legacy javax validation annotations
- * on generated JAXB class fields based on XSD schema constraints and multiplicity.
+ * Adds Bean Validation annotations on generated JAXB fields from XSD multiplicity and facets.
+ *
+ * <p>Maps element/attribute requiredness, collection size, string length, pattern, numeric bounds,
+ * digits, and {@code @Valid} for complex types. The validation API package is auto-detected from the
+ * XJC classpath: {@code jakarta.validation} is preferred when present; otherwise
+ * {@code javax.validation}. Fails if neither API is available.
+ *
+ * <p><b>Intentional limits:</b> no {@code enumeration}/{@code whiteSpace}/{@code fixed}; collection
+ * {@code @Size} is multiplicity only (not item length); only user-declared facets (built-in XML
+ * Schema facets such as {@code xs:integer} {@code fractionDigits} are ignored); field annotations only.
  *
  * @author Rawvoid
  */
 @Option(name = "Xvalidation", description = "Add Bean Validation annotations (JSR-380) based on XSD schema constraints")
 public class ValidationPlugin extends AbstractPlugin {
 
-    private static final String API_JAVAX = "javax";
-
-    @Option(name = "api", defaultValue = "jakarta",
-        description = "Validation API package mode: 'jakarta' (default) or 'javax'")
-    String api;
+    private static final String CXF_NOISE_PATTERN = "\\c+";
+    private static final String JAKARTA_VALID = "jakarta.validation.Valid";
+    private static final String JAVAX_VALID = "javax.validation.Valid";
 
     @Option(name = "class-name", description = "Regex to match fully-qualified class names (repeatable)")
     List<Pattern> classNames;
@@ -55,285 +74,321 @@ public class ValidationPlugin extends AbstractPlugin {
         description = "Disable automatic @Valid annotation on complex or collection properties")
     Boolean disableValid;
 
+    private String constraintPkg;
+    private String validFqcn;
+
+    @Override
+    protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+        resolveValidationApi();
+    }
+
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
-        var isJavax = API_JAVAX.equalsIgnoreCase(api != null ? api.trim() : "");
-        var constraintPkg = isJavax ? "javax.validation.constraints." : "jakarta.validation.constraints.";
-        var validFqcn = isJavax ? "javax.validation.Valid" : "jakarta.validation.Valid";
+        if (constraintPkg == null) {
+            try {
+                resolveValidationApi();
+            } catch (BadCommandLineException ex) {
+                throw new SAXException(ex.getMessage(), ex);
+            }
+        }
+        var cm = outline.getCodeModel();
+        var skipValid = Boolean.TRUE.equals(disableValid);
 
         for (var classOutline : outline.getClasses()) {
-            var implClass = classOutline.implClass;
-            if (!matchesClassName(implClass.fullName())) {
+            if (!matches(classNames, classOutline.implClass.fullName())) {
                 continue;
             }
-
             for (var fieldOutline : classOutline.getDeclaredFields()) {
                 var prop = fieldOutline.getPropertyInfo();
-                var fieldName = prop.getName(false);
-                if (!matchesFieldName(fieldName)) {
+                var name = prop.getName(false);
+                if (!matches(fieldNames, name)) {
                     continue;
                 }
-
-                var fieldVar = implClass.fields().get(fieldName);
-                if (fieldVar == null) {
+                var field = classOutline.implClass.fields().get(name);
+                if (field == null) {
                     continue;
                 }
-
-                processFieldValidation(outline, prop, fieldVar, constraintPkg, validFqcn);
+                applyPresence(cm, prop, field);
+                applyFacets(cm, resolveSimpleType(prop), field);
+                if (!skipValid && isComplex(prop)) {
+                    annotateIfAbsent(cm, field, validFqcn);
+                }
             }
         }
         return true;
     }
 
-    private void processFieldValidation(Outline outline,
-                                        CPropertyInfo prop,
-                                        JFieldVar fieldVar,
-                                        String constraintPkg,
-                                        String validFqcn) {
-        var component = prop.getSchemaComponent();
-
-        XSParticle particle = null;
-        XSElementDecl elementDecl = null;
-
-        if (component instanceof XSParticle p) {
-            particle = p;
-            if (p.getTerm() instanceof XSElementDecl e) {
-                elementDecl = e;
-            }
-        } else if (component instanceof XSElementDecl e) {
-            elementDecl = e;
-        }
-
-        var isCollection = prop.isCollection();
-        var minOccurs = particle != null ? particle.getMinOccurs().longValue() : 0L;
-        var maxOccurs = particle != null ? particle.getMaxOccurs().longValue() : 1L;
-
-        // 1. Mandatory presence / collection size rules
-        if (isCollection) {
-            applyCollectionSizeAndNotNull(outline, fieldVar, constraintPkg, minOccurs, maxOccurs);
+    private void resolveValidationApi() throws BadCommandLineException {
+        var mode = chooseValidationApi(
+            isPresent(JAKARTA_VALID),
+            isPresent(JAVAX_VALID));
+        if ("jakarta".equals(mode)) {
+            constraintPkg = "jakarta.validation.constraints.";
+            validFqcn = JAKARTA_VALID;
         } else {
-            var isNillable = elementDecl != null && elementDecl.isNillable();
-            if (minOccurs >= 1 && !isNillable) {
-                addAnnotationIfAbsent(outline, fieldVar, constraintPkg + "NotNull");
-            }
-        }
-
-        // 2. Simple type facets (String length, pattern, numeric bounds, digits)
-        var simpleType = findSimpleType(component);
-        if (simpleType != null) {
-            applySimpleTypeFacets(outline, fieldVar, constraintPkg, simpleType);
-        }
-
-        // 3. Cascade validation (@Valid) for complex types and collections of complex types
-        if (!Boolean.TRUE.equals(disableValid) && isComplexTypeProperty(prop, fieldVar, outline)) {
-            addAnnotationIfAbsent(outline, fieldVar, validFqcn);
+            constraintPkg = "javax.validation.constraints.";
+            validFqcn = JAVAX_VALID;
         }
     }
 
-    private void applyCollectionSizeAndNotNull(Outline outline,
-                                               JFieldVar fieldVar,
-                                               String constraintPkg,
-                                               long minOccurs,
-                                               long maxOccurs) {
-        if (minOccurs >= 1) {
-            addAnnotationIfAbsent(outline, fieldVar, constraintPkg + "NotNull");
+    /**
+     * Prefers Jakarta when present; falls back to javax; fails when neither is available.
+     *
+     * @return {@code "jakarta"} or {@code "javax"}
+     */
+    static String chooseValidationApi(boolean jakartaPresent, boolean javaxPresent)
+        throws BadCommandLineException {
+        if (jakartaPresent) {
+            return "jakarta";
+        }
+        if (javaxPresent) {
+            return "javax";
+        }
+        throw new BadCommandLineException(
+            "Bean Validation API not found on the XJC classpath. "
+                + "Add jakarta.validation:jakarta.validation-api (preferred) or "
+                + "javax.validation:validation-api to the XJC plugin dependencies.");
+    }
+
+    private static boolean isPresent(String fqcn) {
+        try {
+            Class.forName(fqcn, false, ValidationPlugin.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError ex) {
+            return false;
+        }
+    }
+
+    // --- presence / collection size ---
+
+    private void applyPresence(JCodeModel cm, CPropertyInfo prop, JFieldVar field) {
+        if (prop instanceof CAttributePropertyInfo attribute) {
+            if (attribute.isRequired() && !field.type().isPrimitive()) {
+                annotateIfAbsent(cm, field, constraintPkg + "NotNull");
+            }
+            return;
+        }
+        if (prop instanceof CValuePropertyInfo) {
+            return;
         }
 
-        if (minOccurs > 0 || maxOccurs > 1) {
-            var sizeFqcn = constraintPkg + "Size";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, sizeFqcn)) {
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(sizeFqcn));
-                if (minOccurs > 0) {
-                    anno.param("min", (int) minOccurs);
+        var particle = prop.getSchemaComponent() instanceof XSParticle p ? p : null;
+        if (particle == null) {
+            if (prop instanceof CElementPropertyInfo element
+                && element.isRequired()
+                && !isNillable(element)
+                && !field.type().isPrimitive()) {
+                annotateIfAbsent(cm, field, constraintPkg + "NotNull");
+            }
+            return;
+        }
+
+        var min = particle.getMinOccurs().longValue();
+        var max = particle.getMaxOccurs().longValue();
+        var nillable = particle.getTerm() instanceof XSElementDecl e && e.isNillable();
+
+        if (prop.isCollection()) {
+            if (min >= 1) {
+                annotateIfAbsent(cm, field, constraintPkg + "NotNull");
+            }
+            // unbounded max is -1 in XSOM
+            if (min > 0 || max > 1) {
+                var sizeFqcn = constraintPkg + "Size";
+                if (!AnnotationUtils.hasAnnotation(field, sizeFqcn)) {
+                    var anno = field.annotate(cm.ref(sizeFqcn));
+                    if (min > 0) {
+                        anno.param("min", (int) min);
+                    }
+                    if (max > 1) {
+                        anno.param("max", (int) max);
+                    }
                 }
-                if (maxOccurs > 0) {
-                    anno.param("max", (int) maxOccurs);
+            }
+            return;
+        }
+
+        if (min >= 1 && !nillable && !field.type().isPrimitive()) {
+            annotateIfAbsent(cm, field, constraintPkg + "NotNull");
+        }
+    }
+
+    // --- simple type facets ---
+
+    private void applyFacets(JCodeModel cm, XSSimpleType simpleType, JFieldVar field) {
+        if (simpleType == null) {
+            return;
+        }
+        var singles = new LinkedHashMap<String, String>();
+        var patterns = new ArrayList<String>();
+        collectUserFacets(simpleType, singles, patterns);
+
+        applyStringSize(cm, field, singles);
+        for (var regex : patterns) {
+            field.annotate(cm.ref(constraintPkg + "Pattern")).param("regexp", regex);
+        }
+        applyBound(cm, field, singles.get(XSFacet.FACET_MININCLUSIVE), true, true);
+        applyBound(cm, field, singles.get(XSFacet.FACET_MAXINCLUSIVE), false, true);
+        applyBound(cm, field, singles.get(XSFacet.FACET_MINEXCLUSIVE), true, false);
+        applyBound(cm, field, singles.get(XSFacet.FACET_MAXEXCLUSIVE), false, false);
+        applyDigits(cm, field, singles);
+    }
+
+    /**
+     * Collects declared facets along the user restriction chain. Stops at built-in XML Schema types
+     * so inherited facets like {@code xs:integer}/{@code fractionDigits=0} are not applied.
+     */
+    private static void collectUserFacets(XSSimpleType type,
+                                          Map<String, String> singles,
+                                          List<String> patterns) {
+        for (var t = type; t != null; t = nextUserBase(t)) {
+            if (!t.isRestriction()) {
+                break;
+            }
+            for (var facet : t.asRestriction().getDeclaredFacets()) {
+                if (facet == null || facet.getValue() == null) {
+                    continue;
+                }
+                var value = facet.getValue().value;
+                if (value == null || value.isBlank()) {
+                    continue;
+                }
+                if (XSFacet.FACET_PATTERN.equals(facet.getName())) {
+                    if (!CXF_NOISE_PATTERN.equals(value) && !patterns.contains(value)) {
+                        patterns.add(value);
+                    }
+                } else {
+                    singles.putIfAbsent(facet.getName(), value);
                 }
             }
         }
     }
 
-    private XSSimpleType findSimpleType(XSComponent component) {
-        if (component instanceof XSParticle particle) {
-            component = particle.getTerm();
+    private static XSSimpleType nextUserBase(XSSimpleType type) {
+        var base = type.getSimpleBaseType();
+        if (base == null || XMLConstants.W3C_XML_SCHEMA_NS_URI.equals(base.getTargetNamespace())) {
+            return null;
         }
-        if (component instanceof XSElementDecl elementDecl) {
-            if (elementDecl.getType() instanceof XSSimpleType simpleType) {
-                return simpleType;
-            }
-        } else if (component instanceof XSAttributeDecl attributeDecl) {
-            return attributeDecl.getType();
-        } else if (component instanceof XSSimpleType simpleType) {
-            return simpleType;
-        }
-        return null;
+        return base;
     }
 
-    private void applySimpleTypeFacets(Outline outline,
-                                       JFieldVar fieldVar,
-                                       String constraintPkg,
-                                       XSSimpleType simpleType) {
-        // String length / @Size
-        var lenFacet = simpleType.getFacet(XSFacet.FACET_LENGTH);
-        var minLenFacet = simpleType.getFacet(XSFacet.FACET_MINLENGTH);
-        var maxLenFacet = simpleType.getFacet(XSFacet.FACET_MAXLENGTH);
-
+    private void applyStringSize(JCodeModel cm, JFieldVar field, Map<String, String> singles) {
+        if (!"java.lang.String".equals(field.type().fullName())) {
+            return;
+        }
         var sizeFqcn = constraintPkg + "Size";
-        if (!AnnotationUtils.hasAnnotation(fieldVar, sizeFqcn)) {
-            if (lenFacet != null && lenFacet.getValue() != null) {
-                var len = parseIntSafely(lenFacet.getValue().value);
-                if (len != null) {
-                    var anno = fieldVar.annotate(outline.getCodeModel().ref(sizeFqcn));
-                    anno.param("min", len);
-                    anno.param("max", len);
-                }
-            } else if (minLenFacet != null || maxLenFacet != null) {
-                var minVal = minLenFacet != null && minLenFacet.getValue() != null ? parseIntSafely(minLenFacet.getValue().value) : null;
-                var maxVal = maxLenFacet != null && maxLenFacet.getValue() != null ? parseIntSafely(maxLenFacet.getValue().value) : null;
-                if (minVal != null || maxVal != null) {
-                    var anno = fieldVar.annotate(outline.getCodeModel().ref(sizeFqcn));
-                    if (minVal != null) {
-                        anno.param("min", minVal);
-                    }
-                    if (maxVal != null) {
-                        anno.param("max", maxVal);
-                    }
-                }
-            }
+        if (AnnotationUtils.hasAnnotation(field, sizeFqcn)) {
+            return;
         }
-
-        // Pattern / @Pattern
-        var patternFacets = simpleType.getFacets(XSFacet.FACET_PATTERN);
-        if (patternFacets != null && !patternFacets.isEmpty()) {
-            var patternFqcn = constraintPkg + "Pattern";
-            for (var facet : patternFacets) {
-                if (facet.getValue() != null) {
-                    var regex = facet.getValue().value;
-                    if (regex != null && !regex.isBlank()) {
-                        var anno = fieldVar.annotate(outline.getCodeModel().ref(patternFqcn));
-                        anno.param("regexp", regex);
-                    }
-                }
-            }
+        var length = parseInt(singles.get(XSFacet.FACET_LENGTH));
+        if (length != null) {
+            field.annotate(cm.ref(sizeFqcn)).param("min", length).param("max", length);
+            return;
         }
-
-        // Numeric min/max inclusive/exclusive
-        var minInc = simpleType.getFacet(XSFacet.FACET_MININCLUSIVE);
-        if (minInc != null && minInc.getValue() != null) {
-            applyMinConstraint(outline, fieldVar, constraintPkg, minInc.getValue().value, true);
+        var min = parseInt(singles.get(XSFacet.FACET_MINLENGTH));
+        var max = parseInt(singles.get(XSFacet.FACET_MAXLENGTH));
+        if (min == null && max == null) {
+            return;
         }
-        var maxInc = simpleType.getFacet(XSFacet.FACET_MAXINCLUSIVE);
-        if (maxInc != null && maxInc.getValue() != null) {
-            applyMaxConstraint(outline, fieldVar, constraintPkg, maxInc.getValue().value, true);
+        var anno = field.annotate(cm.ref(sizeFqcn));
+        if (min != null) {
+            anno.param("min", min);
         }
-        var minExc = simpleType.getFacet(XSFacet.FACET_MINEXCLUSIVE);
-        if (minExc != null && minExc.getValue() != null) {
-            applyMinConstraint(outline, fieldVar, constraintPkg, minExc.getValue().value, false);
-        }
-        var maxExc = simpleType.getFacet(XSFacet.FACET_MAXEXCLUSIVE);
-        if (maxExc != null && maxExc.getValue() != null) {
-            applyMaxConstraint(outline, fieldVar, constraintPkg, maxExc.getValue().value, false);
-        }
-
-        // Digits / @Digits
-        var totalDigits = simpleType.getFacet(XSFacet.FACET_TOTALDIGITS);
-        var fractionDigits = simpleType.getFacet(XSFacet.FACET_FRACTIONDIGITS);
-        if ((totalDigits != null && totalDigits.getValue() != null) ||
-            (fractionDigits != null && fractionDigits.getValue() != null)) {
-            var digitsFqcn = constraintPkg + "Digits";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, digitsFqcn)) {
-                var total = totalDigits != null && totalDigits.getValue() != null ? parseIntSafely(totalDigits.getValue().value) : null;
-                var fraction = fractionDigits != null && fractionDigits.getValue() != null ? parseIntSafely(fractionDigits.getValue().value) : null;
-                var totalInt = total != null ? total : 0;
-                var fractionInt = fraction != null ? fraction : 0;
-                var integerPart = Math.max(0, totalInt - fractionInt);
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(digitsFqcn));
-                anno.param("integer", integerPart);
-                anno.param("fraction", fractionInt);
-            }
+        if (max != null) {
+            anno.param("max", max);
         }
     }
 
-    private void applyMinConstraint(Outline outline, JFieldVar fieldVar, String constraintPkg, String rawVal, boolean inclusive) {
+    private void applyBound(JCodeModel cm, JFieldVar field, String raw, boolean min, boolean inclusive) {
+        if (raw == null) {
+            return;
+        }
         if (!inclusive) {
-            var decMinFqcn = constraintPkg + "DecimalMin";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, decMinFqcn)) {
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(decMinFqcn));
-                anno.param("value", rawVal);
-                anno.param("inclusive", false);
+            var fqcn = constraintPkg + (min ? "DecimalMin" : "DecimalMax");
+            if (!AnnotationUtils.hasAnnotation(field, fqcn)) {
+                field.annotate(cm.ref(fqcn)).param("value", raw).param("inclusive", false);
             }
             return;
         }
-
-        var val = parseLongSafely(rawVal);
-        if (val != null) {
-            var minFqcn = constraintPkg + "Min";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, minFqcn)) {
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(minFqcn));
-                anno.param("value", val);
+        var asLong = parseLong(raw);
+        if (asLong != null) {
+            var fqcn = constraintPkg + (min ? "Min" : "Max");
+            if (!AnnotationUtils.hasAnnotation(field, fqcn)) {
+                field.annotate(cm.ref(fqcn)).param("value", asLong);
             }
         } else {
-            var decMinFqcn = constraintPkg + "DecimalMin";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, decMinFqcn)) {
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(decMinFqcn));
-                anno.param("value", rawVal);
+            var fqcn = constraintPkg + (min ? "DecimalMin" : "DecimalMax");
+            if (!AnnotationUtils.hasAnnotation(field, fqcn)) {
+                field.annotate(cm.ref(fqcn)).param("value", raw);
             }
         }
     }
 
-    private void applyMaxConstraint(Outline outline, JFieldVar fieldVar, String constraintPkg, String rawVal, boolean inclusive) {
-        if (!inclusive) {
-            var decMaxFqcn = constraintPkg + "DecimalMax";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, decMaxFqcn)) {
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(decMaxFqcn));
-                anno.param("value", rawVal);
-                anno.param("inclusive", false);
-            }
+    private void applyDigits(JCodeModel cm, JFieldVar field, Map<String, String> singles) {
+        var total = parseInt(singles.get(XSFacet.FACET_TOTALDIGITS));
+        if (total == null) {
             return;
         }
-
-        var val = parseLongSafely(rawVal);
-        if (val != null) {
-            var maxFqcn = constraintPkg + "Max";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, maxFqcn)) {
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(maxFqcn));
-                anno.param("value", val);
-            }
-        } else {
-            var decMaxFqcn = constraintPkg + "DecimalMax";
-            if (!AnnotationUtils.hasAnnotation(fieldVar, decMaxFqcn)) {
-                var anno = fieldVar.annotate(outline.getCodeModel().ref(decMaxFqcn));
-                anno.param("value", rawVal);
-            }
+        var digitsFqcn = constraintPkg + "Digits";
+        if (AnnotationUtils.hasAnnotation(field, digitsFqcn)) {
+            return;
         }
+        var fraction = parseInt(singles.get(XSFacet.FACET_FRACTIONDIGITS));
+        var fractionInt = fraction != null ? fraction : 0;
+        field.annotate(cm.ref(digitsFqcn))
+            .param("integer", Math.max(0, total - fractionInt))
+            .param("fraction", fractionInt);
     }
 
-    private boolean isComplexTypeProperty(CPropertyInfo prop, JFieldVar fieldVar, Outline outline) {
+    // --- helpers ---
+
+    private static XSSimpleType resolveSimpleType(CPropertyInfo prop) {
+        var component = prop.getSchemaComponent();
+        if (component == null) {
+            return null;
+        }
+        return switch (component) {
+            case XSParticle particle when particle.getTerm() instanceof XSElementDecl element
+                && element.getType() instanceof XSSimpleType st -> st;
+            case XSElementDecl element when element.getType() instanceof XSSimpleType st -> st;
+            case XSAttributeUse use -> use.getDecl().getType();
+            case XSAttributeDecl decl -> decl.getType();
+            case XSSimpleType st -> st;
+            default -> null;
+        };
+    }
+
+    private static boolean isComplex(CPropertyInfo prop) {
         for (var ref : prop.ref()) {
             if (ref instanceof CClassInfo) {
                 return true;
             }
         }
-        var fieldType = fieldVar.type();
-        if (fieldType instanceof JDefinedClass defClass) {
-            return outline.getClasses().stream().anyMatch(co -> co.implClass.equals(defClass));
-        }
-        if (fieldType.isReference()) {
-            var typeArgs = fieldType.boxify().getTypeParameters();
-            if (!typeArgs.isEmpty()) {
-                for (var arg : typeArgs) {
-                    if (arg instanceof JDefinedClass defClass) {
-                        if (outline.getClasses().stream().anyMatch(co -> co.implClass.equals(defClass))) {
-                            return true;
-                        }
-                    }
-                }
+        return false;
+    }
+
+    private static boolean isNillable(CElementPropertyInfo element) {
+        for (var typeRef : element.getTypes()) {
+            if (typeRef.isNillable()) {
+                return true;
             }
         }
         return false;
     }
 
-    private static Integer parseIntSafely(String raw) {
+    private void annotateIfAbsent(JCodeModel cm, JFieldVar field, String fqcn) {
+        if (!AnnotationUtils.hasAnnotation(field, fqcn)) {
+            field.annotate(cm.ref(fqcn));
+        }
+    }
+
+    private static boolean matches(List<Pattern> patterns, String value) {
+        if (patterns == null || patterns.isEmpty()) {
+            return true;
+        }
+        return patterns.stream().anyMatch(p -> p.matcher(value).matches());
+    }
+
+    private static Integer parseInt(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
@@ -344,7 +399,7 @@ public class ValidationPlugin extends AbstractPlugin {
         }
     }
 
-    private static Long parseLongSafely(String raw) {
+    private static Long parseLong(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
@@ -353,25 +408,5 @@ public class ValidationPlugin extends AbstractPlugin {
         } catch (NumberFormatException ex) {
             return null;
         }
-    }
-
-    private void addAnnotationIfAbsent(Outline outline, JFieldVar fieldVar, String fqcn) {
-        if (!AnnotationUtils.hasAnnotation(fieldVar, fqcn)) {
-            fieldVar.annotate(outline.getCodeModel().ref(fqcn));
-        }
-    }
-
-    private boolean matchesClassName(String className) {
-        if (classNames == null || classNames.isEmpty()) {
-            return true;
-        }
-        return classNames.stream().anyMatch(p -> p.matcher(className).matches());
-    }
-
-    private boolean matchesFieldName(String fieldName) {
-        if (fieldNames == null || fieldNames.isEmpty()) {
-            return true;
-        }
-        return fieldNames.stream().anyMatch(p -> p.matcher(fieldName).matches());
     }
 }

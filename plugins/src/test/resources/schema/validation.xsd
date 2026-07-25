@@ -1,29 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="com.example.validation"
-           xmlns:tns="com.example.validation"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/validation"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/validation"
            elementFormDefault="qualified">
 
     <xs:element name="User" type="tns:UserType"/>
 
     <xs:complexType name="UserType">
         <xs:sequence>
-            <!-- String with minLength, maxLength, pattern -->
             <xs:element name="username" type="tns:UsernameType" minOccurs="1"/>
-            <!-- Mandatory email string with pattern -->
             <xs:element name="email" type="tns:EmailType" minOccurs="1"/>
-            <!-- Optional bio with maxLength -->
             <xs:element name="bio" type="tns:BioType" minOccurs="0"/>
-            <!-- Integer with min/max inclusive -->
             <xs:element name="age" type="tns:AgeType" minOccurs="1"/>
-            <!-- Decimal with totalDigits and fractionDigits -->
             <xs:element name="salary" type="tns:SalaryType" minOccurs="0"/>
-            <!-- Collection with minOccurs/maxOccurs -->
             <xs:element name="roles" type="xs:string" minOccurs="1" maxOccurs="5"/>
-            <!-- Nested complex type (should get @Valid) -->
             <xs:element name="address" type="tns:AddressType" minOccurs="1"/>
-            <!-- Collection of nested complex types (should get @Valid) -->
             <xs:element name="contacts" type="tns:AddressType" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="note" type="xs:string" minOccurs="1" nillable="true"/>
+            <xs:element name="items" type="tns:ItemType" minOccurs="1" maxOccurs="unbounded"/>
+            <xs:element name="codes" minOccurs="0" maxOccurs="3">
+                <xs:simpleType>
+                    <xs:restriction base="xs:string">
+                        <xs:length value="2"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
         </xs:sequence>
     </xs:complexType>
 
@@ -65,6 +82,38 @@
         <xs:sequence>
             <xs:element name="street" type="xs:string" minOccurs="1"/>
             <xs:element name="city" type="xs:string" minOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- simpleContent + required/optional attributes with facets -->
+    <xs:complexType name="ItemType">
+        <xs:simpleContent>
+            <xs:extension base="tns:CodeType">
+                <xs:attribute name="lang" type="xs:string" use="required"/>
+                <xs:attribute name="priority" type="tns:PriorityType" use="optional"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+
+    <xs:simpleType name="CodeType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+            <xs:maxLength value="8"/>
+            <xs:pattern value="[A-Z]+"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="PriorityType">
+        <xs:restriction base="xs:integer">
+            <xs:minInclusive value="1"/>
+            <xs:maxInclusive value="9"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Contrast type for class-name filter tests -->
+    <xs:complexType name="PlainType">
+        <xs:sequence>
+            <xs:element name="label" type="xs:string" minOccurs="1"/>
         </xs:sequence>
     </xs:complexType>
 
