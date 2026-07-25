@@ -38,10 +38,10 @@ import java.util.regex.Pattern;
  *
  * @author Rawvoid
  */
-@Option(name = "Xtype-parents", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
-public class TypeParentsPlugin extends AbstractPlugin {
+@Option(name = "Xtype-parent", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
+public class TypeParentPlugin extends AbstractPlugin {
 
-    private static final Logger log = LoggerFactory.getLogger(TypeParentsPlugin.class);
+    private static final Logger log = LoggerFactory.getLogger(TypeParentPlugin.class);
 
     private static final String OBJECT_FQCN = "java.lang.Object";
 

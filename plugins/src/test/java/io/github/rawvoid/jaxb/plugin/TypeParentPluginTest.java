@@ -27,18 +27,18 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * XJC integration tests for {@link TypeParentsPlugin}.
- * Uses {@code type-parents.xsd}.
+ * XJC integration tests for {@link TypeParentPlugin}.
+ * Uses {@code type-parent.xsd}.
  */
-class TypeParentsPluginTest extends AbstractXJCMojoTestCase {
+class TypeParentPluginTest extends AbstractXJCMojoTestCase {
 
-    private static final String PKG = "com.example.typeparents";
+    private static final String PKG = "com.example.typeparent";
     private static final String USER_REQUEST_FILTER = PKG + "\\.UserRequestType";
     private static final String USER_RESPONSE_FILTER = PKG + "\\.UserResponseType";
     private static final String BASE_DATA_FILTER = PKG + "\\.BaseDataType";
     private static final String EXTENDED_DATA_FILTER = PKG + "\\.ExtendedDataType";
 
-    private final String optionCmd = optionCommand(TypeParentsPlugin.class);
+    private final String optionCmd = optionCommand(TypeParentPlugin.class);
 
     private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
         var option = pluginClass.getAnnotation(Option.class);
@@ -47,12 +47,12 @@ class TypeParentsPluginTest extends AbstractXJCMojoTestCase {
 
     @BeforeEach
     void setSchema() {
-        schemaIncludes = List.of("type-parents.xsd");
+        schemaIncludes = List.of("type-parent.xsd");
     }
 
     @Test
     void testUsage() {
-        assertThat(new TypeParentsPlugin().getUsage()).isNotNull();
+        assertThat(new TypeParentPlugin().getUsage()).isNotNull();
     }
 
     @Test
@@ -73,7 +73,6 @@ class TypeParentsPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).matches(Pattern.compile("(?s).*private static final long serialVersionUID = -?\\d+L;.*"));
         });
     }
-
 
     @Test
     void interfaceInjectionCompactFormat() throws Exception {

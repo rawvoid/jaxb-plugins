@@ -29,6 +29,6 @@ io.github.rawvoid.jaxb.plugin.FlattenMultiElementPropPlugin
 io.github.rawvoid.jaxb.plugin.GeneratedAnnoPlugin
 io.github.rawvoid.jaxb.plugin.JacksonPlugin
 io.github.rawvoid.jaxb.plugin.ValidationPlugin
-io.github.rawvoid.jaxb.plugin.TypeParentsPlugin
+io.github.rawvoid.jaxb.plugin.TypeParentPlugin
 
 
