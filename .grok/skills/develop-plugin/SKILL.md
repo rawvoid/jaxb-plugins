@@ -93,7 +93,7 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 
 - Custom parse types: `registerTextParser(Class, TextParser)` or by option name in the constructor (`AnnotatePlugin` + `XAnnotation`).
 - After parse + defaults + required checks: override `postParseArgument(Options, int)` for side effects or multi-field validation.
-- Nested / repeatable configs: `NamespacePlugin` (`List<PackageMappingConfig>` / `List<NsPrefixConfig>`), `JSR310Plugin` (`List<TypeMappingConfig>`), `AnnotatePlugin` (add/remove groups).
+- Nested / repeatable configs: `NamespacePlugin` (`List<PackageMappingConfig>` / `List<NsPrefixConfig>`), `JavaTimePlugin` (`List<TypeMappingConfig>`), `AnnotatePlugin` (add/remove groups).
 
 ### Utils (reuse before reinventing)
 
@@ -169,13 +169,15 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 | `RemoveGetterPlugin`       | `-Xremove-getter`        | Minimal `run` method removal                      |
 | `RemoveSetterPlugin`       | `-Xremove-setter`        | Minimal `run` method removal                      |
 | `AnnotatePlugin`           | `-Xannotate`             | Nested configs + custom `TextParser`              |
-| `JSR310Plugin`             | `-Xjsr310`               | Type mapping + adapters on fields                 |
+| `JavaTimePlugin`           | `-Xjava-time`            | Modern `java.time` mapping + adapters on fields   |
 | `ConvertNamePlugin`        | `-Xconvert-name`         | `postParseArgument` + `NameConverter`             |
 | `ElementWrapperPlugin`     | `-Xelement-wrapper`      | Dual-phase: model flatten + wrapper annotation    |
 | `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
 | `RenameClassPlugin`        | `-Xrename-class`         | Class short-name mapping (`-mapping`)             |
 | `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes |
 | `JacksonPlugin`            | `-Xjackson`              | Class-level Jackson defaults (`@JsonInclude`, ignoreUnknown) + `-anno` |
+| `ValidationPlugin`         | `-Xvalidation`           | Bean Validation constraints (@NotNull, @Size, @Valid, etc.) |
+| `TypeParentsPlugin`        | `-Xtype-parents`         | Interface (`implements`) and superclass (`extends`) injection |
 
 Framework types: `AbstractPlugin`, `Option`, `TextParser`.
 

@@ -16,8 +16,8 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/jsr310"
-           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/jsr310"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/java-time"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/java-time"
            elementFormDefault="qualified">
 
     <xs:complexType name="DateTimeTypes">
