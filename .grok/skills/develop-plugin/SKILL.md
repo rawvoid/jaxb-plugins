@@ -175,6 +175,7 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 | `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
 | `RenameClassPlugin`        | `-Xrename-class`         | Class short-name mapping (`-mapping`)             |
 | `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes |
+| `JacksonPlugin`            | `-Xjackson`              | Class-level Jackson defaults (`@JsonInclude`, ignoreUnknown) + `-anno` |
 
 Framework types: `AbstractPlugin`, `Option`, `TextParser`.
 

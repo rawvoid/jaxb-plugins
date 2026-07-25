@@ -62,6 +62,16 @@
             <version>1.18.46</version>
             <scope>provided</scope>
         </dependency>
+        <!--
+          provided: XJC/user supplies Jackson annotations at generation and compile time.
+          Needed so generated @JsonInclude / @JsonIgnoreProperties resolve; not shaded into this jar.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.19.2</version>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- test dependencies -->
 
