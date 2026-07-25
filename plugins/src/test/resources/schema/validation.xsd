@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="com.example.validation"
+           xmlns:tns="com.example.validation"
+           elementFormDefault="qualified">
+
+    <xs:element name="User" type="tns:UserType"/>
+
+    <xs:complexType name="UserType">
+        <xs:sequence>
+            <!-- String with minLength, maxLength, pattern -->
+            <xs:element name="username" type="tns:UsernameType" minOccurs="1"/>
+            <!-- Mandatory email string with pattern -->
+            <xs:element name="email" type="tns:EmailType" minOccurs="1"/>
+            <!-- Optional bio with maxLength -->
+            <xs:element name="bio" type="tns:BioType" minOccurs="0"/>
+            <!-- Integer with min/max inclusive -->
+            <xs:element name="age" type="tns:AgeType" minOccurs="1"/>
+            <!-- Decimal with totalDigits and fractionDigits -->
+            <xs:element name="salary" type="tns:SalaryType" minOccurs="0"/>
+            <!-- Collection with minOccurs/maxOccurs -->
+            <xs:element name="roles" type="xs:string" minOccurs="1" maxOccurs="5"/>
+            <!-- Nested complex type (should get @Valid) -->
+            <xs:element name="address" type="tns:AddressType" minOccurs="1"/>
+            <!-- Collection of nested complex types (should get @Valid) -->
+            <xs:element name="contacts" type="tns:AddressType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="UsernameType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="3"/>
+            <xs:maxLength value="20"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="EmailType">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="BioType">
+        <xs:restriction base="xs:string">
+            <xs:maxLength value="200"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AgeType">
+        <xs:restriction base="xs:integer">
+            <xs:minInclusive value="18"/>
+            <xs:maxInclusive value="120"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SalaryType">
+        <xs:restriction base="xs:decimal">
+            <xs:totalDigits value="10"/>
+            <xs:fractionDigits value="2"/>
+            <xs:minExclusive value="0"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="AddressType">
+        <xs:sequence>
+            <xs:element name="street" type="xs:string" minOccurs="1"/>
+            <xs:element name="city" type="xs:string" minOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

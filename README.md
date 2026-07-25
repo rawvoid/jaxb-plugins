@@ -70,6 +70,42 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 
 ---
 
+### Validation Plugin (`-Xvalidation`)
+
+Generates Bean Validation (JSR-380) constraint annotations (`jakarta.validation.constraints.*` or legacy `javax.validation.constraints.*`) on generated class fields based on XSD schema constraints (`minOccurs`, `maxOccurs`, `nillable`, `minLength`, `maxLength`, `pattern`, numeric bounds, and digits), as well as `@Valid` for cascade validation.
+
+#### Key Features
+
+- **Standard Mapping**: Automatically converts XSD facets and multiplicity into `@NotNull`, `@Size`, `@Pattern`, `@Min`, `@Max`, `@DecimalMin`, `@DecimalMax`, `@Digits`, and `@Valid`.
+- **Modern Defaults**: Uses `jakarta.validation` by default (Java 21+ / Jakarta EE 10 / Spring Boot 3+).
+- **Legacy Compatibility**: Supports switching to `javax.validation` via `-api=javax`.
+- **Filtering & Controls**: Class/field regular expression filtering and a `-disable-valid=true` escape hatch.
+
+#### Quick Start
+
+```bash
+-Xvalidation
+```
+
+#### Command Options
+
+```bash
+-Xvalidation \
+  -api=jakarta \                       # 'jakarta' (default) or 'javax'
+  -class-name=.*UserType \             # Optional regex matched against FQCN (repeatable)
+  -field-name=username \               # Optional regex matched against field name (repeatable)
+  -disable-valid=true                  # Optional: disable @Valid on nested/collection properties (default: false)
+```
+
+| Option | Default | Description |
+|:-------|:--------|:------------|
+| `-api` | `jakarta` | Validation API package mode (`jakarta` or `javax`) |
+| `-class-name` | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
+| `-field-name` | *(all fields)* | Regex matched against field names (repeatable) |
+| `-disable-valid` | `false` | When `true`, omits `@Valid` cascade validation annotations |
+
+---
+
 ### Annotate Plugin (`-Xannotate`)
 
 Adds, removes, or modifies annotations on generated classes, fields, methods, and package metadata.
