@@ -16,15 +16,17 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.codemodel.JCodeModel;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.codemodel.JExpr;
 import com.sun.codemodel.JMod;
 import com.sun.tools.xjc.Options;
+import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
+import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
 
 import java.io.Serializable;
 import java.util.List;
@@ -32,23 +34,28 @@ import java.util.regex.Pattern;
 
 /**
  * Injects interface implementations ({@code implements}) and superclasses ({@code extends})
- * into generated JAXB classes.
+ * into generated JAXB classes (Java supertypes / inheritance edges).
+ *
+ * <p>Application order per class: {@code -serializable} (optional UID), then {@code -interface}
+ * rules in declaration order (cumulative), then {@code -super-class} rules in declaration order
+ * (first-wins). Target classes are selected by each rule's left-hand pattern.</p>
  *
  * <p>Compact CLI examples:</p>
  * <pre>{@code
- * -Xtype-parent -serializable=true
- * -Xtype-parent -interface=.*Request->com.example.BaseRequest
- * -Xtype-parent -super-class=.*Dto->com.example.AbstractDto
- * -Xtype-parent -class-name=.*Request -interface=.*->java.lang.Cloneable
+ * -Xinheritance -serializable=true
+ * -Xinheritance -serializable=true -serial-version-uid=42
+ * -Xinheritance -interface=.*Request->com.example.BaseRequest
+ * -Xinheritance -super-class=.*Dto->com.example.AbstractDto
  * }</pre>
  *
  * <p><b>Intentional limits:</b></p>
  * <ul>
  *   <li>Bean classes only ({@code outline.getClasses()}); enums are not modified.</li>
  *   <li>Does not replace an existing non-{@code Object} superclass (XSD inheritance or a prior
- *       matching {@code -super-class} rule). Multiple matching super-class rules are first-wins.</li>
- *   <li>{@code -serializable} adds {@link Serializable} and a fixed {@code serialVersionUID = 1L}
- *       when the field is absent; does not overwrite an existing field.</li>
+ *       matching {@code -super-class} rule). Multiple matching super-class rules are first-wins;
+ *       skips are reported as XJC warnings.</li>
+ *   <li>{@code -serializable} adds {@link Serializable} and {@code serialVersionUID} (default
+ *       {@code 1L}, overridable via {@code -serial-version-uid}) when the field is absent.</li>
  *   <li>Interface injection is cumulative and skips duplicates already present on the class.</li>
  *   <li>Does not validate that {@code -interface}/{@code -super-class} targets are interfaces/classes
  *       or resolvable at generation time; invalid FQCNs fail later at Java compile.</li>
@@ -57,29 +64,27 @@ import java.util.regex.Pattern;
  *
  * @author Rawvoid
  */
-@Option(name = "Xtype-parent", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
-public class TypeParentPlugin extends AbstractPlugin {
-
-    private static final Logger log = LoggerFactory.getLogger(TypeParentPlugin.class);
+@Option(name = "Xinheritance", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
+public class InheritancePlugin extends AbstractPlugin {
 
     private static final String OBJECT_FQCN = "java.lang.Object";
-    private static final long DEFAULT_SERIAL_VERSION_UID = 1L;
 
     @Option(name = "interface", description = "Interface mapping rules (compact format: pattern->Interface FQCN)")
-    List<TypeParentConfig> interfaces;
+    List<InheritanceConfig> interfaces;
 
     @Option(name = "super-class", description = "Superclass mapping rules (compact format: pattern->SuperClass FQCN)")
-    List<TypeParentConfig> superClasses;
+    List<InheritanceConfig> superClasses;
 
     @Option(name = "serializable", defaultValue = "false",
-        description = "Add implements java.io.Serializable and a fixed serialVersionUID = 1L when missing")
+        description = "Add implements java.io.Serializable and serialVersionUID when missing")
     Boolean serializable;
 
-    @Option(name = "class-name", description = "Global regex filter for matching fully-qualified class names (repeatable)")
-    List<Pattern> classNames;
+    @Option(name = "serial-version-uid", defaultValue = "1",
+        description = "serialVersionUID value used when -serializable is true (default: 1)")
+    Long serialVersionUid;
 
     @Compact(formats = {"/{name}/->{to}", "{name}->{to}"})
-    public static class TypeParentConfig {
+    public static class InheritanceConfig {
 
         @Option(name = "name", required = true, description = "Regex pattern matching fully-qualified class names")
         Pattern name;
@@ -92,12 +97,10 @@ public class TypeParentPlugin extends AbstractPlugin {
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
         var codeModel = outline.getCodeModel();
         var isSerializable = Boolean.TRUE.equals(serializable);
+        var uid = serialVersionUid != null ? serialVersionUid : 1L;
 
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
-            if (!matchesClassName(implClass.fullName())) {
-                continue;
-            }
 
             if (isSerializable) {
                 if (lacksInterface(implClass, Serializable.class.getName())) {
@@ -108,7 +111,7 @@ public class TypeParentPlugin extends AbstractPlugin {
                         JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
                         codeModel.LONG,
                         "serialVersionUID",
-                        JExpr.lit(DEFAULT_SERIAL_VERSION_UID)
+                        JExpr.lit(uid)
                     );
                 }
             }
@@ -125,23 +128,43 @@ public class TypeParentPlugin extends AbstractPlugin {
             }
 
             if (superClasses != null) {
-                for (var config : superClasses) {
-                    if (config.name != null && config.to != null && config.name.matcher(implClass.fullName()).matches()) {
-                        var superClassFqcn = config.to.trim();
-                        if (!superClassFqcn.isEmpty()) {
-                            var currentSuper = implClass._extends();
-                            if (currentSuper == null || OBJECT_FQCN.equals(currentSuper.fullName())) {
-                                implClass._extends(codeModel.ref(superClassFqcn));
-                            } else {
-                                log.debug("Skipping super-class '{}' for '{}': already extends '{}'",
-                                    superClassFqcn, implClass.fullName(), currentSuper.fullName());
-                            }
-                        }
-                    }
-                }
+                applySuperClasses(classOutline, implClass, codeModel, errorHandler);
             }
         }
         return true;
+    }
+
+    private void applySuperClasses(
+        ClassOutline classOutline,
+        JDefinedClass implClass,
+        JCodeModel codeModel,
+        ErrorHandler errorHandler
+    ) throws SAXException {
+        for (var config : superClasses) {
+            if (config.name == null || config.to == null || !config.name.matcher(implClass.fullName()).matches()) {
+                continue;
+            }
+            var superClassFqcn = config.to.trim();
+            if (superClassFqcn.isEmpty()) {
+                continue;
+            }
+            var currentSuper = implClass._extends();
+            if (currentSuper == null || OBJECT_FQCN.equals(currentSuper.fullName())) {
+                implClass._extends(codeModel.ref(superClassFqcn));
+            } else {
+                warn(errorHandler, locatorOf(classOutline),
+                    "Skipping super-class '%s' for '%s': already extends '%s'"
+                        .formatted(superClassFqcn, implClass.fullName(), currentSuper.fullName()));
+            }
+        }
+    }
+
+    private static Locator locatorOf(ClassOutline classOutline) {
+        return classOutline.target != null ? classOutline.target.getLocator() : null;
+    }
+
+    private void warn(ErrorHandler errorHandler, Locator locator, String message) throws SAXException {
+        errorHandler.warning(new SAXParseException(message, locator));
     }
 
     private boolean lacksInterface(JDefinedClass implClass, String interfaceFqcn) {
@@ -152,12 +175,5 @@ public class TypeParentPlugin extends AbstractPlugin {
             }
         }
         return true;
-    }
-
-    private boolean matchesClassName(String className) {
-        if (classNames == null || classNames.isEmpty()) {
-            return true;
-        }
-        return classNames.stream().anyMatch(p -> p.matcher(className).matches());
     }
 }

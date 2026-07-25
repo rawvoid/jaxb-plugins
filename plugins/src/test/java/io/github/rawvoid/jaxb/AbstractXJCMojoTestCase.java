@@ -92,10 +92,19 @@ public abstract class AbstractXJCMojoTestCase {
         var classes = loadGeneratedClasses();
         if (consumer != null) {
             var pattern = Pattern.compile(regex);
+            var matched = 0;
             for (var clazz : classes) {
-                if (!pattern.matcher(clazz.getName()).matches()) continue;
+                if (!pattern.matcher(clazz.getName()).matches()) {
+                    continue;
+                }
+                matched++;
                 var source = getJavaSource(clazz);
                 consumer.accept(source, clazz);
+            }
+            if (matched == 0) {
+                var names = classes.stream().map(Class::getName).sorted().toList();
+                throw new AssertionError(
+                    "testExecute filter matched 0 classes: regex=%s, generated=%s".formatted(regex, names));
             }
         }
         return classes;

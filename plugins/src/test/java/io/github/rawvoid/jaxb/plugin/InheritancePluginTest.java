@@ -29,18 +29,18 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * XJC integration tests for {@link TypeParentPlugin}.
- * Uses {@code type-parent.xsd}.
+ * XJC integration tests for {@link InheritancePlugin}.
+ * Uses {@code inheritance.xsd}.
  */
-class TypeParentPluginTest extends AbstractXJCMojoTestCase {
+class InheritancePluginTest extends AbstractXJCMojoTestCase {
 
-    private static final String PKG = "com.github.rawvoid.xjc_plugins.type_parent";
+    private static final String PKG = "com.github.rawvoid.xjc_plugins.inheritance";
     private static final String USER_REQUEST_FILTER = PKG.replace(".", "\\.") + "\\.UserRequestType";
     private static final String USER_RESPONSE_FILTER = PKG.replace(".", "\\.") + "\\.UserResponseType";
     private static final String BASE_DATA_FILTER = PKG.replace(".", "\\.") + "\\.BaseDataType";
     private static final String EXTENDED_DATA_FILTER = PKG.replace(".", "\\.") + "\\.ExtendedDataType";
 
-    private final String optionCmd = optionCommand(TypeParentPlugin.class);
+    private final String optionCmd = optionCommand(InheritancePlugin.class);
 
     private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
         var option = pluginClass.getAnnotation(Option.class);
@@ -49,12 +49,15 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
 
     @BeforeEach
     void setSchema() {
-        schemaIncludes = List.of("type-parent.xsd");
+        schemaIncludes = List.of("inheritance.xsd");
     }
 
     @Test
     void testUsage() {
-        assertThat(new TypeParentPlugin().getUsage()).isNotNull();
+        var usage = new InheritancePlugin().getUsage();
+        assertThat(usage).isNotNull();
+        assertThat(usage).contains("-serial-version-uid");
+        assertThat(usage).doesNotContain("-class-name");
     }
 
     @Test
@@ -77,22 +80,32 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void serializableShortcutFixedUid() throws Exception {
+    void serializableShortcutDefaultUid() throws Exception {
         var args = List.of(optionCmd, "-serializable=true");
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(source).contains("implements Serializable");
             assertThat(source).contains("private static final long serialVersionUID = 1L;");
             assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
+            assertSerialVersionUid(clazz, 1L);
+        });
+    }
 
-            try {
-                var field = clazz.getDeclaredField("serialVersionUID");
-                assertThat(Modifier.isStatic(field.getModifiers())).isTrue();
-                assertThat(Modifier.isFinal(field.getModifiers())).isTrue();
-                field.setAccessible(true);
-                assertThat(field.getLong(null)).isEqualTo(1L);
-            } catch (ReflectiveOperationException ex) {
-                throw new AssertionError(ex);
-            }
+    @Test
+    void serializableCustomUid() throws Exception {
+        var args = List.of(optionCmd, "-serializable=true", "-serial-version-uid=42");
+        testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
+            assertThat(source).contains("private static final long serialVersionUID = 42L;");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
+            assertSerialVersionUid(clazz, 42L);
+        });
+    }
+
+    @Test
+    void serialVersionUidIgnoredWithoutSerializable() throws Exception {
+        var args = List.of(optionCmd, "-serial-version-uid=99");
+        testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
+            assertThat(source).doesNotContain("serialVersionUID");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isFalse();
         });
     }
 
@@ -180,22 +193,33 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void classNameFilterGatesAllInjections() throws Exception {
+    void interfacePatternSelectsTargetClasses() throws Exception {
         var args = List.of(
             optionCmd,
-            "-class-name=.*UserRequestType",
             "-serializable=true",
-            "-interface=.*->java.lang.Cloneable"
+            "-interface=.*UserRequestType->java.lang.Cloneable"
         );
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
             assertThat(Cloneable.class.isAssignableFrom(clazz)).isTrue();
         });
+        // -serializable applies to all beans; interface pattern is the per-rule selector.
         testExecute(args, USER_RESPONSE_FILTER, (source, clazz) -> {
-            assertThat(source).doesNotContain("Serializable");
-            assertThat(source).doesNotContain("Cloneable");
-            assertThat(Serializable.class.isAssignableFrom(clazz)).isFalse();
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
             assertThat(Cloneable.class.isAssignableFrom(clazz)).isFalse();
+            assertThat(source).doesNotContain("Cloneable");
         });
+    }
+
+    private static void assertSerialVersionUid(Class<?> clazz, long expected) {
+        try {
+            var field = clazz.getDeclaredField("serialVersionUID");
+            assertThat(Modifier.isStatic(field.getModifiers())).isTrue();
+            assertThat(Modifier.isFinal(field.getModifiers())).isTrue();
+            field.setAccessible(true);
+            assertThat(field.getLong(null)).isEqualTo(expected);
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError(ex);
+        }
     }
 }
