@@ -29,16 +29,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * XJC integration tests for {@link JavaTimePlugin}.
- * Uses dedicated {@code jsr310.xsd} only.
+ * Uses dedicated {@code java-time.xsd} only.
  */
 public class JavaTimePluginTest extends AbstractXJCMojoTestCase {
 
     private static final String DATE_TIME_TYPES =
-        "com\\.github\\.rawvoid\\.xjc_plugins\\.jsr310\\.DateTimeTypes";
+        "com\\.github\\.rawvoid\\.xjc_plugins\\.java_time\\.DateTimeTypes";
 
     @BeforeEach
     void setSchema() {
-        schemaIncludes = List.of("jsr310.xsd");
+        schemaIncludes = List.of("java-time.xsd");
     }
 
     @Test
@@ -73,7 +73,7 @@ public class JavaTimePluginTest extends AbstractXJCMojoTestCase {
 
             // Verify auto-derived adapter package is <common_package>.adapter
             assertThat(dateTimeAdapter.value().getPackageName())
-                .isEqualTo("com.github.rawvoid.xjc_plugins.jsr310.adapter");
+                .isEqualTo("com.github.rawvoid.xjc_plugins.java_time.adapter");
 
             // Verify LocalDate adapter uses ISO_DATE formatter
             var dateAdapter = clazz.getDeclaredField("date").getAnnotation(XmlJavaTypeAdapter.class);
