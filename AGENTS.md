@@ -24,6 +24,7 @@ Instructions for AI assistants working in this repository.
 
 ## 4. Git & Remote Actions
 
+- **Conventional Commits**: Git commit messages and PR titles MUST strictly adhere to the Conventional Commits specification.
 - **Atomic Local Commits**: Commit locally after completing each coherent, atomic subtask. Avoid combining unrelated changes into a single bulk commit.
 - **Remote Operations**: **NEVER** `git push`, force-push, amend published history, or open/update PRs unless explicitly instructed by the user.
 - **Secrets**: **NEVER** commit secrets, tokens, or credentials.
