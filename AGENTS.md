@@ -24,12 +24,10 @@ Instructions for AI assistants working in this repository.
 ## 4. Git & Remote Actions
 
 - **Atomic Local Commits**: Commit locally after completing each coherent, atomic subtask. Avoid combining unrelated changes into a single bulk commit.
-- **Accurate Commit Messages**: Write conventional, complete-sentence commit messages in **English only** (e.g., `feat: ...`, `fix: ...`) that precisely describe the intent and scope of each commit.
+- **Accurate Commit Messages**: Write conventional commit messages and PR titles in **English only**.
 - **Remote Operations**: **NEVER** `git push`, force-push, amend published history, or open/update PRs unless explicitly instructed by the user.
 - **Secrets**: **NEVER** commit secrets, tokens, or credentials.
 
 ## 5. Communication
 
-- **User Interaction**: Chat responses, implementation plans (`implementation_plan.md`), walkthroughs (`walkthrough.md`), design notes, and reviews **MUST match the user's prompt language** (including all document titles, section headers, and structural prose).
-- **Repository Artifacts**: Commit messages, PR titles/bodies, code comments, and Javadoc **MUST be English only**. Keep identifiers, paths, CLI flags, and API names unchanged.
 - **Efficiency**: State trade-offs concisely; proceed with implementation once direction is clear.
