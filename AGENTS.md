@@ -4,16 +4,17 @@ Instructions for AI assistants working in this repository.
 
 ## 1. Workflow & Planning
 
-- **Plan First**: Always conduct thorough research and create an explicit implementation plan before modifying code.
-- **Task Breakdown**: Break down complex tasks into atomic, logically structured subtasks within the implementation plan.
-- **Approval Gate**: Do **NOT** start code implementation until receiving explicit approval from the user on the implementation plan.
+- **Plan First (non-trivial)**: For non-trivial work (behavior changes, new modules or public APIs, unclear design), research thoroughly and produce a short implementation plan with atomic subtasks before modifying code.
+- **Approval Gate (non-trivial)**: Do **NOT** start implementing non-trivial work until the user explicitly approves the plan.
+- **Trivial / directed work**: For clearly scoped fixes, follow-ups on an already approved plan, or tasks the user has specified precisely, implement directly after stating the intended scope. Do not invent a heavyweight plan.
+- **Smallest change**: Prefer the smallest change that satisfies the request; avoid unrelated refactors and scope creep.
 
 ## 2. Code & Research
 
 - **Simplicity & Elegance**: Avoid over-engineering, over-coding, and speculative abstractions. Keep architecture flat and control flow obvious. Write concise, readable, and elegant code with clear structure. Drop unused branches and defensive code for impossible states.
 - **Modern Java**: Target **Java 21+**. Use current Java features (`var` for obvious types, records, pattern matching, sequenced collections, text blocks) when they improve clarity.
 - **Dependencies**: Do NOT introduce new external libraries or frameworks without explicit user approval.
-- **Class Imports**: **NEVER** use fully qualified class names in code or Javadoc unless there is an explicit name collision. Always use explicit `import` statements.
+- **Class Imports**: In Java sources and Javadoc, prefer explicit `import` statements over fully qualified names. Use FQCN only on name collision or in non-source contexts (SPI files, diagnostic strings, config that requires a type name).
 - **Local Source Inspection**: Prioritize reading local Maven repository (`~/.m2/repository`) source JARs over web searches when investigating third-party APIs. If local source JARs are missing, run `mvn dependency:sources` to download them before attempting online search.
 - **Code Hygiene**: No dead code, unused parameters, swallowed exceptions, or redundant comments. Code comments and Javadoc MUST be in **English only**.
 
@@ -25,10 +26,12 @@ Instructions for AI assistants working in this repository.
 ## 4. Git & Remote Actions
 
 - **Conventional Commits**: Git commit messages and PR titles MUST strictly adhere to the Conventional Commits specification.
-- **Atomic Local Commits**: Commit locally after completing each coherent, atomic subtask. Avoid combining unrelated changes into a single bulk commit.
+- **Atomic Local Commits**: Commit locally as coherent, verified units of work (feature or fix + tests green). Avoid combining unrelated changes; do not force a commit after every exploratory substep.
 - **Remote Operations**: **NEVER** `git push`, force-push, amend published history, or open/update PRs unless explicitly instructed by the user.
 - **Secrets**: **NEVER** commit secrets, tokens, or credentials.
 
 ## 5. Communication
 
-- **Efficiency**: State trade-offs concisely; proceed with implementation once direction is clear.
+- **Language**: Reply in the user's language.
+- **Clarity**: State trade-offs concisely. Ask when requirements or design choices are ambiguous; otherwise proceed once the direction is clear within the workflow rules above.
+- **Completion**: When done, briefly report what changed and how it was verified (e.g., test command run).
