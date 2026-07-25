@@ -132,13 +132,13 @@ Add `jakarta.validation:jakarta.validation-api` (preferred) or `javax.validation
 
 ### Type Parent Plugin (`-Xtype-parent`)
 
-Injects interface implementations (`implements`) and superclasses (`extends`) into generated JAXB classes, with automated `Serializable` support.
+Injects interface implementations (`implements`) and superclasses (`extends`) into generated JAXB classes, with optional `Serializable` support.
 
 #### Key Features
 
-- **Interface Implementation**: Adds `implements InterfaceFQCN` via pattern matching or compact mapping. Accumulates multiple interfaces without duplicates.
-- **Superclass Extension**: Adds `extends SuperClassFQCN` while preserving pre-existing XSD inheritance structures.
-- **Serializable Shortcut**: Automated `implements java.io.Serializable` and auto-generated random `serialVersionUID`.
+- **Interface Implementation**: Adds `implements InterfaceFQCN` via compact or structured mapping. Accumulates multiple interfaces without duplicates.
+- **Superclass Extension**: Adds `extends SuperClassFQCN` only when the class currently extends `Object` (preserves XSD inheritance). Multiple matching rules are first-wins.
+- **Serializable Shortcut**: Adds `implements java.io.Serializable` and a **fixed** `serialVersionUID = 1L` when missing (reproducible builds).
 
 #### Quick Start
 
@@ -155,16 +155,22 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 -Xtype-parent \
   -interface=pattern->InterfaceFQCN \    # Compact interface mapping (repeatable)
   -super-class=pattern->SuperClassFQCN \ # Compact superclass mapping (repeatable)
-  -serializable=true \                  # Add implements java.io.Serializable & random serialVersionUID
+  -serializable=true \                  # Add Serializable + fixed serialVersionUID = 1L
   -class-name=.*UserType               # Optional regex filter for matching FQCN (repeatable)
 ```
 
-| Option          | Default         | Description                                                                       |
-|:----------------|:----------------|:----------------------------------------------------------------------------------|
-| `-interface`    | *(none)*        | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces            |
-| `-super-class`  | *(none)*        | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses            |
-| `-serializable` | `false`         | When `true`, injects `Serializable` interface and random `serialVersionUID` field |
-| `-class-name`   | *(all classes)* | Regex matched against fully-qualified class names (repeatable)                    |
+Structured form is also supported:
+
+```bash
+-Xtype-parent -interface -name=.*Request -to=com.example.BaseRequest
+```
+
+| Option          | Default         | Description                                                                          |
+|:----------------|:----------------|:-------------------------------------------------------------------------------------|
+| `-interface`    | *(none)*        | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces               |
+| `-super-class`  | *(none)*        | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses               |
+| `-serializable` | `false`         | When `true`, injects `Serializable` and fixed `serialVersionUID = 1L` if missing     |
+| `-class-name`   | *(all classes)* | Regex matched against fully-qualified class names (repeatable)                       |
 
 ---
 

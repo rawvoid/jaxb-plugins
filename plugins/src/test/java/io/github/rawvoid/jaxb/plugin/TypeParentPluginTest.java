@@ -20,9 +20,11 @@ import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.Serializable;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.EventListener;
 import java.util.List;
-import java.util.regex.Pattern;
-
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,11 +34,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class TypeParentPluginTest extends AbstractXJCMojoTestCase {
 
-    private static final String PKG = "com.example.typeparent";
-    private static final String USER_REQUEST_FILTER = PKG + "\\.UserRequestType";
-    private static final String USER_RESPONSE_FILTER = PKG + "\\.UserResponseType";
-    private static final String BASE_DATA_FILTER = PKG + "\\.BaseDataType";
-    private static final String EXTENDED_DATA_FILTER = PKG + "\\.ExtendedDataType";
+    private static final String PKG = "com.github.rawvoid.xjc_plugins.type_parent";
+    private static final String USER_REQUEST_FILTER = PKG.replace(".", "\\.") + "\\.UserRequestType";
+    private static final String USER_RESPONSE_FILTER = PKG.replace(".", "\\.") + "\\.UserResponseType";
+    private static final String BASE_DATA_FILTER = PKG.replace(".", "\\.") + "\\.BaseDataType";
+    private static final String EXTENDED_DATA_FILTER = PKG.replace(".", "\\.") + "\\.ExtendedDataType";
 
     private final String optionCmd = optionCommand(TypeParentPlugin.class);
 
@@ -61,16 +63,36 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).doesNotContain("Serializable");
             assertThat(source).doesNotContain("serialVersionUID");
             assertThat(source).doesNotContain("implements");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isFalse();
         });
     }
 
     @Test
-    void serializableShortcutRandomUid() throws Exception {
+    void pluginWithoutSubOptionsIsNoOp() throws Exception {
+        testExecute(List.of(optionCmd), USER_REQUEST_FILTER, (source, clazz) -> {
+            assertThat(source).doesNotContain("implements");
+            assertThat(source).doesNotContain("serialVersionUID");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isFalse();
+        });
+    }
+
+    @Test
+    void serializableShortcutFixedUid() throws Exception {
         var args = List.of(optionCmd, "-serializable=true");
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(source).contains("implements Serializable");
-            assertThat(source).contains("private static final long serialVersionUID =");
-            assertThat(source).matches(Pattern.compile("(?s).*private static final long serialVersionUID = -?\\d+L;.*"));
+            assertThat(source).contains("private static final long serialVersionUID = 1L;");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
+
+            try {
+                var field = clazz.getDeclaredField("serialVersionUID");
+                assertThat(Modifier.isStatic(field.getModifiers())).isTrue();
+                assertThat(Modifier.isFinal(field.getModifiers())).isTrue();
+                field.setAccessible(true);
+                assertThat(field.getLong(null)).isEqualTo(1L);
+            } catch (ReflectiveOperationException ex) {
+                throw new AssertionError(ex);
+            }
         });
     }
 
@@ -83,9 +105,27 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
         );
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(source).contains("implements Cloneable");
+            assertThat(Cloneable.class.isAssignableFrom(clazz)).isTrue();
+            assertThat(EventListener.class.isAssignableFrom(clazz)).isFalse();
         });
         testExecute(args, USER_RESPONSE_FILTER, (source, clazz) -> {
             assertThat(source).contains("implements EventListener");
+            assertThat(EventListener.class.isAssignableFrom(clazz)).isTrue();
+            assertThat(Cloneable.class.isAssignableFrom(clazz)).isFalse();
+        });
+    }
+
+    @Test
+    void interfaceInjectionStructuredForm() throws Exception {
+        var args = List.of(
+            optionCmd,
+            "-interface",
+            "-name=.*UserRequestType",
+            "-to=java.lang.Cloneable"
+        );
+        testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
+            assertThat(source).contains("implements Cloneable");
+            assertThat(Cloneable.class.isAssignableFrom(clazz)).isTrue();
         });
     }
 
@@ -98,6 +138,7 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
         testExecute(args, BASE_DATA_FILTER, (source, clazz) -> {
             assertThat(source).contains("extends TestBaseDto");
             assertThat(TestBaseDto.class.isAssignableFrom(clazz)).isTrue();
+            assertThat(clazz.getSuperclass()).isEqualTo(TestBaseDto.class);
         });
     }
 
@@ -108,9 +149,16 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
             "-super-class=.*DataType->io.github.rawvoid.jaxb.plugin.TestBaseDto"
         );
         testExecute(args, EXTENDED_DATA_FILTER, (source, clazz) -> {
-            // ExtendedDataType extends BaseDataType in XSD, so superclass injection is skipped for it
+            // Direct XSD parent is kept; plugin does not rewrite ExtendedDataType's extends clause.
+            // (BaseDataType may still get TestBaseDto from the same broad pattern — checked below.)
             assertThat(source).contains("extends BaseDataType");
             assertThat(source).doesNotContain("extends TestBaseDto");
+            assertThat(clazz.getSuperclass().getSimpleName()).isEqualTo("BaseDataType");
+        });
+        // Broad pattern still injects into BaseDataType (no XSD parent).
+        testExecute(args, BASE_DATA_FILTER, (source, clazz) -> {
+            assertThat(source).contains("extends TestBaseDto");
+            assertThat(clazz.getSuperclass()).isEqualTo(TestBaseDto.class);
         });
     }
 
@@ -124,6 +172,30 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(source).contains("Serializable");
             assertThat(source).contains("Cloneable");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
+            assertThat(Cloneable.class.isAssignableFrom(clazz)).isTrue();
+            var interfaces = Arrays.asList(clazz.getInterfaces());
+            assertThat(interfaces).contains(Serializable.class, Cloneable.class);
+        });
+    }
+
+    @Test
+    void classNameFilterGatesAllInjections() throws Exception {
+        var args = List.of(
+            optionCmd,
+            "-class-name=.*UserRequestType",
+            "-serializable=true",
+            "-interface=.*->java.lang.Cloneable"
+        );
+        testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
+            assertThat(Cloneable.class.isAssignableFrom(clazz)).isTrue();
+        });
+        testExecute(args, USER_RESPONSE_FILTER, (source, clazz) -> {
+            assertThat(source).doesNotContain("Serializable");
+            assertThat(source).doesNotContain("Cloneable");
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isFalse();
+            assertThat(Cloneable.class.isAssignableFrom(clazz)).isFalse();
         });
     }
 }

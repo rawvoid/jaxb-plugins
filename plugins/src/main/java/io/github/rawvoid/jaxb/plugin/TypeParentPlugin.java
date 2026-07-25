@@ -19,7 +19,6 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.codemodel.JExpr;
 import com.sun.codemodel.JMod;
-
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import org.slf4j.Logger;
@@ -29,12 +28,32 @@ import org.xml.sax.SAXException;
 
 import java.io.Serializable;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 
-
 /**
- * XJC plugin for dynamically injecting implements interfaces and extends superclasses into generated JAXB classes.
+ * Injects interface implementations ({@code implements}) and superclasses ({@code extends})
+ * into generated JAXB classes.
+ *
+ * <p>Compact CLI examples:</p>
+ * <pre>{@code
+ * -Xtype-parent -serializable=true
+ * -Xtype-parent -interface=.*Request->com.example.BaseRequest
+ * -Xtype-parent -super-class=.*Dto->com.example.AbstractDto
+ * -Xtype-parent -class-name=.*Request -interface=.*->java.lang.Cloneable
+ * }</pre>
+ *
+ * <p><b>Intentional limits:</b></p>
+ * <ul>
+ *   <li>Bean classes only ({@code outline.getClasses()}); enums are not modified.</li>
+ *   <li>Does not replace an existing non-{@code Object} superclass (XSD inheritance or a prior
+ *       matching {@code -super-class} rule). Multiple matching super-class rules are first-wins.</li>
+ *   <li>{@code -serializable} adds {@link Serializable} and a fixed {@code serialVersionUID = 1L}
+ *       when the field is absent; does not overwrite an existing field.</li>
+ *   <li>Interface injection is cumulative and skips duplicates already present on the class.</li>
+ *   <li>Does not validate that {@code -interface}/{@code -super-class} targets are interfaces/classes
+ *       or resolvable at generation time; invalid FQCNs fail later at Java compile.</li>
+ *   <li>Target types must be on the consumer compile classpath.</li>
+ * </ul>
  *
  * @author Rawvoid
  */
@@ -44,6 +63,7 @@ public class TypeParentPlugin extends AbstractPlugin {
     private static final Logger log = LoggerFactory.getLogger(TypeParentPlugin.class);
 
     private static final String OBJECT_FQCN = "java.lang.Object";
+    private static final long DEFAULT_SERIAL_VERSION_UID = 1L;
 
     @Option(name = "interface", description = "Interface mapping rules (compact format: pattern->Interface FQCN)")
     List<TypeParentConfig> interfaces;
@@ -52,12 +72,12 @@ public class TypeParentPlugin extends AbstractPlugin {
     List<TypeParentConfig> superClasses;
 
     @Option(name = "serializable", defaultValue = "false",
-        description = "Add implements java.io.Serializable and automatically generate random serialVersionUID")
+        description = "Add implements java.io.Serializable and a fixed serialVersionUID = 1L when missing")
     Boolean serializable;
 
     @Option(name = "class-name", description = "Global regex filter for matching fully-qualified class names (repeatable)")
     List<Pattern> classNames;
-    
+
     @Compact(formats = {"/{name}/->{to}", "{name}->{to}"})
     public static class TypeParentConfig {
 
@@ -79,23 +99,20 @@ public class TypeParentPlugin extends AbstractPlugin {
                 continue;
             }
 
-            // 1. Serializable shortcut
             if (isSerializable) {
                 if (lacksInterface(implClass, Serializable.class.getName())) {
                     implClass._implements(codeModel.ref(Serializable.class));
                 }
                 if (!implClass.fields().containsKey("serialVersionUID")) {
-                    var randomUid = ThreadLocalRandom.current().nextLong();
                     implClass.field(
                         JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
                         codeModel.LONG,
                         "serialVersionUID",
-                        JExpr.lit(randomUid)
+                        JExpr.lit(DEFAULT_SERIAL_VERSION_UID)
                     );
                 }
             }
 
-            // 2. Interfaces
             if (interfaces != null) {
                 for (var config : interfaces) {
                     if (config.name != null && config.to != null && config.name.matcher(implClass.fullName()).matches()) {
@@ -107,7 +124,6 @@ public class TypeParentPlugin extends AbstractPlugin {
                 }
             }
 
-            // 3. Superclass
             if (superClasses != null) {
                 for (var config : superClasses) {
                     if (config.name != null && config.to != null && config.name.matcher(implClass.fullName()).matches()) {
@@ -117,8 +133,8 @@ public class TypeParentPlugin extends AbstractPlugin {
                             if (currentSuper == null || OBJECT_FQCN.equals(currentSuper.fullName())) {
                                 implClass._extends(codeModel.ref(superClassFqcn));
                             } else {
-                                log.info("Preserving XSD inheritance for '{}': already extends '{}'",
-                                    implClass.fullName(), currentSuper.fullName());
+                                log.debug("Skipping super-class '{}' for '{}': already extends '{}'",
+                                    superClassFqcn, implClass.fullName(), currentSuper.fullName());
                             }
                         }
                     }
