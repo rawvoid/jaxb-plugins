@@ -34,12 +34,13 @@ import java.util.regex.Pattern;
  * Injects interface implementations ({@code implements}) and superclasses ({@code extends})
  * into generated JAXB classes.
  *
+ * <p>Target classes are selected by each rule's left-hand pattern (no global class filter).</p>
+ *
  * <p>Compact CLI examples:</p>
  * <pre>{@code
  * -Xtype-parent -serializable=true
  * -Xtype-parent -interface=.*Request->com.example.BaseRequest
  * -Xtype-parent -super-class=.*Dto->com.example.AbstractDto
- * -Xtype-parent -class-name=.*Request -interface=.*->java.lang.Cloneable
  * }</pre>
  *
  * <p><b>Intentional limits:</b></p>
@@ -75,9 +76,6 @@ public class TypeParentPlugin extends AbstractPlugin {
         description = "Add implements java.io.Serializable and a fixed serialVersionUID = 1L when missing")
     Boolean serializable;
 
-    @Option(name = "class-name", description = "Global regex filter for matching fully-qualified class names (repeatable)")
-    List<Pattern> classNames;
-
     @Compact(formats = {"/{name}/->{to}", "{name}->{to}"})
     public static class TypeParentConfig {
 
@@ -95,9 +93,6 @@ public class TypeParentPlugin extends AbstractPlugin {
 
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
-            if (!matchesClassName(implClass.fullName())) {
-                continue;
-            }
 
             if (isSerializable) {
                 if (lacksInterface(implClass, Serializable.class.getName())) {
@@ -152,12 +147,5 @@ public class TypeParentPlugin extends AbstractPlugin {
             }
         }
         return true;
-    }
-
-    private boolean matchesClassName(String className) {
-        if (classNames == null || classNames.isEmpty()) {
-            return true;
-        }
-        return classNames.stream().anyMatch(p -> p.matcher(className).matches());
     }
 }

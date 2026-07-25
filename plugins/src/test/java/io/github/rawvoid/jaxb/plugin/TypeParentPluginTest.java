@@ -54,7 +54,9 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void testUsage() {
-        assertThat(new TypeParentPlugin().getUsage()).isNotNull();
+        var usage = new TypeParentPlugin().getUsage();
+        assertThat(usage).isNotNull();
+        assertThat(usage).doesNotContain("-class-name");
     }
 
     @Test
@@ -180,22 +182,21 @@ class TypeParentPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void classNameFilterGatesAllInjections() throws Exception {
+    void interfacePatternSelectsTargetClasses() throws Exception {
         var args = List.of(
             optionCmd,
-            "-class-name=.*UserRequestType",
             "-serializable=true",
-            "-interface=.*->java.lang.Cloneable"
+            "-interface=.*UserRequestType->java.lang.Cloneable"
         );
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
             assertThat(Cloneable.class.isAssignableFrom(clazz)).isTrue();
         });
+        // -serializable applies to all beans; interface pattern is the per-rule selector.
         testExecute(args, USER_RESPONSE_FILTER, (source, clazz) -> {
-            assertThat(source).doesNotContain("Serializable");
-            assertThat(source).doesNotContain("Cloneable");
-            assertThat(Serializable.class.isAssignableFrom(clazz)).isFalse();
+            assertThat(Serializable.class.isAssignableFrom(clazz)).isTrue();
             assertThat(Cloneable.class.isAssignableFrom(clazz)).isFalse();
+            assertThat(source).doesNotContain("Cloneable");
         });
     }
 }

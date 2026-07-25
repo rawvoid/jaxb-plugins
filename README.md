@@ -136,7 +136,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 
 #### Key Features
 
-- **Interface Implementation**: Adds `implements InterfaceFQCN` via compact or structured mapping. Accumulates multiple interfaces without duplicates.
+- **Interface Implementation**: Adds `implements InterfaceFQCN` via compact or structured mapping. Accumulates multiple interfaces without duplicates. Select targets with each rule's left-hand pattern.
 - **Superclass Extension**: Adds `extends SuperClassFQCN` only when the class currently extends `Object` (preserves XSD inheritance). Multiple matching rules are first-wins.
 - **Serializable Shortcut**: Adds `implements java.io.Serializable` and a **fixed** `serialVersionUID = 1L` when missing (reproducible builds).
 
@@ -155,8 +155,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 -Xtype-parent \
   -interface=pattern->InterfaceFQCN \    # Compact interface mapping (repeatable)
   -super-class=pattern->SuperClassFQCN \ # Compact superclass mapping (repeatable)
-  -serializable=true \                  # Add Serializable + fixed serialVersionUID = 1L
-  -class-name=.*UserType               # Optional regex filter for matching FQCN (repeatable)
+  -serializable=true                     # Add Serializable + fixed serialVersionUID = 1L
 ```
 
 Structured form is also supported:
@@ -165,12 +164,11 @@ Structured form is also supported:
 -Xtype-parent -interface -name=.*Request -to=com.example.BaseRequest
 ```
 
-| Option          | Default         | Description                                                                          |
-|:----------------|:----------------|:-------------------------------------------------------------------------------------|
-| `-interface`    | *(none)*        | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces               |
-| `-super-class`  | *(none)*        | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses               |
-| `-serializable` | `false`         | When `true`, injects `Serializable` and fixed `serialVersionUID = 1L` if missing     |
-| `-class-name`   | *(all classes)* | Regex matched against fully-qualified class names (repeatable)                       |
+| Option          | Default  | Description                                                                      |
+|:----------------|:---------|:---------------------------------------------------------------------------------|
+| `-interface`    | *(none)* | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces           |
+| `-super-class`  | *(none)* | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses           |
+| `-serializable` | `false`  | When `true`, injects `Serializable` and fixed `serialVersionUID = 1L` if missing |
 
 ---
 
