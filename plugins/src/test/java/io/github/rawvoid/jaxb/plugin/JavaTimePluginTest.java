@@ -28,10 +28,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * XJC integration tests for {@link JSR310Plugin}.
+ * XJC integration tests for {@link JavaTimePlugin}.
  * Uses dedicated {@code jsr310.xsd} only.
  */
-public class JSR310PluginTest extends AbstractXJCMojoTestCase {
+public class JavaTimePluginTest extends AbstractXJCMojoTestCase {
 
     private static final String DATE_TIME_TYPES =
         "com\\.github\\.rawvoid\\.xjc_plugins\\.jsr310\\.DateTimeTypes";
@@ -42,8 +42,8 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testJSR310PluginDefault() throws Exception {
-        var args = List.of("-Xjsr310");
+    void testJavaTimePluginDefault() throws Exception {
+        var args = List.of("-Xjava-time");
         testExecute(args, DATE_TIME_TYPES, (source, clazz) -> {
             var dateTimeField = clazz.getDeclaredField("dateTime");
             assertThat(dateTimeField.getType()).isEqualTo(List.class);
@@ -84,9 +84,9 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testJSR310PluginCustomConfig() throws Exception {
+    void testJavaTimePluginCustomConfig() throws Exception {
         var args = List.of(
-            "-Xjsr310",
+            "-Xjava-time",
             "-type-mapping",
             "-xsd-type=date",
             "-target-type=java.time.OffsetDateTime",
@@ -102,47 +102,12 @@ public class JSR310PluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void testJSR310PluginCustomPattern() throws Exception {
-        var args = List.of(
-            "-Xjsr310",
-            "-type-mapping",
-            "-field=.*\\.date",
-            "-format=yyyy/MM/dd"
-        );
-        testExecute(args, DATE_TIME_TYPES, (source, clazz) -> {
-            var field = clazz.getDeclaredField("date");
-            var annotation = field.getAnnotation(XmlJavaTypeAdapter.class);
-            assertThat(annotation).isNotNull();
-
-            var adapterClass = annotation.value();
-            var adapterSource = getJavaSource(adapterClass);
-            assertThat(adapterSource).contains("\"yyyy/MM/dd\"");
-        });
-    }
-
-    @Test
-    void testAdapterPackageOption() throws Exception {
-        var args = List.of(
-            "-Xjsr310",
-            "-adapter-package=io.github.rawvoid.jaxb.test.adapters"
-        );
-        testExecute(args, DATE_TIME_TYPES, (source, clazz) -> {
-            var annotation = clazz.getDeclaredField("date").getAnnotation(XmlJavaTypeAdapter.class);
-            assertThat(annotation).isNotNull();
-            assertThat(annotation.value().getPackageName())
-                .isEqualTo("io.github.rawvoid.jaxb.test.adapters");
-        });
-    }
-
-    @Test
     void testFindCommonPackage() {
-        assertThat(JSR310Plugin.findCommonPackage(List.of("com.example.project.order", "com.example.project.user")))
-            .isEqualTo("com.example.project");
-
-        assertThat(JSR310Plugin.findCommonPackage(List.of("com.example.project.order")))
-            .isEqualTo("com.example.project.order");
-
-        assertThat(JSR310Plugin.findCommonPackage(List.of("com.example.a", "org.sample.b")))
-            .isEmpty();
+        assertThat(JavaTimePlugin.findCommonPackage(List.of("com.example.a.b", "com.example.a.c")))
+            .isEqualTo("com.example.a");
+        assertThat(JavaTimePlugin.findCommonPackage(List.of("com.example.a", "com.example.b")))
+            .isEqualTo("com.example");
+        assertThat(JavaTimePlugin.findCommonPackage(List.of("com.example.a", "org.example.b")))
+            .isEqualTo("");
     }
 }

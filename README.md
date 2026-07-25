@@ -19,9 +19,9 @@ A suite of extensible XJC (JAXB) plugins designed to streamline XML-to-Java bind
 
 ## Available Plugins
 
-### JSR-310 Plugin (`-Xjsr310`)
+### Java Time Plugin (`-Xjava-time`)
 
-Maps XSD date and time types to modern `java.time` (JSR-310) classes.
+Maps XSD date and time types to modern `java.time` classes.
 
 #### Key Features
 
@@ -33,7 +33,7 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 #### Quick Start
 
 ```bash
--Xjsr310 \
+-Xjava-time \
   -type-mapping \
   -xsd-type=dateTime \
   -target-type=java.time.OffsetDateTime
@@ -42,7 +42,7 @@ Maps XSD date and time types to modern `java.time` (JSR-310) classes.
 #### Command Options
 
 ```bash
--Xjsr310 \
+-Xjava-time \
   -adapter-package=package.name \      # Optional: defaults to <common_package>.adapter
   -type-mapping \                      # Group marker
   -xsd-type=xsdType \

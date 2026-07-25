@@ -42,17 +42,16 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- *
- * JAXB plugin that enables JSR-310 date/time API support in generated JAXB classes.
+ * JAXB plugin that enables java.time date/time API support in generated JAXB classes.
  * <p>
- * This plugin allows users to use the JSR-310 date/time API (java.time package) in their JAXB classes.
+ * This plugin allows users to use the modern Java date/time API (java.time package) in their JAXB classes.
  * It modifies the generated JAXB classes to use the appropriate adapter classes for marshalling and unmarshalling.
  * </p>
  *
  * @author Rawvoid
  */
-@Option(name = "Xjsr310", description = "Enable JSR-310 date/time API support in generated JAXB classes")
-public class JSR310Plugin extends AbstractPlugin {
+@Option(name = "Xjava-time", description = "Enable java.time date/time API support in generated JAXB classes")
+public class JavaTimePlugin extends AbstractPlugin {
 
     @Option(name = "adapter-package",
         description = "Package name for auto-generated XmlAdapter classes (default: derived from common package of generated classes)")
