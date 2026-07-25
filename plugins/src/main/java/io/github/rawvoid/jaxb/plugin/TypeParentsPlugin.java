@@ -29,7 +29,9 @@ import org.xml.sax.SAXException;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
+
 
 /**
  * XJC plugin for dynamically injecting implements interfaces and extends superclasses into generated JAXB classes.
@@ -83,7 +85,7 @@ public class TypeParentsPlugin extends AbstractPlugin {
                     implClass._implements(codeModel.ref(Serializable.class));
                 }
                 if (!implClass.fields().containsKey("serialVersionUID")) {
-                    var randomUid = java.util.concurrent.ThreadLocalRandom.current().nextLong();
+                    var randomUid = ThreadLocalRandom.current().nextLong();
                     implClass.field(
                         JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
                         codeModel.LONG,
