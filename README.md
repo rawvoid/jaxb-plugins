@@ -72,7 +72,17 @@ Maps XSD date and time types to modern `java.time` classes.
 
 ### Validation Plugin (`-Xvalidation`)
 
-Generates Bean Validation (JSR-380) constraint annotations on generated class fields from XSD multiplicity and simple-type facets. Supports `jakarta.validation` (default) and legacy `javax.validation`.
+Generates Bean Validation (JSR-380) constraint annotations on generated class fields from XSD multiplicity and simple-type facets.
+
+#### API auto-detection
+
+The plugin picks the validation package from the **XJC classpath** (not the main module compile classpath):
+
+1. Prefer `jakarta.validation` when present
+2. Else use `javax.validation` when present
+3. If neither is found, XJC fails with a clear error
+
+Add `jakarta.validation:jakarta.validation-api` (preferred) or `javax.validation:validation-api` to the `jaxb-maven-plugin` / XJC plugin dependencies.
 
 #### Mapping
 
@@ -107,7 +117,6 @@ Generates Bean Validation (JSR-380) constraint annotations on generated class fi
 
 ```bash
 -Xvalidation \
-  -api=jakarta \                       # 'jakarta' (default) or 'javax'
   -class-name=.*UserType \             # Optional regex matched against FQCN (repeatable)
   -field-name=username \               # Optional regex matched against field name (repeatable)
   -disable-valid=true                  # Optional: disable @Valid on nested/collection properties (default: false)
@@ -115,7 +124,6 @@ Generates Bean Validation (JSR-380) constraint annotations on generated class fi
 
 | Option           | Default         | Description                                                    |
 |:-----------------|:----------------|:---------------------------------------------------------------|
-| `-api`           | `jakarta`       | Validation API package mode (`jakarta` or `javax`)             |
 | `-class-name`    | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
 | `-field-name`    | *(all fields)*  | Regex matched against field names (repeatable)                 |
 | `-disable-valid` | `false`         | When `true`, omits `@Valid` cascade validation annotations     |

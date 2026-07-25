@@ -47,7 +47,9 @@ import java.util.regex.Pattern;
  * Adds Bean Validation annotations on generated JAXB fields from XSD multiplicity and facets.
  *
  * <p>Maps element/attribute requiredness, collection size, string length, pattern, numeric bounds,
- * digits, and {@code @Valid} for complex types. Supports {@code jakarta} (default) and {@code javax}.
+ * digits, and {@code @Valid} for complex types. The validation API package is auto-detected from the
+ * XJC classpath: {@code jakarta.validation} is preferred when present; otherwise
+ * {@code javax.validation}. Fails if neither API is available.
  *
  * <p><b>Intentional limits:</b> no {@code enumeration}/{@code whiteSpace}/{@code fixed}; collection
  * {@code @Size} is multiplicity only (not item length); only user-declared facets (built-in XML
@@ -59,10 +61,8 @@ import java.util.regex.Pattern;
 public class ValidationPlugin extends AbstractPlugin {
 
     private static final String CXF_NOISE_PATTERN = "\\c+";
-
-    @Option(name = "api", defaultValue = "jakarta",
-        description = "Validation API package mode: 'jakarta' (default) or 'javax'")
-    String api;
+    private static final String JAKARTA_VALID = "jakarta.validation.Valid";
+    private static final String JAVAX_VALID = "javax.validation.Valid";
 
     @Option(name = "class-name", description = "Regex to match fully-qualified class names (repeatable)")
     List<Pattern> classNames;
@@ -79,15 +79,17 @@ public class ValidationPlugin extends AbstractPlugin {
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
-        resolveApi();
+        resolveValidationApi();
     }
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
-        // XJC always parses options first; keep a safe default if run is invoked directly.
         if (constraintPkg == null) {
-            constraintPkg = "jakarta.validation.constraints.";
-            validFqcn = "jakarta.validation.Valid";
+            try {
+                resolveValidationApi();
+            } catch (BadCommandLineException ex) {
+                throw new SAXException(ex.getMessage(), ex);
+            }
         }
         var cm = outline.getCodeModel();
         var skipValid = Boolean.TRUE.equals(disableValid);
@@ -116,15 +118,45 @@ public class ValidationPlugin extends AbstractPlugin {
         return true;
     }
 
-    private void resolveApi() throws BadCommandLineException {
-        var mode = api == null || api.isBlank() ? "jakarta" : api.trim().toLowerCase();
-        constraintPkg = switch (mode) {
-            case "jakarta" -> "jakarta.validation.constraints.";
-            case "javax" -> "javax.validation.constraints.";
-            default -> throw new BadCommandLineException(
-                "Invalid -api value '%s'; expected 'jakarta' or 'javax'".formatted(api));
-        };
-        validFqcn = "javax".equals(mode) ? "javax.validation.Valid" : "jakarta.validation.Valid";
+    private void resolveValidationApi() throws BadCommandLineException {
+        var mode = chooseValidationApi(
+            isPresent(JAKARTA_VALID),
+            isPresent(JAVAX_VALID));
+        if ("jakarta".equals(mode)) {
+            constraintPkg = "jakarta.validation.constraints.";
+            validFqcn = JAKARTA_VALID;
+        } else {
+            constraintPkg = "javax.validation.constraints.";
+            validFqcn = JAVAX_VALID;
+        }
+    }
+
+    /**
+     * Prefers Jakarta when present; falls back to javax; fails when neither is available.
+     *
+     * @return {@code "jakarta"} or {@code "javax"}
+     */
+    static String chooseValidationApi(boolean jakartaPresent, boolean javaxPresent)
+        throws BadCommandLineException {
+        if (jakartaPresent) {
+            return "jakarta";
+        }
+        if (javaxPresent) {
+            return "javax";
+        }
+        throw new BadCommandLineException(
+            "Bean Validation API not found on the XJC classpath. "
+                + "Add jakarta.validation:jakarta.validation-api (preferred) or "
+                + "javax.validation:validation-api to the XJC plugin dependencies.");
+    }
+
+    private static boolean isPresent(String fqcn) {
+        try {
+            Class.forName(fqcn, false, ValidationPlugin.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError ex) {
+            return false;
+        }
     }
 
     // --- presence / collection size ---

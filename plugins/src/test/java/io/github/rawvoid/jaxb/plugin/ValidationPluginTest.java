@@ -28,12 +28,11 @@ import jakarta.validation.constraints.Size;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * XJC integration tests for {@link ValidationPlugin}.
@@ -187,13 +186,28 @@ class ValidationPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void javaxValidationMode() throws Exception {
-        testExecute(List.of(optionCmd, "-api=javax"), USER, (source, clazz) -> {
-            assertThat(source).contains("javax.validation.constraints.");
-            assertThat(source).doesNotContain("jakarta.validation");
-            assertThat(hasAnnotationByName(field(clazz, "username"), "javax.validation.constraints.NotNull")).isTrue();
-            assertThat(hasAnnotationByName(field(clazz, "address"), "javax.validation.Valid")).isTrue();
+    void prefersJakartaWhenBothApisPresent() throws Exception {
+        // Test classpath provides both APIs; auto-detect must prefer jakarta.
+        testExecute(List.of(optionCmd), USER, (source, clazz) -> {
+            assertThat(source).contains("jakarta.validation.constraints.");
+            assertThat(source).doesNotContain("javax.validation");
+            assertThat(field(clazz, "username").getAnnotation(NotNull.class)).isNotNull();
+            assertThat(field(clazz, "address").getAnnotation(Valid.class)).isNotNull();
         });
+    }
+
+    @Test
+    void chooseValidationApiPrefersJakarta() throws Exception {
+        assertThat(ValidationPlugin.chooseValidationApi(true, true)).isEqualTo("jakarta");
+        assertThat(ValidationPlugin.chooseValidationApi(true, false)).isEqualTo("jakarta");
+        assertThat(ValidationPlugin.chooseValidationApi(false, true)).isEqualTo("javax");
+    }
+
+    @Test
+    void chooseValidationApiFailsWhenNeitherPresent() {
+        assertThatThrownBy(() -> ValidationPlugin.chooseValidationApi(false, false))
+            .isInstanceOf(com.sun.tools.xjc.BadCommandLineException.class)
+            .hasMessageContaining("Bean Validation API not found");
     }
 
     @Test
@@ -232,12 +246,5 @@ class ValidationPluginTest extends AbstractXJCMojoTestCase {
         var f = clazz.getDeclaredField(name);
         f.setAccessible(true);
         return f;
-    }
-
-    private static boolean hasAnnotationByName(Field field, String fqcn) {
-        return Arrays.stream(field.getAnnotations())
-            .map(Annotation::annotationType)
-            .map(Class::getName)
-            .anyMatch(fqcn::equals);
     }
 }
