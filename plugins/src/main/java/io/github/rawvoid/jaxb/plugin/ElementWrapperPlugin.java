@@ -23,6 +23,7 @@ import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XSElementDecl;
 import com.sun.xml.xsom.XSParticle;
+import io.github.rawvoid.jaxb.utils.AnnotationUtils;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlNsForm;
 import org.slf4j.Logger;
@@ -464,9 +465,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             return;
         }
 
-        var alreadyPresent = field.annotations().stream()
-            .anyMatch(a -> a.getAnnotationClass().fullName().equals(XmlElementWrapper.class.getName()));
-        if (alreadyPresent) {
+        if (AnnotationUtils.hasAnnotation(field, XmlElementWrapper.class)) {
             return;
         }
 

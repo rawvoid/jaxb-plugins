@@ -17,11 +17,11 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.codemodel.JAnnotationArrayMember;
-import com.sun.codemodel.JAnnotationStringValue;
 import com.sun.codemodel.JAnnotationUse;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.tools.xjc.outline.PackageOutline;
+import io.github.rawvoid.jaxb.utils.AnnotationUtils;
 import jakarta.xml.bind.annotation.XmlNs;
 import jakarta.xml.bind.annotation.XmlSchema;
 import org.xml.sax.ErrorHandler;
@@ -153,7 +153,7 @@ public class NamespacePlugin extends AbstractPlugin {
         if (xmlSchema == null) {
             return;
         }
-        var packageNamespace = readAnnotationString(xmlSchema, "namespace");
+        var packageNamespace = AnnotationUtils.readStringMember(xmlSchema, "namespace");
         if (!Objects.equals(packageNamespace, packageMapping.namespace)) {
             return;
         }
@@ -193,10 +193,7 @@ public class NamespacePlugin extends AbstractPlugin {
     }
 
     private static JAnnotationUse findXmlSchema(PackageOutline packageOutline) {
-        return packageOutline._package().annotations().stream()
-            .filter(a -> a.getAnnotationClass().fullName().equals(XmlSchema.class.getName()))
-            .findFirst()
-            .orElse(null);
+        return AnnotationUtils.findAnnotation(packageOutline._package(), XmlSchema.class).orElse(null);
     }
 
     private static JAnnotationArrayMember ensureXmlnsArray(JAnnotationUse xmlSchema) {
@@ -220,16 +217,8 @@ public class NamespacePlugin extends AbstractPlugin {
 
     private static Optional<JAnnotationUse> findExistingXmlnsEntry(JAnnotationArrayMember xmlns, String targetNamespace) {
         return xmlns.annotations().stream()
-            .filter(anno -> Objects.equals(readAnnotationString(anno, "namespaceURI"), targetNamespace))
+            .filter(anno -> Objects.equals(AnnotationUtils.readStringMember(anno, "namespaceURI"), targetNamespace))
             .findFirst();
-    }
-
-    private static String readAnnotationString(JAnnotationUse annotation, String member) {
-        var value = annotation.getAnnotationMembers().get(member);
-        if (!(value instanceof JAnnotationStringValue stringValue)) {
-            return null;
-        }
-        return stringValue.toString();
     }
 
     /**
