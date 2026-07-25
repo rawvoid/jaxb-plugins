@@ -47,13 +47,13 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
     private static final String GENERATED_ANNOTATION_FQCN = "jakarta.annotation.Generated";
 
     @Option(name = "value", description = "Value attribute of @Generated annotation (default: JAXB RI v[BuildID])")
-    private String value;
+    String value;
 
     @Option(name = "comments", description = "Comments attribute of @Generated annotation")
-    private String comments;
+    String comments;
 
     @Option(name = "date", defaultValue = "false", description = "Include generation date in @Generated annotation (default: false)")
-    private Boolean date;
+    Boolean date;
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {

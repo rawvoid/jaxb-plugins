@@ -16,10 +16,7 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.JClass;
-import com.sun.codemodel.JDefinedClass;
-import com.sun.codemodel.JFieldVar;
-import com.sun.codemodel.JMod;
+import com.sun.codemodel.*;
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
@@ -162,8 +159,8 @@ public class LombokPlugin extends AbstractPlugin {
             || cm.ref(Map.class).isAssignableFrom(erasure);
     }
 
-    private static boolean hasAnnotation(JFieldVar field, String fqcn) {
-        for (var annotation : field.annotations()) {
+    private static boolean hasAnnotation(JAnnotatable annotatable, String fqcn) {
+        for (var annotation : annotatable.annotations()) {
             if (fqcn.equals(annotation.getAnnotationClass().fullName())) {
                 return true;
             }

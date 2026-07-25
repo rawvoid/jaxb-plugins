@@ -368,7 +368,7 @@ public class RenameClassPlugin extends AbstractPlugin {
                 }
                 warn(
                     errorHandler,
-                    toRevert.iterator().next().locator,
+                    toRevert.getFirst().locator,
                     "ObjectFactory name conflict '"
                         + squeezed
                         + "'; keeping original name(s) for "

@@ -79,7 +79,7 @@ public class NamespacePlugin extends AbstractPlugin {
     List<NsPrefixConfig> nsPrefixes;
 
     @Override
-    protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+    protected void postParseArgument(Options opt, int consumedArgs) {
         injectBindings(opt);
     }
 
