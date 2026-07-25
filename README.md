@@ -114,7 +114,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 
 - **Interface Implementation**: Adds `implements InterfaceFQCN` via pattern matching or compact mapping. Accumulates multiple interfaces without duplicates.
 - **Superclass Extension**: Adds `extends SuperClassFQCN` while preserving pre-existing XSD inheritance structures.
-- **Serializable Shortcut**: Automated `implements java.io.Serializable` and `serialVersionUID = 1L` (customizable via `-serial-version-uid`).
+- **Serializable Shortcut**: Automated `implements java.io.Serializable` and auto-generated random `serialVersionUID`.
 
 #### Quick Start
 
@@ -131,8 +131,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 -Xtype-parents \
   -interface=pattern->InterfaceFQCN \    # Compact interface mapping (repeatable)
   -super-class=pattern->SuperClassFQCN \ # Compact superclass mapping (repeatable)
-  -serializable=true \                  # Add implements java.io.Serializable & serialVersionUID
-  -serial-version-uid=1 \              # Custom serialVersionUID long value (default: 1)
+  -serializable=true \                  # Add implements java.io.Serializable & random serialVersionUID
   -class-name=.*UserType               # Optional regex filter for matching FQCN (repeatable)
 ```
 
@@ -140,9 +139,9 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 |:-------|:--------|:------------|
 | `-interface` | *(none)* | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces |
 | `-super-class` | *(none)* | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses |
-| `-serializable` | `false` | When `true`, injects `Serializable` interface and `serialVersionUID` field |
-| `-serial-version-uid` | `1` | Long value for `serialVersionUID` |
+| `-serializable` | `false` | When `true`, injects `Serializable` interface and random `serialVersionUID` field |
 | `-class-name` | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
+
 
 ---
 

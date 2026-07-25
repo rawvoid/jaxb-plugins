@@ -21,6 +21,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.regex.Pattern;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,22 +65,15 @@ class TypeParentsPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void serializableShortcutDefaultUid() throws Exception {
+    void serializableShortcutRandomUid() throws Exception {
         var args = List.of(optionCmd, "-serializable=true");
         testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
             assertThat(source).contains("implements Serializable");
-            assertThat(source).contains("private static final long serialVersionUID = 1L;");
+            assertThat(source).contains("private static final long serialVersionUID =");
+            assertThat(source).matches(Pattern.compile("(?s).*private static final long serialVersionUID = -?\\d+L;.*"));
         });
     }
 
-    @Test
-    void serializableShortcutCustomUid() throws Exception {
-        var args = List.of(optionCmd, "-serializable=true", "-serial-version-uid=987654321");
-        testExecute(args, USER_REQUEST_FILTER, (source, clazz) -> {
-            assertThat(source).contains("implements Serializable");
-            assertThat(source).contains("private static final long serialVersionUID = 987654321L;");
-        });
-    }
 
     @Test
     void interfaceInjectionCompactFormat() throws Exception {

@@ -50,16 +50,12 @@ public class TypeParentsPlugin extends AbstractPlugin {
     List<TypeParentConfig> superClasses;
 
     @Option(name = "serializable", defaultValue = "false",
-        description = "Add implements java.io.Serializable and serialVersionUID")
+        description = "Add implements java.io.Serializable and automatically generate random serialVersionUID")
     Boolean serializable;
-
-    @Option(name = "serial-version-uid", defaultValue = "1",
-        description = "Custom serialVersionUID value (default: 1)")
-    Long serialVersionUID;
 
     @Option(name = "class-name", description = "Global regex filter for matching fully-qualified class names (repeatable)")
     List<Pattern> classNames;
-
+    
     @Compact(formats = {"/{name}/->{to}", "{name}->{to}"})
     public static class TypeParentConfig {
 
@@ -74,7 +70,6 @@ public class TypeParentsPlugin extends AbstractPlugin {
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
         var codeModel = outline.getCodeModel();
         var isSerializable = Boolean.TRUE.equals(serializable);
-        var uid = serialVersionUID != null ? serialVersionUID : 1L;
 
         for (var classOutline : outline.getClasses()) {
             var implClass = classOutline.implClass;
@@ -88,11 +83,12 @@ public class TypeParentsPlugin extends AbstractPlugin {
                     implClass._implements(codeModel.ref(Serializable.class));
                 }
                 if (!implClass.fields().containsKey("serialVersionUID")) {
+                    var randomUid = java.util.concurrent.ThreadLocalRandom.current().nextLong();
                     implClass.field(
                         JMod.PRIVATE | JMod.STATIC | JMod.FINAL,
                         codeModel.LONG,
                         "serialVersionUID",
-                        JExpr.lit(uid)
+                        JExpr.lit(randomUid)
                     );
                 }
             }
