@@ -81,7 +81,7 @@ public class TypeParentsPlugin extends AbstractPlugin {
 
             // 1. Serializable shortcut
             if (isSerializable) {
-                if (!alreadyImplements(implClass, Serializable.class.getName())) {
+                if (lacksInterface(implClass, Serializable.class.getName())) {
                     implClass._implements(codeModel.ref(Serializable.class));
                 }
                 if (!implClass.fields().containsKey("serialVersionUID")) {
@@ -100,7 +100,7 @@ public class TypeParentsPlugin extends AbstractPlugin {
                 for (var config : interfaces) {
                     if (config.name != null && config.to != null && config.name.matcher(implClass.fullName()).matches()) {
                         var interfaceFqcn = config.to.trim();
-                        if (!interfaceFqcn.isEmpty() && !alreadyImplements(implClass, interfaceFqcn)) {
+                        if (!interfaceFqcn.isEmpty() && lacksInterface(implClass, interfaceFqcn)) {
                             implClass._implements(codeModel.ref(interfaceFqcn));
                         }
                     }
@@ -128,14 +128,14 @@ public class TypeParentsPlugin extends AbstractPlugin {
         return true;
     }
 
-    private boolean alreadyImplements(JDefinedClass implClass, String interfaceFqcn) {
+    private boolean lacksInterface(JDefinedClass implClass, String interfaceFqcn) {
         var it = implClass._implements();
         while (it.hasNext()) {
             if (interfaceFqcn.equals(it.next().fullName())) {
-                return true;
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     private boolean matchesClassName(String className) {
