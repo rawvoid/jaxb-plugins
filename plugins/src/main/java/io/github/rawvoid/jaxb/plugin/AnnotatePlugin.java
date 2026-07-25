@@ -16,18 +16,15 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.*;
+import com.sun.codemodel.JAnnotatable;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.AnnotationUtils;
 import org.jvnet.jaxb.annox.model.XAnnotation;
-import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
 import java.lang.annotation.Annotation;
-import java.lang.annotation.Repeatable;
-import java.lang.reflect.Array;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -64,8 +61,7 @@ public class AnnotatePlugin extends AbstractPlugin {
     List<RemoveConfig> removeFromPackageConfigs;
 
     public AnnotatePlugin() {
-        registerTextParser(XAnnotation.class, (optionName, text) ->
-            XAnnotationParser.INSTANCE.parse(text.toString()));
+        registerTextParser(XAnnotation.class, AnnotationUtils.xAnnotationTextParser());
     }
 
     @Override
@@ -134,121 +130,9 @@ public class AnnotatePlugin extends AbstractPlugin {
             .filter(config -> config.targets == null || config.targets.isEmpty() || config.targets.stream()
                 .anyMatch(targetPattern -> targetPattern.matcher(targetName).matches()))
             .toList();
-        var xAnnotations = matchedConfigs.stream()
-            .flatMap(config -> config.xAnnotations.stream());
-        xAnnotations.forEach(xAnnotation -> {
-            var annotationClass = xAnnotation.getAnnotationClass();
-            var existingSameAnnotations = target.annotations().stream()
-                .filter(a -> a.getAnnotationClass().fullName().equals(annotationClass.getName()))
-                .toList();
-
-            if (!existingSameAnnotations.isEmpty()) {
-                if (annotationClass.getAnnotation(Repeatable.class) == null) {
-                    existingSameAnnotations.forEach(target::removeAnnotation);
-                }
-            }
-            var annotationUse = target.annotate(annotationClass);
-            xAnnotation.getFieldsList().forEach(field ->
-                fillAnnotationParam(annotationUse, field.getName(), field.getValue()));
-        });
-    }
-
-    /**
-     * Fills the parameter of the annotation use with the given name and value.
-     *
-     * @param annotationUse the annotation use to fill the parameter for
-     * @param paramName     the name of the parameter to fill
-     * @param paramValue    the value of the parameter to fill
-     */
-    protected void fillAnnotationParam(JAnnotationUse annotationUse, String paramName, Object paramValue) {
-        switch (paramValue) {
-            case String strValue -> annotationUse.param(paramName, strValue);
-            case Integer intValue -> annotationUse.param(paramName, intValue);
-            case Boolean boolValue -> annotationUse.param(paramName, boolValue);
-            case Character charValue -> annotationUse.param(paramName, charValue);
-            case Byte byteValue -> annotationUse.param(paramName, byteValue);
-            case Short shortValue -> annotationUse.param(paramName, shortValue);
-            case Long longValue -> annotationUse.param(paramName, longValue);
-            case Float floatValue -> annotationUse.param(paramName, floatValue);
-            case Double doubleValue -> annotationUse.param(paramName, doubleValue);
-            case Class<?> clazz -> annotationUse.param(paramName, clazz);
-            case Enum<?> enumValue -> annotationUse.param(paramName, enumValue);
-            case JEnumConstant enumConstant -> annotationUse.param(paramName, enumConstant);
-            case JExpression expression -> annotationUse.param(paramName, expression);
-            case JType type -> annotationUse.param(paramName, type);
-            case XAnnotation<?> xAnno -> {
-                var nestedUse = annotationUse.annotationParam(paramName, xAnno.getAnnotationClass());
-                xAnno.getFieldsList().forEach(field ->
-                    fillAnnotationParam(nestedUse, field.getName(), field.getValue()));
-            }
-            case Annotation anno -> {
-                var nestedUse = annotationUse.annotationParam(paramName, anno.annotationType());
-                fillAnnotationFromObject(nestedUse, anno);
-            }
-            default -> {
-                Iterable<?> iterable;
-                if (paramValue instanceof Iterable<?>) {
-                    iterable = (Iterable<?>) paramValue;
-                } else if (paramValue.getClass().isArray()) {
-                    var length = Array.getLength(paramValue);
-                    var list = new ArrayList<>(length);
-                    for (var i = 0; i < length; i++) {
-                        list.add(Array.get(paramValue, i));
-                    }
-                    iterable = list;
-                } else {
-                    throw new IllegalStateException("Unexpected value: " + paramValue);
-                }
-                var array = annotationUse.paramArray(paramName);
-                iterable.forEach(item -> fillArrayParam(array, item));
-            }
-        }
-    }
-
-    /**
-     * Fills the parameter of the annotation array member with the given value.
-     *
-     * @param array the annotation array member to fill the parameter for
-     * @param value the value of the parameter to fill
-     */
-    public void fillArrayParam(JAnnotationArrayMember array, Object value) {
-        switch (value) {
-            case String strValue -> array.param(strValue);
-            case Integer intValue -> array.param(intValue);
-            case Boolean boolValue -> array.param(boolValue);
-            case Character charValue -> array.param(charValue);
-            case Byte byteValue -> array.param(byteValue);
-            case Short shortValue -> array.param(shortValue);
-            case Long longValue -> array.param(longValue);
-            case Float floatValue -> array.param(floatValue);
-            case Double doubleValue -> array.param(doubleValue);
-            case Class<?> clazz -> array.param(clazz);
-            case Enum<?> enumValue -> array.param(enumValue);
-            case JEnumConstant enumConstant -> array.param(enumConstant);
-            case JExpression expression -> array.param(expression);
-            case JType type -> array.param(type);
-            case XAnnotation<?> xAnno -> {
-                var nestedUse = array.annotate(xAnno.getAnnotationClass());
-                xAnno.getFieldsList().forEach(field ->
-                    fillAnnotationParam(nestedUse, field.getName(), field.getValue()));
-            }
-            case Annotation anno -> {
-                var nestedUse = array.annotate(anno.annotationType());
-                fillAnnotationFromObject(nestedUse, anno);
-            }
-            default -> throw new IllegalStateException("Unexpected value: " + value);
-        }
-    }
-
-    private void fillAnnotationFromObject(JAnnotationUse annotationUse, Annotation anno) {
-        for (var method : anno.annotationType().getDeclaredMethods()) {
-            try {
-                var val = method.invoke(anno);
-                fillAnnotationParam(annotationUse, method.getName(), val);
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to invoke annotation method: " + method.getName(), e);
-            }
-        }
+        matchedConfigs.stream()
+            .flatMap(config -> config.xAnnotations.stream())
+            .forEach(xAnnotation -> AnnotationUtils.applyXAnnotation(target, xAnnotation));
     }
 
     /**
@@ -264,12 +148,8 @@ public class AnnotatePlugin extends AbstractPlugin {
                 .anyMatch(targetPattern -> targetPattern.matcher(targetName).matches()))
             .toList();
 
-        matchedConfigs.forEach(config -> config.annotations.forEach(annoClass -> {
-            var toRemove = target.annotations().stream()
-                .filter(a -> a.getAnnotationClass().fullName().equals(annoClass.getName()))
-                .toList();
-            toRemove.forEach(target::removeAnnotation);
-        }));
+        matchedConfigs.forEach(config -> config.annotations.forEach(annoClass ->
+            AnnotationUtils.removeAnnotations(target, annoClass)));
     }
 
     /**
@@ -290,7 +170,7 @@ public class AnnotatePlugin extends AbstractPlugin {
      */
     public static class RemoveConfig {
 
-        @Option(name = "anno", required = true, placeholder = "class", description = "Annotation class name to remove")
+        @Option(name = "anno", required = true, placeholder = "annotation", description = "Annotation class name to remove")
         List<Class<? extends Annotation>> annotations;
 
         @Option(name = "target", description = "Regex to match the fully-qualified target name")

@@ -23,7 +23,6 @@ import io.github.rawvoid.jaxb.plugin.ClassNameDetector;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
@@ -297,7 +296,7 @@ public final class OutlineUtils {
         var isRefBySuperClass = superClass != null && ClassNameDetector.detect(superClass.fullName(), classFullName);
         // Aggregate reference checks across all possible sources.
         return isRefBySuperClass
-            || isRefByAnnotation(definedClass, classFullName)
+            || AnnotationUtils.referencesType(definedClass, classFullName)
             || definedClass.fields().values().stream()
             .anyMatch(field -> isRefInField(field, classFullName))
 
@@ -350,13 +349,10 @@ public final class OutlineUtils {
      * @param annotatable   the annotated element to update
      * @param targetType    the type to be replaced
      * @param newTargetType the replacement type
+     * @see AnnotationUtils#replaceAnnotationReferences(JAnnotatable, JDefinedClass, JDefinedClass)
      */
     public static void replaceAnnotationReferences(JAnnotatable annotatable, JDefinedClass targetType, JDefinedClass newTargetType) {
-        if (annotatable == null) {
-            return;
-        }
-        // Iterate over all annotations and replace type references in member values.
-        annotatable.annotations().forEach(annotation -> replaceAnnotationUse(annotation, targetType, newTargetType));
+        AnnotationUtils.replaceAnnotationReferences(annotatable, targetType, newTargetType);
     }
 
     /**
@@ -439,7 +435,7 @@ public final class OutlineUtils {
     private static boolean isRefInField(JFieldVar fieldVar, String classFullName) {
         var typeName = fieldVar.type().fullName();
         var isRefByType = ClassNameDetector.detect(typeName, classFullName);
-        return isRefByType || isRefByAnnotation(fieldVar, classFullName);
+        return isRefByType || AnnotationUtils.referencesType(fieldVar, classFullName);
     }
 
     /**
@@ -448,7 +444,7 @@ public final class OutlineUtils {
     private static boolean isRefInMethod(JMethod method, String classFullName) {
         var returnTypeName = method.type().fullName();
         var isRefByReturn = ClassNameDetector.detect(returnTypeName, classFullName);
-        return isRefByReturn || isRefByAnnotation(method, classFullName)
+        return isRefByReturn || AnnotationUtils.referencesType(method, classFullName)
             || method.params().stream()
             .anyMatch(param -> isRefInMethodParam(param, classFullName));
     }
@@ -459,114 +455,7 @@ public final class OutlineUtils {
     private static boolean isRefInMethodParam(JVar param, String classFullName) {
         var typeName = param.type().fullName();
         var isRefByType = ClassNameDetector.detect(typeName, classFullName);
-        return isRefByType || isRefByAnnotation(param, classFullName);
-    }
-
-    /**
-     * Determines whether annotation members on the element reference the specified type.
-     */
-    private static boolean isRefByAnnotation(JAnnotatable annotatable, String classFullName) {
-        if (annotatable == null) {
-            return false;
-        }
-        return annotatable.annotations().stream()
-            .anyMatch(annotation -> isRefInAnnotation(annotation, classFullName));
-    }
-
-    /**
-     * Checks whether a single annotation's member values reference the specified type.
-     */
-    private static boolean isRefInAnnotation(JAnnotationUse annotation, String classFullName) {
-        if (annotation == null) {
-            return false;
-        }
-        // Supports class values, array members, and nested annotations.
-        return annotation.getAnnotationMembers().values().stream().anyMatch(value -> switch (value) {
-            case JAnnotationClassValue classValue ->
-                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
-            case JAnnotationArrayMember arrayMember -> isRefInAnnotationArrayMember(arrayMember, classFullName);
-            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
-            default -> false;
-        });
-    }
-
-    /**
-     * Checks whether an annotation array member references the specified type (supports nested arrays/annotations).
-     */
-    private static boolean isRefInAnnotationArrayMember(JAnnotationArrayMember arrayMember, String classFullName) {
-        if (arrayMember == null) {
-            return false;
-        }
-        // Recursively check type/annotation references in array elements.
-        return arrayMember.annotations2().stream().anyMatch(value -> switch (value) {
-            case JAnnotationClassValue classValue ->
-                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
-            case JAnnotationArrayMember subArrayMember -> isRefInAnnotationArrayMember(subArrayMember, classFullName);
-            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
-            default -> false;
-        });
-    }
-
-    /**
-     * Replaces references to the target type inside annotation member values.
-     */
-    private static void replaceAnnotationUse(JAnnotationUse annotation, JDefinedClass targetType, JDefinedClass newTargetType) {
-        if (annotation == null) {
-            return;
-        }
-        // Iterate over all member values and replace by type.
-        annotation.getAnnotationMembers().values().forEach(value -> replaceAnnotationValue(value, targetType, newTargetType));
-    }
-
-    /**
-     * Recursively replaces type references in annotation member values.
-     */
-    private static void replaceAnnotationValue(JAnnotationValue value, JDefinedClass targetType, JDefinedClass newTargetType) {
-        switch (value) {
-            case JAnnotationClassValue classValue -> replaceAnnotationClassValue(classValue, targetType, newTargetType);
-            case JAnnotationArrayMember arrayMember ->
-                arrayMember.annotations2().forEach(item -> replaceAnnotationValue(item, targetType, newTargetType));
-            case JAnnotationUse annotationUse -> replaceAnnotationUse(annotationUse, targetType, newTargetType);
-            default -> {
-            }
-        }
-    }
-
-    /**
-     * Replaces type references for {@code Class} values inside an annotation.
-     * <p>
-     * Since {@link JAnnotationClassValue} internals are not directly accessible,
-     * use reflection to locate the {@link JClass}/{@link JType} field and perform the replacement.
-     * </p>
-     */
-    private static void replaceAnnotationClassValue(JAnnotationClassValue classValue, JDefinedClass targetType, JDefinedClass newTargetType) {
-        var valueType = classValue.type();
-        if (valueType == null || !ClassNameDetector.detect(valueType.fullName(), targetType.fullName())) {
-            return;
-        }
-        // Use reflection to locate the actual stored type field.
-        var clazz = classValue.getClass();
-        Field candidateField = null;
-        try {
-            for (var field : clazz.getDeclaredFields()) {
-                if (JClass.class.isAssignableFrom(field.getType()) || JType.class.isAssignableFrom(field.getType())) {
-                    field.setAccessible(true);
-                    var current = field.get(classValue);
-                    if (current instanceof JClass currentClass
-                        && ClassNameDetector.detect(currentClass.fullName(), targetType.fullName())) {
-                        candidateField = field;
-                        break;
-                    }
-                }
-            }
-            if (candidateField == null) {
-                throw new IllegalStateException("Failed to locate annotation class value field for " + valueType.fullName());
-            }
-            // Replace with the new target type.
-            candidateField.set(classValue, newTargetType);
-        } catch (IllegalAccessException e) {
-            throw new IllegalStateException("Failed to replace annotation type for " + valueType.fullName(), e);
-        }
+        return isRefByType || AnnotationUtils.referencesType(param, classFullName);
     }
 
     /**

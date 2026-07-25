@@ -16,17 +16,14 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.JClass;
-import com.sun.codemodel.JDefinedClass;
-import com.sun.codemodel.JFieldVar;
-import com.sun.codemodel.JMod;
+import com.sun.codemodel.*;
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.AnnotationUtils;
 import io.github.rawvoid.jaxb.utils.LombokSingulars;
 import io.github.rawvoid.jaxb.utils.OutlineUtils;
 import org.jvnet.jaxb.annox.model.XAnnotation;
-import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
@@ -79,7 +76,6 @@ public class LombokPlugin extends AbstractPlugin {
     private static final String LOMBOK_SINGULAR = "lombok.Singular";
     private static final String LOMBOK_NO_ARGS_CONSTRUCTOR = "lombok.NoArgsConstructor";
     private static final String LOMBOK_ALL_ARGS_CONSTRUCTOR = "lombok.AllArgsConstructor";
-    private final AnnotatePlugin annotatePlugin = new AnnotatePlugin();
 
     @Option(name = "anno", description = "Lombok annotation to add (repeatable). Defaults to @lombok.Data when omitted")
     List<XAnnotation<?>> annotations;
@@ -104,8 +100,7 @@ public class LombokPlugin extends AbstractPlugin {
     Boolean superBuilder;
 
     public LombokPlugin() {
-        registerTextParser(XAnnotation.class, (optionName, text) ->
-            XAnnotationParser.INSTANCE.parse(text.toString()));
+        registerTextParser(XAnnotation.class, AnnotationUtils.xAnnotationTextParser());
     }
 
     /**
@@ -162,18 +157,9 @@ public class LombokPlugin extends AbstractPlugin {
             || cm.ref(Map.class).isAssignableFrom(erasure);
     }
 
-    private static boolean hasAnnotation(JFieldVar field, String fqcn) {
-        for (var annotation : field.annotations()) {
-            if (fqcn.equals(annotation.getAnnotationClass().fullName())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static void addIfAbsent(List<XAnnotation<?>> resolved, String fqcn, String source) {
         if (!containsAnnotation(resolved, fqcn)) {
-            resolved.add(parseAnnotation(source));
+            resolved.add(AnnotationUtils.parseXAnnotation(source));
         }
     }
 
@@ -192,14 +178,6 @@ public class LombokPlugin extends AbstractPlugin {
     private static boolean hasNonObjectSuperclass(JDefinedClass implClass) {
         var superClass = implClass._extends();
         return superClass != null && !Object.class.getName().equals(superClass.fullName());
-    }
-
-    private static XAnnotation<?> parseAnnotation(String source) {
-        try {
-            return XAnnotationParser.INSTANCE.parse(source);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to parse annotation: " + source, e);
-        }
     }
 
     @Override
@@ -226,7 +204,7 @@ public class LombokPlugin extends AbstractPlugin {
             }
 
             var resolved = resolveAnnotations(implClass, superBuilderNames);
-            applyAnnotations(implClass, className, resolved);
+            applyAnnotations(implClass, resolved);
 
             if (buildersEnabled) {
                 annotateSingularOnCollectionFields(implClass);
@@ -257,7 +235,7 @@ public class LombokPlugin extends AbstractPlugin {
     List<XAnnotation<?>> resolveAnnotations(JDefinedClass implClass, Set<String> superBuilderNames) {
         var resolved = new ArrayList<XAnnotation<?>>();
         if (annotations == null || annotations.isEmpty()) {
-            resolved.add(parseAnnotation("@lombok.Data"));
+            resolved.add(AnnotationUtils.parseXAnnotation("@lombok.Data"));
         } else {
             resolved.addAll(annotations);
         }
@@ -282,7 +260,7 @@ public class LombokPlugin extends AbstractPlugin {
 
         if (hasData(resolved) && hasNonObjectSuperclass(implClass)
             && !containsAnnotation(resolved, LOMBOK_EQUALS_AND_HASH_CODE)) {
-            resolved.add(parseAnnotation("@lombok.EqualsAndHashCode(callSuper = true)"));
+            resolved.add(AnnotationUtils.parseXAnnotation("@lombok.EqualsAndHashCode(callSuper = true)"));
         }
         return resolved;
     }
@@ -303,7 +281,7 @@ public class LombokPlugin extends AbstractPlugin {
             if (!isSingularCollectionField(implClass, field)) {
                 continue;
             }
-            if (hasAnnotation(field, LOMBOK_SINGULAR)) {
+            if (AnnotationUtils.hasAnnotation(field, LOMBOK_SINGULAR)) {
                 continue;
             }
 
@@ -316,9 +294,7 @@ public class LombokPlugin extends AbstractPlugin {
         }
     }
 
-    private void applyAnnotations(JDefinedClass implClass, String className, List<XAnnotation<?>> resolved) {
-        var config = new AnnotatePlugin.AddConfig();
-        config.xAnnotations = resolved;
-        annotatePlugin.addAnnotation(implClass, className, List.of(config));
+    private void applyAnnotations(JDefinedClass implClass, List<XAnnotation<?>> resolved) {
+        resolved.forEach(annotation -> AnnotationUtils.applyXAnnotation(implClass, annotation));
     }
 }

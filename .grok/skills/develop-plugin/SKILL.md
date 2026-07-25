@@ -101,6 +101,7 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 |------------------------------------------|------------------------------------------------------------------------|
 | `ModelUtils`                             | Model graph, property parents, remove class from model                 |
 | `OutlineUtils`                           | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext` |
+| `AnnotationUtils`                        | Query/add/remove CodeModel annotations, apply annox `XAnnotation`, type refs in annotation members |
 | `ReflectUtils`                           | Localized reflection helpers                                           |
 | `FieldAccessor` / `DefaultFieldAccessor` | Field access patterns on generated types                               |
 

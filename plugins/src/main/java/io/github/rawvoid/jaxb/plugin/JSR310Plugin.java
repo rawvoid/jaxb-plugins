@@ -23,6 +23,7 @@ import com.sun.tools.xjc.model.CElementPropertyInfo;
 import com.sun.tools.xjc.model.CPropertyInfo;
 import com.sun.tools.xjc.model.CValuePropertyInfo;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.AnnotationUtils;
 import jakarta.xml.bind.annotation.adapters.XmlAdapter;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import org.xml.sax.ErrorHandler;
@@ -173,9 +174,7 @@ public class JSR310Plugin extends AbstractPlugin {
         }
         field.type(newType);
 
-        field.annotations().stream()
-            .filter(anno -> anno.getAnnotationClass().fullName().equals(XmlJavaTypeAdapter.class.getName()))
-            .forEach(field::removeAnnotation);
+        AnnotationUtils.removeAnnotations(field, XmlJavaTypeAdapter.class);
         if (mapping != null && mapping.adapterClass != null) {
             field.annotate(XmlJavaTypeAdapter.class).param("value", mapping.adapterClass);
         } else {

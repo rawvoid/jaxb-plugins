@@ -21,6 +21,7 @@ import com.sun.codemodel.JClass;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.AnnotationUtils;
 import org.xml.sax.ErrorHandler;
 
 import java.time.LocalDate;
@@ -47,13 +48,13 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
     private static final String GENERATED_ANNOTATION_FQCN = "jakarta.annotation.Generated";
 
     @Option(name = "value", description = "Value attribute of @Generated annotation (default: JAXB RI v[BuildID])")
-    private String value;
+    String value;
 
     @Option(name = "comments", description = "Comments attribute of @Generated annotation")
-    private String comments;
+    String comments;
 
     @Option(name = "date", defaultValue = "false", description = "Include generation date in @Generated annotation (default: false)")
-    private Boolean date;
+    Boolean date;
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {
@@ -95,17 +96,16 @@ public class GeneratedAnnoPlugin extends AbstractPlugin {
     }
 
     private void addGeneratedAnnotation(JAnnotatable target, JClass annotationClass, String value, String comments, String date) {
-        var alreadyAnnotated = target.annotations().stream()
-            .anyMatch(a -> a.getAnnotationClass().fullName().equals(GENERATED_ANNOTATION_FQCN));
-        if (!alreadyAnnotated) {
-            var annotationUse = target.annotate(annotationClass);
-            annotationUse.param("value", value);
-            if (date != null && !date.isEmpty()) {
-                annotationUse.param("date", date);
-            }
-            if (comments != null) {
-                annotationUse.param("comments", comments);
-            }
+        if (AnnotationUtils.hasAnnotation(target, GENERATED_ANNOTATION_FQCN)) {
+            return;
+        }
+        var annotationUse = target.annotate(annotationClass);
+        annotationUse.param("value", value);
+        if (date != null && !date.isEmpty()) {
+            annotationUse.param("date", date);
+        }
+        if (comments != null) {
+            annotationUse.param("comments", comments);
         }
     }
 }
