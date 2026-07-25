@@ -16,24 +16,17 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.sun.codemodel.JAnnotationUse;
-import com.sun.codemodel.JClass;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.codemodel.JFieldVar;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.CClassInfo;
 import com.sun.tools.xjc.model.CPropertyInfo;
-import com.sun.tools.xjc.outline.ClassOutline;
-import com.sun.tools.xjc.outline.FieldOutline;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.*;
 import io.github.rawvoid.jaxb.utils.AnnotationUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 
-import java.math.BigInteger;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -45,8 +38,6 @@ import java.util.regex.Pattern;
  */
 @Option(name = "Xvalidation", description = "Add Bean Validation annotations (JSR-380) based on XSD schema constraints")
 public class ValidationPlugin extends AbstractPlugin {
-
-    private static final Logger log = LoggerFactory.getLogger(ValidationPlugin.class);
 
     private static final String API_JAVAX = "javax";
 
@@ -88,15 +79,13 @@ public class ValidationPlugin extends AbstractPlugin {
                     continue;
                 }
 
-                processFieldValidation(outline, classOutline, fieldOutline, prop, fieldVar, constraintPkg, validFqcn);
+                processFieldValidation(outline, prop, fieldVar, constraintPkg, validFqcn);
             }
         }
         return true;
     }
 
     private void processFieldValidation(Outline outline,
-                                        ClassOutline classOutline,
-                                        FieldOutline fieldOutline,
                                         CPropertyInfo prop,
                                         JFieldVar fieldVar,
                                         String constraintPkg,
@@ -150,14 +139,14 @@ public class ValidationPlugin extends AbstractPlugin {
             addAnnotationIfAbsent(outline, fieldVar, constraintPkg + "NotNull");
         }
 
-        if (minOccurs > 0 || (maxOccurs != XSParticle.UNBOUNDED && maxOccurs > 1)) {
+        if (minOccurs > 0 || maxOccurs > 1) {
             var sizeFqcn = constraintPkg + "Size";
             if (!AnnotationUtils.hasAnnotation(fieldVar, sizeFqcn)) {
                 var anno = fieldVar.annotate(outline.getCodeModel().ref(sizeFqcn));
                 if (minOccurs > 0) {
                     anno.param("min", (int) minOccurs);
                 }
-                if (maxOccurs != XSParticle.UNBOUNDED && maxOccurs > 0) {
+                if (maxOccurs > 0) {
                     anno.param("max", (int) maxOccurs);
                 }
             }
@@ -192,29 +181,22 @@ public class ValidationPlugin extends AbstractPlugin {
         var sizeFqcn = constraintPkg + "Size";
         if (!AnnotationUtils.hasAnnotation(fieldVar, sizeFqcn)) {
             if (lenFacet != null && lenFacet.getValue() != null) {
-                try {
-                    var len = Integer.parseInt(lenFacet.getValue().value);
+                var len = parseIntSafely(lenFacet.getValue().value);
+                if (len != null) {
                     var anno = fieldVar.annotate(outline.getCodeModel().ref(sizeFqcn));
                     anno.param("min", len);
                     anno.param("max", len);
-                } catch (NumberFormatException ignored) {
                 }
             } else if (minLenFacet != null || maxLenFacet != null) {
-                var hasMin = minLenFacet != null && minLenFacet.getValue() != null;
-                var hasMax = maxLenFacet != null && maxLenFacet.getValue() != null;
-                if (hasMin || hasMax) {
+                var minVal = minLenFacet != null && minLenFacet.getValue() != null ? parseIntSafely(minLenFacet.getValue().value) : null;
+                var maxVal = maxLenFacet != null && maxLenFacet.getValue() != null ? parseIntSafely(maxLenFacet.getValue().value) : null;
+                if (minVal != null || maxVal != null) {
                     var anno = fieldVar.annotate(outline.getCodeModel().ref(sizeFqcn));
-                    if (hasMin) {
-                        try {
-                            anno.param("min", Integer.parseInt(minLenFacet.getValue().value));
-                        } catch (NumberFormatException ignored) {
-                        }
+                    if (minVal != null) {
+                        anno.param("min", minVal);
                     }
-                    if (hasMax) {
-                        try {
-                            anno.param("max", Integer.parseInt(maxLenFacet.getValue().value));
-                        } catch (NumberFormatException ignored) {
-                        }
+                    if (maxVal != null) {
+                        anno.param("max", maxVal);
                     }
                 }
             }
@@ -260,24 +242,14 @@ public class ValidationPlugin extends AbstractPlugin {
             (fractionDigits != null && fractionDigits.getValue() != null)) {
             var digitsFqcn = constraintPkg + "Digits";
             if (!AnnotationUtils.hasAnnotation(fieldVar, digitsFqcn)) {
-                var total = 0;
-                var fraction = 0;
-                if (totalDigits != null && totalDigits.getValue() != null) {
-                    try {
-                        total = Integer.parseInt(totalDigits.getValue().value);
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
-                if (fractionDigits != null && fractionDigits.getValue() != null) {
-                    try {
-                        fraction = Integer.parseInt(fractionDigits.getValue().value);
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
-                var integerPart = Math.max(0, total - fraction);
+                var total = totalDigits != null && totalDigits.getValue() != null ? parseIntSafely(totalDigits.getValue().value) : null;
+                var fraction = fractionDigits != null && fractionDigits.getValue() != null ? parseIntSafely(fractionDigits.getValue().value) : null;
+                var totalInt = total != null ? total : 0;
+                var fractionInt = fraction != null ? fraction : 0;
+                var integerPart = Math.max(0, totalInt - fractionInt);
                 var anno = fieldVar.annotate(outline.getCodeModel().ref(digitsFqcn));
                 anno.param("integer", integerPart);
-                anno.param("fraction", fraction);
+                anno.param("fraction", fractionInt);
             }
         }
     }
@@ -293,14 +265,14 @@ public class ValidationPlugin extends AbstractPlugin {
             return;
         }
 
-        try {
-            var val = Long.parseLong(rawVal);
+        var val = parseLongSafely(rawVal);
+        if (val != null) {
             var minFqcn = constraintPkg + "Min";
             if (!AnnotationUtils.hasAnnotation(fieldVar, minFqcn)) {
                 var anno = fieldVar.annotate(outline.getCodeModel().ref(minFqcn));
                 anno.param("value", val);
             }
-        } catch (NumberFormatException ex) {
+        } else {
             var decMinFqcn = constraintPkg + "DecimalMin";
             if (!AnnotationUtils.hasAnnotation(fieldVar, decMinFqcn)) {
                 var anno = fieldVar.annotate(outline.getCodeModel().ref(decMinFqcn));
@@ -320,14 +292,14 @@ public class ValidationPlugin extends AbstractPlugin {
             return;
         }
 
-        try {
-            var val = Long.parseLong(rawVal);
+        var val = parseLongSafely(rawVal);
+        if (val != null) {
             var maxFqcn = constraintPkg + "Max";
             if (!AnnotationUtils.hasAnnotation(fieldVar, maxFqcn)) {
                 var anno = fieldVar.annotate(outline.getCodeModel().ref(maxFqcn));
                 anno.param("value", val);
             }
-        } catch (NumberFormatException ex) {
+        } else {
             var decMaxFqcn = constraintPkg + "DecimalMax";
             if (!AnnotationUtils.hasAnnotation(fieldVar, decMaxFqcn)) {
                 var anno = fieldVar.annotate(outline.getCodeModel().ref(decMaxFqcn));
@@ -359,6 +331,28 @@ public class ValidationPlugin extends AbstractPlugin {
             }
         }
         return false;
+    }
+
+    private static Integer parseIntSafely(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static Long parseLongSafely(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private void addAnnotationIfAbsent(Outline outline, JFieldVar fieldVar, String fqcn) {
