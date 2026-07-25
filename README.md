@@ -106,7 +106,7 @@ Generates Bean Validation (JSR-380) constraint annotations (`jakarta.validation.
 
 ---
 
-### Type Parents Plugin (`-Xtype-parents`)
+### Type Parent Plugin (`-Xtype-parent`)
 
 Injects interface implementations (`implements`) and superclasses (`extends`) into generated JAXB classes, with automated `Serializable` support.
 
@@ -119,7 +119,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 #### Quick Start
 
 ```bash
--Xtype-parents \
+-Xtype-parent \
   -serializable=true \
   -interface=.*Request->com.example.BaseRequest \
   -super-class=.*Dto->com.example.AbstractDto
@@ -128,7 +128,7 @@ Injects interface implementations (`implements`) and superclasses (`extends`) in
 #### Command Options
 
 ```bash
--Xtype-parents \
+-Xtype-parent \
   -interface=pattern->InterfaceFQCN \    # Compact interface mapping (repeatable)
   -super-class=pattern->SuperClassFQCN \ # Compact superclass mapping (repeatable)
   -serializable=true \                  # Add implements java.io.Serializable & random serialVersionUID

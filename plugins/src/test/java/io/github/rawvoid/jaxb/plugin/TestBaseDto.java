@@ -17,7 +17,7 @@
 package io.github.rawvoid.jaxb.plugin;
 
 /**
- * Base DTO class for testing TypeParentsPlugin superclass extension.
+ * Base DTO class for testing TypeParentPlugin superclass extension.
  */
 public class TestBaseDto {
     private String baseId;
