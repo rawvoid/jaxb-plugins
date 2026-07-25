@@ -30,6 +30,6 @@ Instructions for AI assistants working in this repository.
 
 ## 5. Communication
 
-- **User Interaction**: Chat responses, implementation plans, design notes, and reviews **MUST match the user's prompt language**.
+- **User Interaction**: Chat responses, implementation plans (`implementation_plan.md`), walkthroughs (`walkthrough.md`), design notes, and reviews **MUST match the user's prompt language** (including all document titles, section headers, and structural prose).
 - **Repository Artifacts**: Commit messages, PR titles/bodies, code comments, and Javadoc **MUST be English only**. Keep identifiers, paths, CLI flags, and API names unchanged.
 - **Efficiency**: State trade-offs concisely; proceed with implementation once direction is clear.
