@@ -106,6 +106,46 @@ Generates Bean Validation (JSR-380) constraint annotations (`jakarta.validation.
 
 ---
 
+### Type Parents Plugin (`-Xtype-parents`)
+
+Injects interface implementations (`implements`) and superclasses (`extends`) into generated JAXB classes, with automated `Serializable` support.
+
+#### Key Features
+
+- **Interface Implementation**: Adds `implements InterfaceFQCN` via pattern matching or compact mapping. Accumulates multiple interfaces without duplicates.
+- **Superclass Extension**: Adds `extends SuperClassFQCN` while preserving pre-existing XSD inheritance structures.
+- **Serializable Shortcut**: Automated `implements java.io.Serializable` and `serialVersionUID = 1L` (customizable via `-serial-version-uid`).
+
+#### Quick Start
+
+```bash
+-Xtype-parents \
+  -serializable=true \
+  -interface=.*Request->com.example.BaseRequest \
+  -super-class=.*Dto->com.example.AbstractDto
+```
+
+#### Command Options
+
+```bash
+-Xtype-parents \
+  -interface=pattern->InterfaceFQCN \    # Compact interface mapping (repeatable)
+  -super-class=pattern->SuperClassFQCN \ # Compact superclass mapping (repeatable)
+  -serializable=true \                  # Add implements java.io.Serializable & serialVersionUID
+  -serial-version-uid=1 \              # Custom serialVersionUID long value (default: 1)
+  -class-name=.*UserType               # Optional regex filter for matching FQCN (repeatable)
+```
+
+| Option | Default | Description |
+|:-------|:--------|:------------|
+| `-interface` | *(none)* | Compact mapping (`pattern->InterfaceFQCN`) for implementing interfaces |
+| `-super-class` | *(none)* | Compact mapping (`pattern->SuperClassFQCN`) for extending superclasses |
+| `-serializable` | `false` | When `true`, injects `Serializable` interface and `serialVersionUID` field |
+| `-serial-version-uid` | `1` | Long value for `serialVersionUID` |
+| `-class-name` | *(all classes)* | Regex matched against fully-qualified class names (repeatable) |
+
+---
+
 ### Annotate Plugin (`-Xannotate`)
 
 Adds, removes, or modifies annotations on generated classes, fields, methods, and package metadata.

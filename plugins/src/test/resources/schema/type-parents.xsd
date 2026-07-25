@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="com.example.typeparents"
+           xmlns:tns="com.example.typeparents"
+           elementFormDefault="qualified">
+
+    <xs:element name="UserRequest" type="tns:UserRequestType"/>
+    <xs:element name="UserResponse" type="tns:UserResponseType"/>
+    <xs:element name="BaseData" type="tns:BaseDataType"/>
+    <xs:element name="ExtendedData" type="tns:ExtendedDataType"/>
+
+    <xs:complexType name="UserRequestType">
+        <xs:sequence>
+            <xs:element name="requestId" type="xs:string"/>
+            <xs:element name="username" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="UserResponseType">
+        <xs:sequence>
+            <xs:element name="responseId" type="xs:string"/>
+            <xs:element name="result" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="BaseDataType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Inherits from BaseDataType via XSD extension -->
+    <xs:complexType name="ExtendedDataType">
+        <xs:complexContent>
+            <xs:extension base="tns:BaseDataType">
+                <xs:sequence>
+                    <xs:element name="extra" type="xs:string"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+</xs:schema>
