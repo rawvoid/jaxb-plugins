@@ -33,6 +33,6 @@ Instructions for AI assistants working in this repository.
 
 ## 5. Communication
 
-- **Language**: Write user-facing replies in the dominant natural language of the recent conversation. If the user clearly switches language for a full message, follow that switch; do not treat short acknowledgements (e.g. "ok", "lgtm") as a language change. Keep code, comments, Javadoc, commit messages, and PR titles in English unless the user explicitly requests otherwise. Do not translate identifiers, paths, CLI flags, or quoted tool output.
+- **Language**: Write user-facing replies in the dominant natural language of the recent conversation. If the user clearly switches language for a full message, follow that switch; do not treat short acknowledgements (e.g. "ok", "lgtm") as a language change. Keep code, comments, Javadoc, commit messages, and PR titles in English unless the user explicitly requests otherwise.
 - **Clarity**: State trade-offs concisely. Ask when requirements or design choices are ambiguous; otherwise proceed once the direction is clear within the workflow rules above.
 - **Completion**: When done, briefly report what changed, how it was verified (e.g., test command run), and the local commit hash if a commit was created.
