@@ -72,6 +72,22 @@
             <version>2.19.2</version>
             <scope>provided</scope>
         </dependency>
+        <!--
+          provided: XJC/user supplies Bean Validation annotations at generation and compile time.
+        -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <version>3.0.2</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.validation</groupId>
+            <artifactId>validation-api</artifactId>
+            <version>2.0.1.Final</version>
+            <scope>provided</scope>
+        </dependency>
+
 
         <!-- test dependencies -->
 
