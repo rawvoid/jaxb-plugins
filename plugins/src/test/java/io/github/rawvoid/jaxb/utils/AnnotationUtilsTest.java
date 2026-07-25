@@ -16,6 +16,7 @@
 
 package io.github.rawvoid.jaxb.utils;
 
+import com.sun.codemodel.JAnnotationClassValue;
 import com.sun.codemodel.JCodeModel;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.codemodel.JMod;
@@ -126,5 +127,43 @@ class AnnotationUtilsTest {
         assertThat(AnnotationUtils.hasAnnotation(field, XmlRootElement.class)).isTrue();
         AnnotationUtils.removeAnnotations(field, XmlRootElement.class.getName());
         assertThat(AnnotationUtils.hasAnnotation(field, XmlRootElement.class)).isFalse();
+    }
+
+    @Test
+    void applyXAnnotationAppendsRepeatableAnnotations() {
+        var first = AnnotationUtils.parseXAnnotation(
+            "@io.github.rawvoid.jaxb.utils.RepeatableMarker(value = \"one\")");
+        var second = AnnotationUtils.parseXAnnotation(
+            "@io.github.rawvoid.jaxb.utils.RepeatableMarker(value = \"two\")");
+
+        AnnotationUtils.applyXAnnotation(type, first);
+        AnnotationUtils.applyXAnnotation(type, second);
+
+        var uses = AnnotationUtils.findAnnotations(type, RepeatableMarker.class);
+        assertThat(uses).hasSize(2);
+        assertThat(uses).extracting(use -> AnnotationUtils.readStringMember(use, "value"))
+            .containsExactlyInAnyOrder("one", "two");
+    }
+
+    @Test
+    void referencesAndReplacesAnnotationClassValues() throws Exception {
+        var codeModel = type.owner();
+        var from = codeModel._class("io.github.rawvoid.jaxb.test.FromType");
+        var to = codeModel._class("io.github.rawvoid.jaxb.test.ToType");
+
+        type.annotate(TypeRefMarker.class).param("value", from);
+
+        assertThat(AnnotationUtils.referencesType(type, from.fullName())).isTrue();
+        assertThat(AnnotationUtils.referencesType(type, to.fullName())).isFalse();
+
+        AnnotationUtils.replaceAnnotationReferences(type, from, to);
+
+        assertThat(AnnotationUtils.referencesType(type, from.fullName())).isFalse();
+        assertThat(AnnotationUtils.referencesType(type, to.fullName())).isTrue();
+
+        var value = AnnotationUtils.findAnnotation(type, TypeRefMarker.class).orElseThrow()
+            .getAnnotationMembers().get("value");
+        assertThat(value).isInstanceOf(JAnnotationClassValue.class);
+        assertThat(((JAnnotationClassValue) value).type().fullName()).isEqualTo(to.fullName());
     }
 }

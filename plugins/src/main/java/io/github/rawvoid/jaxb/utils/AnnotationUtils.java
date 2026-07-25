@@ -17,6 +17,7 @@
 package io.github.rawvoid.jaxb.utils;
 
 import com.sun.codemodel.*;
+import io.github.rawvoid.jaxb.plugin.ClassNameDetector;
 import io.github.rawvoid.jaxb.plugin.TextParser;
 import org.jvnet.jaxb.annox.model.XAnnotation;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
@@ -24,6 +25,7 @@ import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Repeatable;
 import java.lang.reflect.Array;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -33,8 +35,8 @@ import java.util.Optional;
  * Shared helpers for querying and mutating CodeModel annotations on {@link JAnnotatable} elements.
  * <p>
  * Covers existence checks, find/remove by FQCN, applying annox {@link XAnnotation} values,
- * and reading simple string members. Domain-specific defaults (e.g. XmlElementWrapper namespace
- * rules, XmlNs upsert) stay in the plugins.
+ * reading simple string members, and walking annotation members for type references.
+ * Domain-specific defaults (e.g. XmlElementWrapper namespace rules, XmlNs upsert) stay in the plugins.
  * </p>
  *
  * @author Rawvoid
@@ -277,6 +279,36 @@ public final class AnnotationUtils {
         return (optionName, text) -> XAnnotationParser.INSTANCE.parse(text.toString());
     }
 
+    /**
+     * Returns whether any annotation member on {@code annotatable} references
+     * {@code classFullName} as a class value (including nested annotations and arrays).
+     */
+    public static boolean referencesType(JAnnotatable annotatable, String classFullName) {
+        if (annotatable == null || classFullName == null) {
+            return false;
+        }
+        return annotatable.annotations().stream()
+            .anyMatch(annotation -> isRefInAnnotation(annotation, classFullName));
+    }
+
+    /**
+     * Replaces type references inside annotation members on the specified element.
+     *
+     * @param annotatable   the annotated element to update
+     * @param targetType    the type to be replaced
+     * @param newTargetType the replacement type
+     */
+    public static void replaceAnnotationReferences(
+        JAnnotatable annotatable,
+        JDefinedClass targetType,
+        JDefinedClass newTargetType
+    ) {
+        if (annotatable == null) {
+            return;
+        }
+        annotatable.annotations().forEach(annotation -> replaceAnnotationUse(annotation, targetType, newTargetType));
+    }
+
     private static void fillFromAnnotationInstance(JAnnotationUse annotationUse, Annotation anno) {
         for (var method : anno.annotationType().getDeclaredMethods()) {
             try {
@@ -285,6 +317,90 @@ public final class AnnotationUtils {
             } catch (Exception e) {
                 throw new IllegalStateException("Failed to invoke annotation method: " + method.getName(), e);
             }
+        }
+    }
+
+    private static boolean isRefInAnnotation(JAnnotationUse annotation, String classFullName) {
+        if (annotation == null) {
+            return false;
+        }
+        return annotation.getAnnotationMembers().values().stream().anyMatch(value -> switch (value) {
+            case JAnnotationClassValue classValue ->
+                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
+            case JAnnotationArrayMember arrayMember -> isRefInAnnotationArrayMember(arrayMember, classFullName);
+            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
+            default -> false;
+        });
+    }
+
+    private static boolean isRefInAnnotationArrayMember(JAnnotationArrayMember arrayMember, String classFullName) {
+        if (arrayMember == null) {
+            return false;
+        }
+        return arrayMember.annotations2().stream().anyMatch(value -> switch (value) {
+            case JAnnotationClassValue classValue ->
+                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
+            case JAnnotationArrayMember subArrayMember -> isRefInAnnotationArrayMember(subArrayMember, classFullName);
+            case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
+            default -> false;
+        });
+    }
+
+    private static void replaceAnnotationUse(JAnnotationUse annotation, JDefinedClass targetType, JDefinedClass newTargetType) {
+        if (annotation == null) {
+            return;
+        }
+        annotation.getAnnotationMembers().values().forEach(value ->
+            replaceAnnotationValue(value, targetType, newTargetType));
+    }
+
+    private static void replaceAnnotationValue(JAnnotationValue value, JDefinedClass targetType, JDefinedClass newTargetType) {
+        switch (value) {
+            case JAnnotationClassValue classValue -> replaceAnnotationClassValue(classValue, targetType, newTargetType);
+            case JAnnotationArrayMember arrayMember ->
+                arrayMember.annotations2().forEach(item -> replaceAnnotationValue(item, targetType, newTargetType));
+            case JAnnotationUse annotationUse -> replaceAnnotationUse(annotationUse, targetType, newTargetType);
+            default -> {
+            }
+        }
+    }
+
+    /**
+     * Replaces type references for {@code Class} values inside an annotation.
+     * <p>
+     * Since {@link JAnnotationClassValue} internals are not directly accessible,
+     * use reflection to locate the {@link JClass}/{@link JType} field and perform the replacement.
+     * </p>
+     */
+    private static void replaceAnnotationClassValue(
+        JAnnotationClassValue classValue,
+        JDefinedClass targetType,
+        JDefinedClass newTargetType
+    ) {
+        var valueType = classValue.type();
+        if (valueType == null || !ClassNameDetector.detect(valueType.fullName(), targetType.fullName())) {
+            return;
+        }
+        var clazz = classValue.getClass();
+        Field candidateField = null;
+        try {
+            for (var field : clazz.getDeclaredFields()) {
+                if (JClass.class.isAssignableFrom(field.getType()) || JType.class.isAssignableFrom(field.getType())) {
+                    field.setAccessible(true);
+                    var current = field.get(classValue);
+                    if (current instanceof JClass currentClass
+                        && ClassNameDetector.detect(currentClass.fullName(), targetType.fullName())) {
+                        candidateField = field;
+                        break;
+                    }
+                }
+            }
+            if (candidateField == null) {
+                throw new IllegalStateException("Failed to locate annotation class value field for " + valueType.fullName());
+            }
+            candidateField.set(classValue, newTargetType);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Failed to replace annotation type for " + valueType.fullName(), e);
         }
     }
 }
