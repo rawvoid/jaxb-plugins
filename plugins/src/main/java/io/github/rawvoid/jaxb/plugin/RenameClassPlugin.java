@@ -50,6 +50,14 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * generation. Name checks are case-insensitive for short names.
  * </p>
  * <p>
+ * <strong>Mapping pipeline.</strong> {@code -mapping} entries run in declaration order as a
+ * single forward pass. Each rule matches against the <em>current intermediate</em> short name
+ * (not only the original), so multi-step renames work, for example
+ * {@code IATAFooType} → strip {@code Type} → strip {@code IATA} → {@code Foo}.
+ * A rule that would produce a non-identifier is skipped with a warning; later rules still run.
+ * Optional package filters always use the type's owner package.
+ * </p>
+ * <p>
  * <strong>Conflict policy.</strong> Conflicting types keep their original names; non-conflicting
  * renames still apply. Conflicts are reported as warnings (build does not fail). Checks cover:
  * </p>
@@ -380,34 +388,36 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * First matching {@link #mappings} entry wins. The list is non-null and non-empty
-     * when this is called from {@link #postProcessModel}.
+     * Applies every matching {@link #mappings} entry in order as a pipeline. Each rule
+     * matches against the current intermediate short name. The list is non-null and
+     * non-empty when this is called from {@link #postProcessModel}.
      */
     private String mapName(Candidate candidate) {
+        var current = candidate.shortName;
         for (var mapping : mappings) {
-            if (matches(mapping, candidate)) {
-                return mapWith(mapping, candidate);
+            if (!matches(mapping, candidate.packageName, current)) {
+                continue;
             }
+            var next = current.replaceAll(mapping.from.pattern(), mapping.to);
+            if (next.equals(current)) {
+                continue;
+            }
+            if (!JJavaName.isJavaIdentifier(next)) {
+                log.warn(
+                    "Invalid Java class name after mapping: '{}' (from {}); skipping rule",
+                    next,
+                    candidate.fullName
+                );
+                continue;
+            }
+            current = next;
         }
-        return candidate.shortName;
+        return current;
     }
 
-    private static boolean matches(MappingConfig mapping, Candidate candidate) {
-        return (mapping.packageName == null || mapping.packageName.equals(candidate.packageName))
-            && mapping.from.matcher(candidate.shortName).matches();
-    }
-
-    private static String mapWith(MappingConfig mapping, Candidate candidate) {
-        var next = candidate.shortName.replaceAll(mapping.from.pattern(), mapping.to);
-        if (JJavaName.isJavaIdentifier(next)) {
-            return next;
-        }
-        log.warn(
-            "Invalid Java class name after mapping: '{}' (from {}); keeping original name",
-            next,
-            candidate.fullName
-        );
-        return candidate.shortName;
+    private static boolean matches(MappingConfig mapping, String packageName, String shortName) {
+        return (mapping.packageName == null || mapping.packageName.equals(packageName))
+            && mapping.from.matcher(shortName).matches();
     }
 
     private void warn(ErrorHandler errorHandler, Locator locator, String message) {
@@ -425,8 +435,8 @@ public class RenameClassPlugin extends AbstractPlugin {
     /**
      * One class-name mapping: optional package filter, required short-name pattern, target name.
      * <p>
-     * Compact CLI (see {@link Compact}): {@code -mapping=Person->CustomPerson},
-     * {@code -mapping=/(.*)Type/->$1}.
+     * Mappings form an ordered pipeline (see class Javadoc). Compact CLI (see {@link Compact}):
+     * {@code -mapping=Person->CustomPerson}, {@code -mapping=/(.*)Type/->$1}.
      * </p>
      */
     @Compact(formats = {"/{from}/->{to}", "{from}->{to}"})
@@ -440,7 +450,8 @@ public class RenameClassPlugin extends AbstractPlugin {
         String packageName;
 
         /**
-         * Matches the type short name; replacement uses {@link #to} via {@link String#replaceAll}.
+         * Matches the current intermediate short name; replacement uses {@link #to} via
+         * {@link String#replaceAll}.
          */
         @Option(name = "from", required = true, description = "Regular expression matching the short class name")
         Pattern from;

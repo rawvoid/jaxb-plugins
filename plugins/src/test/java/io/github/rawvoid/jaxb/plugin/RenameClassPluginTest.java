@@ -96,6 +96,22 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void appliesMappingsAsPipeline() throws Exception {
+        // IATAWidgetType → strip Type → IATAWidget → strip IATA → Widget
+        var args = List.of(
+            "-Xrename-class",
+            "-mapping=^(.+)Type$->$1",
+            "-mapping=^IATA(.+)$->$1"
+        );
+        var classes = testExecute(args, ".*IATAWidget.*|.*Widget.*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("Widget");
+        assertThat(byName).doesNotContainKey("IATAWidgetType");
+        assertThat(byName).doesNotContainKey("IATAWidget");
+    }
+
+    @Test
     void packageFilterLimitsRename() throws Exception {
         // Default package derived from namespace; wrong package must leave Person untouched.
         var wrongPackage = List.of(

@@ -496,15 +496,19 @@ Renames generated classes, enums, and element classes post-model building with s
 #### Key Features
 
 - Rewrites short class names using regex replacement patterns.
+- Mappings run as an ordered pipeline: each rule sees the intermediate name from previous rules (single forward pass).
 - Safe execution: detects squeezed name collisions and rolls back conflicting renames with build warnings.
 
 #### Quick Start
 
 ```bash
 -Xrename-class \
-  -mapping=/(.*)Type/->$1 \
+  -mapping=^(.+)Type$->$1 \
+  -mapping=^IATA(.+)$->$1 \
   -mapping=Person->CustomPerson
 ```
+
+Example pipeline: `IATAFooType` → strip `Type` → `IATAFoo` → strip `IATA` → `Foo`.
 
 ---
 
