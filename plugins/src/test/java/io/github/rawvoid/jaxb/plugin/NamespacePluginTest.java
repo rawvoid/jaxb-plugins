@@ -115,6 +115,30 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void mapsNamespaceCompactWithWhitespaceAroundSeparators() throws Exception {
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping=" + NS + " -> pkg1 : n1"
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+            assertThat(prefixFor(clazz, NS)).isEqualTo("n1");
+        });
+    }
+
+    @Test
+    void mapsNamespaceCompactEmptyPrefixWithWhitespace() throws Exception {
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping=" + NS + "  ->  pkg1  :  "
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+            assertThat(prefixFor(clazz, NS)).isEmpty();
+        });
+    }
+
+    @Test
     void nsPrefixBasic() throws Exception {
         var args = List.of(
             "-Xnamespace",

@@ -51,7 +51,8 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  * <p>
  * Structured multi-arg form remains supported. Values must not contain the literal separators
  * used in a template (e.g. {@code ->}). For {@code /{name}/->…}, the regex body must not
- * contain an unescaped {@code /}.
+ * contain an unescaped {@code /}. Whitespace around separators is ignored
+ * ({@code a -> b : c} is equivalent to {@code a->b:c}).
  * </p>
  *
  * @author Rawvoid
@@ -65,6 +66,7 @@ public @interface Compact {
      * <p>
      * Placeholders are {@code {optionName}}; text outside braces is a literal separator.
      * Consecutive placeholders require a non-empty separator. Tried in order until one matches.
+     * Surrounding whitespace on each captured value is trimmed.
      * </p>
      *
      * @return compact format templates, e.g. {@code {"/{name}/->{to}", "{input}->{to}"}}

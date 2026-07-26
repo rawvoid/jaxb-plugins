@@ -896,6 +896,8 @@ public abstract class AbstractPlugin extends Plugin {
      * @return placeholder values if {@code text} matches the template; {@code null} otherwise
      */
     private static List<String> trySplitCompactValues(CompiledCompact compiled, String text) {
+        // Whole-arg trim so leading/trailing spaces around the compact value are ignored.
+        text = text.strip();
         var literals = compiled.literals();
         var optionNames = compiled.optionNames();
         var prefix = literals.getFirst();
@@ -921,6 +923,9 @@ public abstract class AbstractPlugin extends Plugin {
                 value = text.substring(cursor, sepAt);
                 cursor = sepAt + nextLiteral.length();
             }
+            // Whitespace around separators attaches to placeholders; strip so
+            // "a -> b : c" matches the same as "a->b:c".
+            value = value.strip();
             // Empty middle placeholders are not a match (keeps more-specific templates from
             // stealing values). Trailing empty is allowed so optional last fields work, e.g.
             // "{ns}->{package}:{prefix}" with "uri->com.example:" → package set, prefix blank.
