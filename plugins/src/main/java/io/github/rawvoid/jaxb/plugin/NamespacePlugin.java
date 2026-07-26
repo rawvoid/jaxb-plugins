@@ -37,10 +37,10 @@ import java.util.regex.Pattern;
 /**
  * JAXB plugin that customizes Java package names and XML namespace prefixes for XML namespaces.
  * <p>
- * Package mappings are applied through injected external bindings and do not depend on
- * command-line order of schema files. Ns-prefix rules are applied on generated {@code @XmlSchema}
- * annotations (including package-filtered multi-namespace rules ported from the former
- * {@code -Xns-prefix} plugin).
+ * Package mappings are applied through injected SCD-based external bindings (one
+ * {@code schemaBindings} per target namespace, safe when a namespace spans many XSD files).
+ * Ns-prefix rules are applied on generated {@code @XmlSchema} annotations (including
+ * package-filtered multi-namespace rules ported from the former {@code -Xns-prefix} plugin).
  * </p>
  * <p>
  * Usage examples:
@@ -85,14 +85,24 @@ public class NamespacePlugin extends AbstractPlugin {
 
     /**
      * Injects external bindings that assign Java packages by XML target namespace.
-     * Bindings use {@code schemaLocation="*"} so they do not depend on when schemas were
-     * registered relative to plugin arguments.
+     * <p>
+     * Bindings use SCD ({@code x-schema::prefix}) so each mapping attaches
+     * {@code schemaBindings} once per target namespace, even when that namespace is
+     * split across many schema documents. {@code schemaLocation="*"} cannot do this:
+     * XJC ignores {@code node} under {@code *} and would inject one binding per document,
+     * which fails with "Multiple schemaBindings are defined for the target namespace".
+     * </p>
+     * <p>
+     * SCD requires extension mode; this method enables it when package mappings are present.
+     * </p>
      */
     private void injectBindings(Options options) {
         var bindings = generateBindings();
         if (bindings == null || bindings.isBlank()) {
             return;
         }
+        // SCD selectors need extension mode; without it XJC reports SCD_NOT_ENABLED as an error.
+        options.compatibilityMode = Options.EXTENSION;
         var inputSource = new InputSource(new StringReader(bindings));
         inputSource.setSystemId(BINDINGS_SYSTEM_ID);
         options.addBindFile(inputSource);
@@ -108,22 +118,44 @@ public class NamespacePlugin extends AbstractPlugin {
             return null;
         }
         var body = new StringBuilder();
+        var index = 0;
         for (var packageMapping : packageMappings) {
-            body.append("""
-                <jaxb:bindings schemaLocation="*" node="/xs:schema[@targetNamespace='%s']">
-                    <jaxb:schemaBindings>
-                      <jaxb:package name="%s"/>
-                    </jaxb:schemaBindings>
-                </jaxb:bindings>
-                """.formatted(packageMapping.namespace, packageMapping.packageName));
+            var ns = packageMapping.namespace == null ? "" : packageMapping.namespace;
+            var pkg = packageMapping.packageName == null ? "" : packageMapping.packageName;
+            if (ns.isEmpty()) {
+                // Empty targetNamespace: SCD empty prefix resolves via default xmlns.
+                body.append("""
+                    <jaxb:bindings scd="x-schema::" xmlns="" if-exists="true">
+                        <jaxb:schemaBindings>
+                          <jaxb:package name="%s"/>
+                        </jaxb:schemaBindings>
+                    </jaxb:bindings>
+                    """.formatted(escapeXml(pkg)));
+            } else {
+                var prefix = "ns" + index++;
+                body.append("""
+                    <jaxb:bindings scd="x-schema::%s" xmlns:%s="%s" if-exists="true">
+                        <jaxb:schemaBindings>
+                          <jaxb:package name="%s"/>
+                        </jaxb:schemaBindings>
+                    </jaxb:bindings>
+                    """.formatted(prefix, prefix, escapeXml(ns), escapeXml(pkg)));
+            }
         }
         return """
             <?xml version="1.0" encoding="UTF-8"?>
             <jaxb:bindings
                 xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
-                xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 version="3.0">
             """ + body + "</jaxb:bindings>";
+    }
+
+    private static String escapeXml(String value) {
+        return value
+            .replace("&", "&amp;")
+            .replace("\"", "&quot;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;");
     }
 
     @Override
@@ -144,7 +176,8 @@ public class NamespacePlugin extends AbstractPlugin {
     }
 
     private void applyPackageMappingXmlns(PackageOutline packageOutline, PackageMappingConfig packageMapping) {
-        var hasPrefix = packageMapping.prefix != null;
+        // Compact form "ns->pkg:" yields an empty prefix string; treat blank as absent.
+        var hasPrefix = packageMapping.prefix != null && !packageMapping.prefix.isBlank();
         var hasXmlNsList = packageMapping.xmlNsConfigs != null && !packageMapping.xmlNsConfigs.isEmpty();
         if (!hasPrefix && !hasXmlNsList) {
             return;
