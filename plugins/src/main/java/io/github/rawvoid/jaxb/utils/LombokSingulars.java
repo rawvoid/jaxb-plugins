@@ -26,8 +26,8 @@ import java.lang.reflect.Method;
  * Thin reflective access to Lombok's {@code lombok.core.handlers.Singulars#autoSingularize}.
  * <p>
  * That class is packaged only inside Lombok's SCL shadow jar (not a normal classpath type).
- * We load it via {@code lombok.launch.Main#getShadowClassLoader()} so singularization stays
- * identical to what annotation processing uses — no local copy of the rules table.
+ * We load it via {@link LombokShadow} so singularization stays identical to what annotation
+ * processing uses — no local copy of the rules table.
  * </p>
  * <p>
  * If Lombok is missing or the reflective bootstrap fails, {@link #autoSingularize(String)}
@@ -66,15 +66,11 @@ public final class LombokSingulars {
     }
 
     /**
-     * Bootstrap: {@code Main.getShadowClassLoader().loadClass("…Singulars").getMethod(…)}.
+     * Bootstrap: {@link LombokShadow} → {@code Singulars.autoSingularize(String)}.
      */
     private static Method resolveAutoSingularize() {
         try {
-            var main = Class.forName("lombok.launch.Main");
-            var getShadow = main.getDeclaredMethod("getShadowClassLoader");
-            getShadow.setAccessible(true);
-            var shadow = (ClassLoader) getShadow.invoke(null);
-            var singulars = shadow.loadClass("lombok.core.handlers.Singulars");
+            var singulars = LombokShadow.loadClass("lombok.core.handlers.Singulars");
             return singulars.getMethod("autoSingularize", String.class);
         } catch (ReflectiveOperationException | LinkageError e) {
             logOnce(

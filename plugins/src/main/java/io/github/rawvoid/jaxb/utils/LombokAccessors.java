@@ -54,7 +54,7 @@ public final class LombokAccessors {
         Method toSetter = null;
         Object dummyAst = null;
         try {
-            var shadow = shadowClassLoader();
+            var shadow = LombokShadow.classLoader();
             var handlerUtil = shadow.loadClass("lombok.core.handlers.HandlerUtil");
             var astClass = shadow.loadClass("lombok.core.AST");
             var annotationValuesClass = shadow.loadClass("lombok.core.AnnotationValues");
@@ -151,13 +151,6 @@ public final class LombokAccessors {
         var useUpperCase = in.length() > 2
             && (Character.isTitleCase(in.charAt(1)) || Character.isUpperCase(in.charAt(1)));
         return (useUpperCase ? Character.toUpperCase(first) : Character.toTitleCase(first)) + in.substring(1);
-    }
-
-    private static ClassLoader shadowClassLoader() throws ReflectiveOperationException {
-        var main = Class.forName("lombok.launch.Main");
-        var getShadow = main.getDeclaredMethod("getShadowClassLoader");
-        getShadow.setAccessible(true);
-        return (ClassLoader) getShadow.invoke(null);
     }
 
     private static void logOnce(String message, Throwable t) {
