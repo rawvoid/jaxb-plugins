@@ -26,6 +26,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LombokAccessorsTest {
 
     @Test
+    void handlerUtilBootstrapSucceeded() {
+        // Module depends on lombok; CI must not silently degrade to fallback naming.
+        assertThat(LombokAccessors.isHandlerUtilAvailable()).isTrue();
+    }
+
+    @Test
     void scalarNames() {
         assertThat(LombokAccessors.toGetterName("id", false)).isEqualTo("getId");
         assertThat(LombokAccessors.toSetterName("id", false)).isEqualTo("setId");

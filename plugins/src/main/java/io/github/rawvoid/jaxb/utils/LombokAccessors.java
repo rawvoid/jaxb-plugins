@@ -84,6 +84,14 @@ public final class LombokAccessors {
     }
 
     /**
+     * Whether {@link #toGetterName}/{@link #toSetterName} will use HandlerUtil (not the local fallback).
+     * False when Lombok shadow bootstrap or dummy AST setup failed.
+     */
+    public static boolean isHandlerUtilAvailable() {
+        return TO_GETTER_NAME != null && TO_SETTER_NAME != null && DUMMY_AST != null;
+    }
+
+    /**
      * Lombok default getter name for {@code fieldName}.
      *
      * @param isBoolean {@code true} only for primitive {@code boolean} (not {@link Boolean})
