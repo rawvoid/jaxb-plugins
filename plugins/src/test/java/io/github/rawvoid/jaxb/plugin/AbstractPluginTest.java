@@ -18,6 +18,7 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
+import com.sun.tools.xjc.Plugin;
 import com.sun.tools.xjc.outline.Outline;
 import org.junit.jupiter.api.Test;
 import org.jvnet.jaxb.annox.model.XAnnotation;
@@ -42,6 +43,48 @@ class AbstractPluginTest {
         var usage = plugin.getUsage();
         assertThat(usage).isNotNull();
         assertThat(usage.contains("-Xtest-plugin")).isTrue();
+    }
+
+    @Test
+    void testRepeatedPluginOptionOnCommandLine() throws BadCommandLineException {
+        var options = new Options();
+        options.parseArguments(new String[]{"-Xremove-getter", "-Xremove-getter", "src/test/resources/schema/remove-getter.xsd"});
+        assertThat(options.activePlugins).hasSize(2);
+        assertThat(options.activePlugins.get(0)).isSameAs(options.activePlugins.get(1));
+    }
+
+    @Test
+    void testRepeatedPluginExecutionInDriver() throws Exception {
+        var runCount = new int[]{0};
+        var testPlugin = new Plugin() {
+            @Override
+            public String getOptionName() {
+                return "Xtest-dup";
+            }
+
+            @Override
+            public String getUsage() {
+                return "  -Xtest-dup : test dup";
+            }
+
+            @Override
+            public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
+                runCount[0]++;
+                return true;
+            }
+        };
+
+        var options = new Options();
+        options.getAllPlugins().add(testPlugin);
+        options.parseArguments(new String[]{"-Xtest-dup", "-Xtest-dup", "src/test/resources/schema/remove-getter.xsd"});
+        assertThat(options.activePlugins).hasSize(2);
+        assertThat(options.activePlugins.get(0)).isSameAs(testPlugin);
+        assertThat(options.activePlugins.get(1)).isSameAs(testPlugin);
+
+        for (Plugin plugin : options.activePlugins) {
+            plugin.run(null, options, null);
+        }
+        assertThat(runCount[0]).isEqualTo(2);
     }
 
     @Test

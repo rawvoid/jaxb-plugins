@@ -226,6 +226,41 @@ public class LombokPlugin extends AbstractPlugin {
     }
 
     /**
+     * Whether this plugin configuration will apply {@code @lombok.Data} to {@code className}.
+     * <p>
+     * True when the class matches {@code -class-name} (or all classes when unset) and either
+     * {@code -anno} is omitted (default {@code @Data}) or an explicit {@code -anno} includes
+     * {@code @lombok.Data}. Used by other plugins (e.g. common-interface) without depending on
+     * {@link #run} order.
+     * </p>
+     */
+    public boolean appliesDataTo(String className) {
+        if (className == null || !matches(className)) {
+            return false;
+        }
+        if (annotations == null || annotations.isEmpty()) {
+            return true;
+        }
+        return annotations.stream()
+            .anyMatch(a -> LOMBOK_DATA.equals(a.getAnnotationClass().getName()));
+    }
+
+    /**
+     * Whether any active {@link LombokPlugin} will apply {@code @Data} to {@code className}.
+     */
+    public static boolean anyActiveAppliesData(Options options, String className) {
+        if (options == null || className == null) {
+            return false;
+        }
+        for (var plugin : options.activePlugins) {
+            if (plugin instanceof LombokPlugin lombokPlugin && lombokPlugin.appliesDataTo(className)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Builds the final class-level annotation list: user or default {@code @Data}, optional builder
      * trio ({@code toBuilder = true}), and optional {@code @EqualsAndHashCode(callSuper = true)}.
      *

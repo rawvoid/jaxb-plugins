@@ -30,5 +30,6 @@ io.github.rawvoid.jaxb.plugin.GeneratedAnnoPlugin
 io.github.rawvoid.jaxb.plugin.JacksonPlugin
 io.github.rawvoid.jaxb.plugin.ValidationPlugin
 io.github.rawvoid.jaxb.plugin.InheritancePlugin
+io.github.rawvoid.jaxb.plugin.CommonInterfacePlugin
 
 

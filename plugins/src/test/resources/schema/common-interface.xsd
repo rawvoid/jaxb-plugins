@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/common-interface"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/common-interface"
+           elementFormDefault="qualified">
+
+    <xs:element name="CreateRequest" type="tns:CreateRequestType"/>
+    <xs:element name="UpdateRequest" type="tns:UpdateRequestType"/>
+    <xs:element name="DeleteRequest" type="tns:DeleteRequestType"/>
+    <xs:element name="CreateResponse" type="tns:CreateResponseType"/>
+    <xs:element name="UpdateResponse" type="tns:UpdateResponseType"/>
+    <xs:element name="IdMismatch" type="tns:IdMismatchType"/>
+    <xs:element name="Unrelated" type="tns:UnrelatedType"/>
+
+    <!-- Shares id, name, tags with UpdateRequestType -->
+    <xs:complexType name="CreateRequestType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="tags" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="UpdateRequestType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="tags" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Only id is common with the other *RequestType types -->
+    <xs:complexType name="DeleteRequestType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="reason" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Shares code, message for multi-group response interface -->
+    <xs:complexType name="CreateResponseType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+            <xs:element name="message" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="UpdateResponseType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+            <xs:element name="message" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Same property name "id" but different type (for mismatch tests) -->
+    <xs:complexType name="IdMismatchType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:int"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="UnrelatedType">
+        <xs:sequence>
+            <xs:element name="foo" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>
