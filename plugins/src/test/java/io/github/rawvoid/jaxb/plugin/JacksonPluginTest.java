@@ -23,9 +23,15 @@ import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * XJC integration tests for {@link JacksonPlugin}.
@@ -38,6 +44,7 @@ class JacksonPluginTest extends AbstractXJCMojoTestCase {
     private static final String ORDER = PKG + ".Order";
     private static final String PERSON_FILTER = "com\\.github\\.rawvoid\\.xjc_plugins\\.jackson\\.Person";
     private static final String ORDER_FILTER = "com\\.github\\.rawvoid\\.xjc_plugins\\.jackson\\.Order";
+    private static final String JACKSON_PLUGIN_FQCN = "io.github.rawvoid.jaxb.plugin.JacksonPlugin";
 
     private final String optionCmd = optionCommand(JacksonPlugin.class);
 
@@ -54,6 +61,40 @@ class JacksonPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testUsage() {
         assertThat(new JacksonPlugin().getUsage()).isNotNull();
+    }
+
+    /**
+     * {@link JacksonPlugin} must load and construct when jackson-annotations is absent.
+     * Regression for class-load hard-links that caused XJC {@code Failure to load a plugin}.
+     */
+    @Test
+    void loadsWithoutJacksonAnnotations() throws Exception {
+        var urls = classpathWithoutJacksonAnnotations();
+        try (var cl = new URLClassLoader(urls, ClassLoader.getPlatformClassLoader())) {
+            assertThatThrownBy(() -> Class.forName(
+                "com.fasterxml.jackson.annotation.JsonInclude", true, cl))
+                .isInstanceOf(ClassNotFoundException.class);
+
+            var pluginClass = Class.forName(JACKSON_PLUGIN_FQCN, true, cl);
+            var plugin = pluginClass.getDeclaredConstructor().newInstance();
+            assertThat(pluginClass.getMethod("getOptionName").invoke(plugin)).isEqualTo("Xjackson");
+        }
+    }
+
+    private static URL[] classpathWithoutJacksonAnnotations() throws Exception {
+        var path = System.getProperty("java.class.path");
+        var urls = new ArrayList<URL>();
+        for (var entry : path.split(File.pathSeparator)) {
+            if (entry.isBlank()) {
+                continue;
+            }
+            var name = Path.of(entry).getFileName().toString();
+            if (name.startsWith("jackson-annotations")) {
+                continue;
+            }
+            urls.add(Path.of(entry).toUri().toURL());
+        }
+        return urls.toArray(URL[]::new);
     }
 
     @Test
