@@ -19,23 +19,23 @@ package io.github.rawvoid.jaxb.utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Resolves Lombok default getter/setter names for a field (no {@code @Accessors}, no project
- * {@code lombok.config}).
+ * Thin reflective access to Lombok's {@code HandlerUtil.toGetterName}/{@code toSetterName}.
  * <p>
- * Prefers Lombok's own capitalization via reflective access to
- * {@code lombok.core.handlers.HandlerUtil} (SCL shadow jar), mirroring
- * {@link LombokSingulars}. Naming rules match {@code HandlerUtil.toGetterName}/{@code toSetterName}
- * under default configuration: {@code boolean} uses {@code is}/{@code set}; other types use
- * {@code get}/{@code set}.
+ * Those APIs live in Lombok's SCL shadow jar (same bootstrap as {@link LombokSingulars}).
+ * They require an {@code AST} for configuration lookup; this class supplies a one-shot dummy
+ * AST so all naming rules stay inside Lombok (defaults only — no project {@code lombok.config}
+ * is loaded for the dummy URI).
  * </p>
  * <p>
- * Does <em>not</em> read user {@code lombok.config} (fluent, prefix, etc.); XJC cannot see the
- * consumer compile module's config. If shadow bootstrap fails, falls back to a BASIC-style
- * capitalization equivalent.
+ * If bootstrap fails, falls back to a minimal {@code get}/{@code is}/{@code set} + title-case
+ * rule so callers still get a name.
  * </p>
  *
  * @author Rawvoid
@@ -45,76 +45,89 @@ public final class LombokAccessors {
     private static final Logger log = LoggerFactory.getLogger(LombokAccessors.class);
     private static volatile boolean failureLogged;
 
-    /**
-     * {@code HandlerUtil.buildAccessorName(String, String, CapitalizationStrategy)} when resolved.
-     */
-    private static final Method BUILD_ACCESSOR_NAME = resolveBuildAccessorName();
-    private static final Object DEFAULT_CAPITALIZATION = resolveDefaultCapitalization();
+    private static final Method TO_GETTER_NAME;
+    private static final Method TO_SETTER_NAME;
+    private static final Object DUMMY_AST;
+
+    static {
+        Method toGetter = null;
+        Method toSetter = null;
+        Object dummyAst = null;
+        try {
+            var shadow = shadowClassLoader();
+            var handlerUtil = shadow.loadClass("lombok.core.handlers.HandlerUtil");
+            var astClass = shadow.loadClass("lombok.core.AST");
+            var annotationValuesClass = shadow.loadClass("lombok.core.AnnotationValues");
+            toGetter = handlerUtil.getMethod(
+                "toGetterName", astClass, annotationValuesClass, CharSequence.class, boolean.class);
+            toSetter = handlerUtil.getMethod(
+                "toSetterName", astClass, annotationValuesClass, CharSequence.class, boolean.class);
+            dummyAst = new DefiningLoader(shadow)
+                .define("lombok.core.XjcDummyAST", DummyAstClassFile.bytes())
+                .getDeclaredConstructor()
+                .newInstance();
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+            logOnce(
+                "Cannot bind lombok.core.handlers.HandlerUtil via ShadowClassLoader; "
+                    + "accessor names use minimal fallback",
+                e
+            );
+        }
+        TO_GETTER_NAME = toGetter;
+        TO_SETTER_NAME = toSetter;
+        DUMMY_AST = dummyAst;
+    }
 
     private LombokAccessors() {
     }
 
     /**
-     * Default Lombok getter name for {@code fieldName}.
+     * Lombok default getter name for {@code fieldName}.
      *
      * @param isBoolean {@code true} only for primitive {@code boolean} (not {@link Boolean})
      */
     public static String toGetterName(String fieldName, boolean isBoolean) {
-        return toAccessorName(fieldName, isBoolean, "is", "get");
+        return invoke(TO_GETTER_NAME, fieldName, isBoolean, true);
     }
 
     /**
-     * Default Lombok setter name for {@code fieldName}.
+     * Lombok default setter name for {@code fieldName}.
      *
      * @param isBoolean {@code true} only for primitive {@code boolean} (not {@link Boolean})
      */
     public static String toSetterName(String fieldName, boolean isBoolean) {
-        return toAccessorName(fieldName, isBoolean, "set", "set");
+        return invoke(TO_SETTER_NAME, fieldName, isBoolean, false);
     }
 
-    /**
-     * Mirrors {@code HandlerUtil.toAccessorName} with {@code accessors == null}, no fluent, no prefix.
-     */
-    private static String toAccessorName(
-        String fieldName,
-        boolean isBoolean,
-        String booleanPrefix,
-        String normalPrefix
-    ) {
+    private static String invoke(Method method, String fieldName, boolean isBoolean, boolean getter) {
         if (fieldName == null || fieldName.isEmpty()) {
             return null;
         }
-        // Field named isRunning (boolean): isRunning / setRunning (HandlerUtil special case).
-        if (isBoolean && fieldName.startsWith("is") && fieldName.length() > 2
-            && !Character.isLowerCase(fieldName.charAt(2))) {
-            return booleanPrefix + fieldName.substring(2);
-        }
-        return buildAccessorName(isBoolean ? booleanPrefix : normalPrefix, fieldName);
-    }
-
-    private static String buildAccessorName(String prefix, String suffix) {
-        if (suffix.isEmpty()) {
-            return prefix;
-        }
-        if (prefix.isEmpty()) {
-            return suffix;
-        }
-        if (BUILD_ACCESSOR_NAME != null && DEFAULT_CAPITALIZATION != null) {
+        if (method != null && DUMMY_AST != null) {
             try {
-                return (String) BUILD_ACCESSOR_NAME.invoke(null, prefix, suffix, DEFAULT_CAPITALIZATION);
+                return (String) method.invoke(null, DUMMY_AST, null, fieldName, isBoolean);
             } catch (InvocationTargetException e) {
-                logOnce("Lombok HandlerUtil.buildAccessorName failed", e.getCause() != null ? e.getCause() : e);
+                logOnce("Lombok HandlerUtil accessor naming failed", e.getCause() != null ? e.getCause() : e);
             } catch (ReflectiveOperationException e) {
-                logOnce("Lombok HandlerUtil.buildAccessorName invoke failed", e);
+                logOnce("Lombok HandlerUtil accessor naming invoke failed", e);
             }
         }
-        return prefix + basicCapitalize(suffix);
+        return fallbackName(fieldName, isBoolean, getter);
     }
 
     /**
-     * Same shape as Lombok {@code CapitalizationStrategy.BASIC}.
+     * Minimal fallback when Lombok is unavailable (mirrors common default bean naming only).
      */
-    static String basicCapitalize(String in) {
+    static String fallbackName(String fieldName, boolean isBoolean, boolean getter) {
+        if (isBoolean && fieldName.startsWith("is") && fieldName.length() > 2
+            && !Character.isLowerCase(fieldName.charAt(2))) {
+            return getter ? fieldName : "set" + fieldName.substring(2);
+        }
+        var prefix = getter ? (isBoolean ? "is" : "get") : "set";
+        return prefix + titleCase(fieldName);
+    }
+
+    private static String titleCase(String in) {
         if (in.isEmpty()) {
             return in;
         }
@@ -122,45 +135,7 @@ public final class LombokAccessors {
         if (!Character.isLowerCase(first)) {
             return in;
         }
-        var useUpperCase = in.length() > 2
-            && (Character.isTitleCase(in.charAt(1)) || Character.isUpperCase(in.charAt(1)));
-        return (useUpperCase ? Character.toUpperCase(first) : Character.toTitleCase(first)) + in.substring(1);
-    }
-
-    private static Method resolveBuildAccessorName() {
-        try {
-            var shadow = shadowClassLoader();
-            if (shadow == null) {
-                return null;
-            }
-            var handlerUtil = shadow.loadClass("lombok.core.handlers.HandlerUtil");
-            var capitalizationStrategy = shadow.loadClass("lombok.core.configuration.CapitalizationStrategy");
-            var method = handlerUtil.getDeclaredMethod(
-                "buildAccessorName", String.class, String.class, capitalizationStrategy);
-            method.setAccessible(true);
-            return method;
-        } catch (ReflectiveOperationException | LinkageError e) {
-            logOnce(
-                "Cannot load lombok.core.handlers.HandlerUtil via ShadowClassLoader; "
-                    + "accessor names use BASIC capitalization fallback",
-                e
-            );
-            return null;
-        }
-    }
-
-    private static Object resolveDefaultCapitalization() {
-        try {
-            var shadow = shadowClassLoader();
-            if (shadow == null) {
-                return null;
-            }
-            var capitalizationStrategy = shadow.loadClass("lombok.core.configuration.CapitalizationStrategy");
-            return capitalizationStrategy.getMethod("defaultValue").invoke(null);
-        } catch (ReflectiveOperationException | LinkageError e) {
-            logOnce("Cannot load CapitalizationStrategy.defaultValue", e);
-            return null;
-        }
+        return Character.toTitleCase(first) + in.substring(1);
     }
 
     private static ClassLoader shadowClassLoader() throws ReflectiveOperationException {
@@ -177,6 +152,191 @@ public final class LombokAccessors {
                     failureLogged = true;
                     log.warn(message, t);
                 }
+            }
+        }
+    }
+
+    /**
+     * Child of the shadow loader so {@code defineClass} can resolve {@code lombok.core.AST}.
+     */
+    private static final class DefiningLoader extends ClassLoader {
+        DefiningLoader(ClassLoader parent) {
+            super(parent);
+        }
+
+        Class<?> define(String name, byte[] bytes) {
+            return defineClass(name, bytes, 0, bytes.length);
+        }
+    }
+
+    /**
+     * Minimal {@code public class lombok.core.XjcDummyAST extends lombok.core.AST} classfile.
+     * Used only so {@code HandlerUtil.toGetterName/toSetterName} can be invoked with defaults.
+     */
+    private static final class DummyAstClassFile {
+        private DummyAstClassFile() {
+        }
+
+        static byte[] bytes() {
+            try {
+                return write();
+            } catch (Exception e) {
+                throw new ExceptionInInitializerError(e);
+            }
+        }
+
+        private static byte[] write() throws Exception {
+            var cp = new ConstantPool();
+            int thisUtf = cp.utf8("lombok/core/XjcDummyAST");
+            int thisClass = cp.cls(thisUtf);
+            int superUtf = cp.utf8("lombok/core/AST");
+            int superClass = cp.cls(superUtf);
+            int initUtf = cp.utf8("<init>");
+            int initDesc = cp.utf8("()V");
+            int superInitDesc = cp.utf8(
+                "(Ljava/lang/String;Ljava/lang/String;Llombok/core/ImportList;Ljava/util/Collection;)V");
+            int superInitNt = cp.nameAndType(initUtf, superInitDesc);
+            int superInitRef = cp.methodref(superClass, superInitNt);
+            int codeUtf = cp.utf8("Code");
+            int fileUtf = cp.utf8("(xjc).java");
+            int fileStr = cp.string(fileUtf);
+            int emptyListUtf = cp.utf8("emptyList");
+            int emptyListDesc = cp.utf8("()Ljava/util/List;");
+            int collectionsUtf = cp.utf8("java/util/Collections");
+            int collectionsClass = cp.cls(collectionsUtf);
+            int emptyListNt = cp.nameAndType(emptyListUtf, emptyListDesc);
+            int emptyListRef = cp.methodref(collectionsClass, emptyListNt);
+            int getAbsUtf = cp.utf8("getAbsoluteFileLocation");
+            int getAbsDesc = cp.utf8("()Ljava/net/URI;");
+            int uriUtf = cp.utf8("java/net/URI");
+            int uriClass = cp.cls(uriUtf);
+            int createUtf = cp.utf8("create");
+            int createDesc = cp.utf8("(Ljava/lang/String;)Ljava/net/URI;");
+            int createNt = cp.nameAndType(createUtf, createDesc);
+            int createRef = cp.methodref(uriClass, createNt);
+            int dummyUriUtf = cp.utf8("file:///xjc-dummy");
+            int dummyUriStr = cp.string(dummyUriUtf);
+            int buildTreeUtf = cp.utf8("buildTree");
+            int buildTreeDesc = cp.utf8(
+                "(Ljava/lang/Object;Llombok/core/AST$Kind;)Llombok/core/LombokNode;");
+
+            var out = new ByteArrayOutputStream();
+            var dos = new DataOutputStream(out);
+            dos.writeInt(0xCAFEBABE);
+            dos.writeShort(0);
+            dos.writeShort(52);
+            cp.writeTo(dos);
+            dos.writeShort(0x0021); // public super
+            dos.writeShort(thisClass);
+            dos.writeShort(superClass);
+            dos.writeShort(0); // interfaces
+            dos.writeShort(0); // fields
+            dos.writeShort(3); // methods
+
+            writeMethod(dos, 0x0001, initUtf, initDesc, codeUtf, code -> {
+                code.writeByte(0x2A); // aload_0
+                code.writeByte(0x12);
+                code.writeByte(fileStr);
+                code.writeByte(0x01); // aconst_null package
+                code.writeByte(0x01); // aconst_null ImportList
+                code.writeByte(0xB8);
+                code.writeShort(emptyListRef);
+                code.writeByte(0xB7);
+                code.writeShort(superInitRef);
+                code.writeByte(0xB1); // return
+            }, 5, 1);
+
+            writeMethod(dos, 0x0001, getAbsUtf, getAbsDesc, codeUtf, code -> {
+                code.writeByte(0x12);
+                code.writeByte(dummyUriStr);
+                code.writeByte(0xB8);
+                code.writeShort(createRef);
+                code.writeByte(0xB0); // areturn
+            }, 1, 1);
+
+            writeMethod(dos, 0x0004, buildTreeUtf, buildTreeDesc, codeUtf, code -> {
+                code.writeByte(0x01);
+                code.writeByte(0xB0);
+            }, 1, 3);
+
+            dos.writeShort(0); // class attributes
+            return out.toByteArray();
+        }
+
+        @FunctionalInterface
+        private interface CodeWriter {
+            void write(DataOutputStream code) throws Exception;
+        }
+
+        private static void writeMethod(
+            DataOutputStream dos,
+            int access,
+            int nameIdx,
+            int descIdx,
+            int codeAttrIdx,
+            CodeWriter body,
+            int maxStack,
+            int maxLocals
+        ) throws Exception {
+            dos.writeShort(access);
+            dos.writeShort(nameIdx);
+            dos.writeShort(descIdx);
+            dos.writeShort(1);
+            var codeBytes = new ByteArrayOutputStream();
+            body.write(new DataOutputStream(codeBytes));
+            var bytecode = codeBytes.toByteArray();
+            dos.writeShort(codeAttrIdx);
+            dos.writeInt(12 + bytecode.length);
+            dos.writeShort(maxStack);
+            dos.writeShort(maxLocals);
+            dos.writeInt(bytecode.length);
+            dos.write(bytecode);
+            dos.writeShort(0);
+            dos.writeShort(0);
+        }
+
+        private static final class ConstantPool {
+            private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            private final DataOutputStream out = new DataOutputStream(buf);
+            private int count = 1;
+
+            int utf8(String s) throws Exception {
+                out.writeByte(1);
+                var b = s.getBytes(StandardCharsets.UTF_8);
+                out.writeShort(b.length);
+                out.write(b);
+                return count++;
+            }
+
+            int cls(int nameIdx) throws Exception {
+                out.writeByte(7);
+                out.writeShort(nameIdx);
+                return count++;
+            }
+
+            int string(int utf8Idx) throws Exception {
+                out.writeByte(8);
+                out.writeShort(utf8Idx);
+                return count++;
+            }
+
+            int nameAndType(int nameIdx, int descIdx) throws Exception {
+                out.writeByte(12);
+                out.writeShort(nameIdx);
+                out.writeShort(descIdx);
+                return count++;
+            }
+
+            int methodref(int clsIdx, int ntIdx) throws Exception {
+                out.writeByte(10);
+                out.writeShort(clsIdx);
+                out.writeShort(ntIdx);
+                return count++;
+            }
+
+            void writeTo(DataOutputStream dos) throws Exception {
+                dos.writeShort(count);
+                dos.write(buf.toByteArray());
             }
         }
     }

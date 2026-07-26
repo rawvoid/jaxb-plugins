@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Names must come from Lombok {@code HandlerUtil} (shadow), not a local reimplementation.
+ */
 class LombokAccessorsTest {
 
     @Test
@@ -49,9 +52,9 @@ class LombokAccessorsTest {
     }
 
     @Test
-    void basicCapitalizeMatchesLombokBasicShape() {
-        assertThat(LombokAccessors.basicCapitalize("id")).isEqualTo("Id");
-        assertThat(LombokAccessors.basicCapitalize("uRL")).isEqualTo("URL");
-        assertThat(LombokAccessors.basicCapitalize("Id")).isEqualTo("Id");
+    void fallbackMatchesMinimalBeanConvention() {
+        assertThat(LombokAccessors.fallbackName("id", false, true)).isEqualTo("getId");
+        assertThat(LombokAccessors.fallbackName("active", true, true)).isEqualTo("isActive");
+        assertThat(LombokAccessors.fallbackName("isRunning", true, false)).isEqualTo("setRunning");
     }
 }
