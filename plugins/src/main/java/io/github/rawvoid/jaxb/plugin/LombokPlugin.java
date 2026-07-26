@@ -39,6 +39,9 @@ import java.util.regex.Pattern;
  * <p><b>Intentional limitations:</b></p>
  * <ul>
  *   <li>Does not generate bytecode; consumers must provide Lombok and annotation processing at compile time.</li>
+ *   <li>By default all XJC getters are removed, including collection getters that lazy-init a live
+ *       {@link List}. Lombok then returns the field as-is (may be {@code null}). Use
+ *       {@code -keep-list-getter} to retain those XJC list getters while still stripping scalar getters.</li>
  *   <li>Builder modes (mutually exclusive):
  *       <ul>
  *         <li>{@code -builder}: smart mix — standalone concrete types get
@@ -86,6 +89,10 @@ public class LombokPlugin extends AbstractPlugin {
     @Option(name = "remove-getter", defaultValue = "true",
         description = "Remove generated getter methods (default: true)")
     Boolean removeGetter;
+
+    @Option(name = "keep-list-getter", defaultValue = "false",
+        description = "When removing getters, keep XJC getters for List/collection properties (lazy-init live list)")
+    Boolean keepListGetter;
 
     @Option(name = "remove-setter", defaultValue = "true",
         description = "Remove generated setter methods (default: true)")
@@ -213,7 +220,8 @@ public class LombokPlugin extends AbstractPlugin {
             OutlineUtils.removePropertyAccessors(
                 classOutline,
                 Boolean.TRUE.equals(removeGetter),
-                Boolean.TRUE.equals(removeSetter));
+                Boolean.TRUE.equals(removeSetter),
+                Boolean.TRUE.equals(keepListGetter));
         }
         return true;
     }
