@@ -354,6 +354,7 @@ Generates Lombok-annotated beans and strips default XJC getters/setters. Replace
 - Replaces getter/setter boilerplate with `@Data`.
 - Supports optional `@Builder` pattern generation.
 - Automatically handles `@EqualsAndHashCode(callSuper = true)` for non-`Object` subclasses.
+- Optional `-keep-list-getter` retains XJC lazy-init live-list getters for collection properties.
 
 #### Quick Start
 
@@ -368,9 +369,14 @@ Generates Lombok-annotated beans and strips default XJC getters/setters. Replace
   -anno=@lombok.Data \                 # Repeatable; defaults to @Data
   -class-name=.*Person \               # Optional class filter
   -remove-getter=true \                # Default: true
+  -keep-list-getter=false \            # Default: false; keep XJC List/collection getters when removing getters
   -remove-setter=true \                # Default: true
   -builder                             # Default: false; adds @Builder + @NoArgsConstructor + @AllArgsConstructor
 ```
+
+By default, stripping getters also removes XJC collection getters that lazy-initialize a live `List`
+(`if (field == null) field = new ArrayList<>()`). Lombok then returns the field as-is (may be `null`).
+Pass `-keep-list-getter` to keep those list getters while still removing scalar getters.
 
 > **Note**: Lombok dependencies must be present on both the XJC classpath (for annotation resolution) and compile classpath.
 

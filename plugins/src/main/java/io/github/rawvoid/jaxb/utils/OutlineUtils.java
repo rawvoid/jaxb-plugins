@@ -49,6 +49,21 @@ public final class OutlineUtils {
     /**
      * Removes XJC-generated property accessors from a class using the property model.
      * <p>
+     * Equivalent to {@link #removePropertyAccessors(ClassOutline, boolean, boolean, boolean)
+     * removePropertyAccessors(classOutline, removeGetters, removeSetters, false)}.
+     * </p>
+     *
+     * @param classOutline  target class outline
+     * @param removeGetters remove property getters when true
+     * @param removeSetters remove property setters when true
+     */
+    public static void removePropertyAccessors(ClassOutline classOutline, boolean removeGetters, boolean removeSetters) {
+        removePropertyAccessors(classOutline, removeGetters, removeSetters, false);
+    }
+
+    /**
+     * Removes XJC-generated property accessors from a class using the property model.
+     * <p>
      * Names follow XJC ({@code prop.getName(true)} seed + {@code get}/{@code is}/{@code set}).
      * Removal also checks arity so unrelated overloads are kept:
      * </p>
@@ -64,12 +79,23 @@ public final class OutlineUtils {
      * {@code isSetX}/{@code unsetX} are not matched. Only
      * {@link ClassOutline#getDeclaredFields() declared} properties are considered.
      * </p>
+     * <p>
+     * When {@code keepCollectionGetters} is true, getters for multi-valued properties
+     * ({@code prop.isCollection()}, typically XJC lazy-init {@code List} accessors) are left in place
+     * even if {@code removeGetters} is true.
+     * </p>
      *
-     * @param classOutline  target class outline
-     * @param removeGetters remove property getters when true
-     * @param removeSetters remove property setters when true
+     * @param classOutline           target class outline
+     * @param removeGetters          remove property getters when true
+     * @param removeSetters          remove property setters when true
+     * @param keepCollectionGetters  when true with {@code removeGetters}, retain collection property getters
      */
-    public static void removePropertyAccessors(ClassOutline classOutline, boolean removeGetters, boolean removeSetters) {
+    public static void removePropertyAccessors(
+        ClassOutline classOutline,
+        boolean removeGetters,
+        boolean removeSetters,
+        boolean keepCollectionGetters
+    ) {
         if (!removeGetters && !removeSetters) {
             return;
         }
@@ -83,7 +109,9 @@ public final class OutlineUtils {
         }
         classOutline.implClass.methods().removeIf(method -> {
             for (var property : properties) {
-                if (removeGetters && isXjcPropertyGetter(method, property)) {
+                if (removeGetters
+                    && isXjcPropertyGetter(method, property)
+                    && !(keepCollectionGetters && property.collection())) {
                     return true;
                 }
                 if (removeSetters && isXjcPropertySetter(method, property)) {

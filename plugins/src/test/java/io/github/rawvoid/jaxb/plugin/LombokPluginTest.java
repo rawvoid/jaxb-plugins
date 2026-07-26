@@ -122,6 +122,27 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void testKeepListGetterPreservesLazyCollectionAccessors() throws Exception {
+        var args = List.of("-Xlombok", "-keep-list-getter");
+        testExecute(args, PERSON, (source, clazz) -> {
+            assertThat(source).contains("@Data");
+            // XJC live-list getters kept (lazy ArrayList init).
+            assertThat(source).contains("getNicknames()");
+            assertThat(source).contains("getTag()");
+            assertThat(source).contains("new ArrayList");
+            assertThat(source).contains("if (nicknames == null)");
+            assertThat(source).contains("if (tag == null)");
+            // Scalar property getters still stripped for Lombok.
+            assertThat(source).doesNotContain("getName()");
+            assertThat(source).doesNotContain("getAge()");
+            assertThat(source).doesNotContain("isActive()");
+            // Compiled class still has accessors (XJC list + Lombok scalars).
+            assertThat(hasGetter(clazz)).isTrue();
+            assertThat(hasSetter(clazz)).isTrue();
+        });
+    }
+
+    @Test
     void testBuilderOnStandaloneType() throws Exception {
         // Person: superclass Object, no generated subclasses → official @Builder(toBuilder = true).
         var args = List.of("-Xlombok", "-builder");
