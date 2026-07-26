@@ -66,7 +66,9 @@ public final class LombokAccessors {
                 .define("lombok.core.XjcDummyAST", DummyAstClassFile.bytes())
                 .getDeclaredConstructor()
                 .newInstance();
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+        } catch (Exception | LinkageError e) {
+            // Catch Exception (not only ReflectiveOperationException) so DummyAstClassFile
+            // generation failures fall back instead of failing class initialization.
             logOnce(
                 "Cannot bind lombok.core.handlers.HandlerUtil via ShadowClassLoader; "
                     + "accessor names use minimal fallback",
@@ -177,12 +179,11 @@ public final class LombokAccessors {
         private DummyAstClassFile() {
         }
 
-        static byte[] bytes() {
-            try {
-                return write();
-            } catch (Exception e) {
-                throw new ExceptionInInitializerError(e);
-            }
+        /**
+         * @throws Exception on classfile assembly failure (caller falls back; do not wrap as Error)
+         */
+        static byte[] bytes() throws Exception {
+            return write();
         }
 
         private static byte[] write() throws Exception {
