@@ -878,11 +878,7 @@ public abstract class AbstractPlugin extends Plugin {
                 var nestedOptionName = compiled.optionNames().get(i);
                 var field = compiled.fieldsByOptionName().get(nestedOptionName);
                 var option = field.getAnnotation(Option.class);
-                var parser = getParser(option, field.getType());
-                if (parser == null) {
-                    throw newExceptionForNoParser(option, field.getType());
-                }
-                setFieldValue(instance, field, parser.parse(option.name(), values.get(i)));
+                setCompactFieldValue(instance, field, option, values.get(i));
             }
             return instance;
         }
@@ -890,6 +886,31 @@ public abstract class AbstractPlugin extends Plugin {
         throw new BadCommandLineException(
             "Invalid compact value for option '-%s': expected format '%s', got '%s'"
                 .formatted(optionName, expected, text));
+    }
+
+    /**
+     * Sets one compact placeholder onto a nested option field. Collection fields receive a
+     * single-element collection (compact form cannot express multiple values for one placeholder).
+     */
+    private void setCompactFieldValue(Object instance, Field field, Option option, String textValue)
+        throws Exception {
+        var fieldType = field.getType();
+        if (Collection.class.isAssignableFrom(fieldType)) {
+            var elementType = getCollectionElementType(field);
+            var parser = getParser(option, elementType);
+            if (parser == null) {
+                throw newExceptionForNoParser(option, elementType);
+            }
+            var collection = newCollectionInstance(fieldType);
+            collection.add(parser.parse(option.name(), textValue));
+            setFieldValue(instance, field, collection);
+            return;
+        }
+        var parser = getParser(option, fieldType);
+        if (parser == null) {
+            throw newExceptionForNoParser(option, fieldType);
+        }
+        setFieldValue(instance, field, parser.parse(option.name(), textValue));
     }
 
     /**

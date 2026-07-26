@@ -53,6 +53,8 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  * used in a template (e.g. {@code ->}). For {@code /{name}/->…}, the regex body must not
  * contain an unescaped {@code /}. Whitespace around separators is ignored
  * ({@code a -> b : c} is equivalent to {@code a->b:c}).
+ * A placeholder bound to a collection field receives a single-element collection (compact form
+ * cannot list multiple values for one placeholder; use the structured form for that).
  * </p>
  *
  * @author Rawvoid

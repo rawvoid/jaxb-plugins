@@ -46,7 +46,14 @@ import java.util.regex.Pattern;
  * emits Java interfaces declaring their accessors. Matching classes then
  * {@code implements} those interfaces. Fields and XML bindings are left untouched.
  *
- * <p>CLI example (multiple groups):</p>
+ * <p>CLI example (compact groups):</p>
+ * <pre>{@code
+ * -Xcommon-interface \
+ *   -group=.*Request->com.example.CommonRequest \
+ *   -group=.*Response->com.example.CommonResponse
+ * }</pre>
+ *
+ * <p>CLI example (structured groups; needed when {@code -fields} or multiple {@code -class} patterns):</p>
  * <pre>{@code
  * -Xcommon-interface \
  *   -group \
@@ -60,9 +67,11 @@ import java.util.regex.Pattern;
  *
  * <p><b>Rules (per group):</b></p>
  * <ul>
- *   <li>{@code -class} (required, repeatable within a group): regex against generated class FQCN.</li>
+ *   <li>{@code -group} accepts compact {@code pattern->InterfaceFqcn} or the structured form below.</li>
+ *   <li>{@code -class} (required, repeatable within a structured group): regex against generated class FQCN.
+ *       Compact form supplies a single pattern.</li>
  *   <li>{@code -interface} (required): FQCN of the interface to generate for this group.</li>
- *   <li>{@code -fields} (optional): comma-separated Java property names; omit for full
+ *   <li>{@code -fields} (optional, structured form only): comma-separated Java property names; omit for full
  *       intersection of matching classes.</li>
  *   <li>Property discovery uses the field model ({@code FieldOutline}), not whether XJC
  *       accessors are still present in source — so it works after {@code -Xlombok} strips methods.</li>
@@ -91,6 +100,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
     /**
      * One interface generation unit: class selection, target interface FQCN, optional field filter.
      */
+    @Compact(formats = {"{class}->{interface}"})
     public static class GroupConfig {
 
         @Option(name = "class", required = true, placeholder = "regex",
