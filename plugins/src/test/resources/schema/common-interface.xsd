@@ -23,6 +23,8 @@
     <xs:element name="CreateRequest" type="tns:CreateRequestType"/>
     <xs:element name="UpdateRequest" type="tns:UpdateRequestType"/>
     <xs:element name="DeleteRequest" type="tns:DeleteRequestType"/>
+    <xs:element name="CreateResponse" type="tns:CreateResponseType"/>
+    <xs:element name="UpdateResponse" type="tns:UpdateResponseType"/>
     <xs:element name="IdMismatch" type="tns:IdMismatchType"/>
     <xs:element name="Unrelated" type="tns:UnrelatedType"/>
 
@@ -48,6 +50,21 @@
         <xs:sequence>
             <xs:element name="id" type="xs:string"/>
             <xs:element name="reason" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Shares code, message for multi-group response interface -->
+    <xs:complexType name="CreateResponseType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+            <xs:element name="message" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="UpdateResponseType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+            <xs:element name="message" type="xs:string"/>
         </xs:sequence>
     </xs:complexType>
 

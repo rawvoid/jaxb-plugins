@@ -39,66 +39,107 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Detects common bean properties across a user-selected set of generated classes and
- * emits a Java interface declaring their accessors. Matching classes then
- * {@code implements} that interface. Fields and XML bindings are left untouched.
+ * Detects common bean properties across user-selected sets of generated classes and
+ * emits Java interfaces declaring their accessors. Matching classes then
+ * {@code implements} those interfaces. Fields and XML bindings are left untouched.
  *
- * <p>CLI example:</p>
+ * <p>CLI example (multiple groups):</p>
  * <pre>{@code
  * -Xcommon-interface \
+ *   -group \
  *   -class=.*Request \
  *   -interface=com.example.CommonRequest \
- *   -fields=id,timestamp
+ *   -fields=id,timestamp \
+ *   -group \
+ *   -class=.*Response \
+ *   -interface=com.example.CommonResponse
  * }</pre>
  *
- * <p><b>Rules:</b></p>
+ * <p><b>Rules (per group):</b></p>
  * <ul>
- *   <li>{@code -class} (required, repeatable): regex against generated class FQCN.</li>
- *   <li>{@code -interface} (required): FQCN of the interface to generate.</li>
+ *   <li>{@code -class} (required, repeatable within a group): regex against generated class FQCN.</li>
+ *   <li>{@code -interface} (required): FQCN of the interface to generate for this group.</li>
  *   <li>{@code -fields} (optional): comma-separated Java property names; omit for full
  *       intersection of matching classes.</li>
  *   <li>Getter is always declared when a property is common. Setter is declared only when
  *       every participating class has a one-argument setter with the same parameter type
  *       (collection properties usually have no setter under stock XJC).</li>
- *   <li>Zero class matches → error. Empty common property set → warning, no generation.</li>
+ *   <li>Zero class matches → error. Empty common property set → warning, skip that group.</li>
+ *   <li>Groups are independent; one class may implement several generated interfaces.</li>
  * </ul>
  *
  * @author Rawvoid
  */
-@Option(name = "Xcommon-interface", description = "Generate an interface from common property accessors and implement it on matching classes")
+@Option(name = "Xcommon-interface", description = "Generate interfaces from common property accessors and implement them on matching classes")
 public class CommonInterfacePlugin extends AbstractPlugin {
 
-    @Option(name = "class", required = true, placeholder = "regex",
-        description = "Regex matching fully-qualified generated class names (repeatable)")
-    List<Pattern> classPatterns;
+    @Option(name = "group", required = true,
+        description = "Interface generation group (repeatable; restatable group marker separates items)")
+    List<GroupConfig> groups;
 
-    @Option(name = "interface", required = true, placeholder = "FQCN",
-        description = "Fully-qualified name of the interface to generate")
-    String interfaceName;
+    /**
+     * One interface generation unit: class selection, target interface FQCN, optional field filter.
+     */
+    public static class GroupConfig {
 
-    @Option(name = "fields", placeholder = "a,b,c",
-        description = "Optional comma-separated Java property names to consider (default: full intersection)")
-    String fields;
+        @Option(name = "class", required = true, placeholder = "regex",
+            description = "Regex matching fully-qualified generated class names (repeatable within the group)")
+        List<Pattern> classPatterns;
+
+        @Option(name = "interface", required = true, placeholder = "FQCN",
+            description = "Fully-qualified name of the interface to generate")
+        String interfaceName;
+
+        @Option(name = "fields", placeholder = "a,b,c",
+            description = "Optional comma-separated Java property names to consider (default: full intersection)")
+        String fields;
+    }
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
-        var ifaceFqcn = interfaceName == null ? "" : interfaceName.trim();
+        if (groups == null || groups.isEmpty()) {
+            error(errorHandler, "At least one -group is required");
+            return false;
+        }
+
+        var ok = true;
+        var generatedInterfaces = new LinkedHashSet<String>();
+        for (var group : groups) {
+            if (!processGroup(outline, group, generatedInterfaces, errorHandler)) {
+                ok = false;
+            }
+        }
+        return ok;
+    }
+
+    private boolean processGroup(
+        Outline outline,
+        GroupConfig group,
+        Set<String> generatedInterfaces,
+        ErrorHandler errorHandler
+    ) throws SAXException {
+        var ifaceFqcn = group.interfaceName == null ? "" : group.interfaceName.trim();
         if (ifaceFqcn.isEmpty()) {
             error(errorHandler, "Option -interface is required and must be a non-empty FQCN");
             return false;
         }
-
-        var matched = selectClasses(outline);
-        if (matched.isEmpty()) {
-            error(errorHandler, "No generated classes matched -class pattern(s): " + patternSummary());
+        if (!generatedInterfaces.add(ifaceFqcn)) {
+            error(errorHandler, "Duplicate -interface '%s' across -group entries".formatted(ifaceFqcn));
             return false;
         }
 
-        var fieldFilter = parseFieldFilter(fields);
+        var matched = selectClasses(outline, group.classPatterns);
+        if (matched.isEmpty()) {
+            error(errorHandler, "No generated classes matched -class pattern(s): "
+                + patternSummary(group.classPatterns));
+            return false;
+        }
+
+        var fieldFilter = parseFieldFilter(group.fields);
         var common = intersectProperties(matched, fieldFilter, errorHandler);
         if (common.isEmpty()) {
             warn(errorHandler, "No common properties for %d class(es) matching %s; interface '%s' not generated"
-                .formatted(matched.size(), patternSummary(), ifaceFqcn));
+                .formatted(matched.size(), patternSummary(group.classPatterns), ifaceFqcn));
             return true;
         }
 
@@ -127,8 +168,11 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         return true;
     }
 
-    private List<ClassOutline> selectClasses(Outline outline) {
+    private static List<ClassOutline> selectClasses(Outline outline, List<Pattern> classPatterns) {
         var result = new ArrayList<ClassOutline>();
+        if (classPatterns == null || classPatterns.isEmpty()) {
+            return result;
+        }
         for (var classOutline : outline.getClasses()) {
             var fqcn = classOutline.implClass.fullName();
             for (var pattern : classPatterns) {
@@ -285,7 +329,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         return set.isEmpty() ? null : set;
     }
 
-    private String patternSummary() {
+    private static String patternSummary(List<Pattern> classPatterns) {
         if (classPatterns == null || classPatterns.isEmpty()) {
             return "[]";
         }

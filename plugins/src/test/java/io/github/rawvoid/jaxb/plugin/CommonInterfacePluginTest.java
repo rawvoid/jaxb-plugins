@@ -38,12 +38,16 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     private static final String CREATE = PKG + ".CreateRequestType";
     private static final String UPDATE = PKG + ".UpdateRequestType";
     private static final String DELETE = PKG + ".DeleteRequestType";
+    private static final String CREATE_RESPONSE = PKG + ".CreateResponseType";
     private static final String UNRELATED = PKG + ".UnrelatedType";
     private static final String IFACE = PKG + ".CommonRequest";
+    private static final String IFACE_RESPONSE = PKG + ".CommonResponse";
     private static final String CREATE_FILTER = escapeDots(CREATE);
     private static final String UPDATE_FILTER = escapeDots(UPDATE);
     private static final String DELETE_FILTER = escapeDots(DELETE);
+    private static final String CREATE_RESPONSE_FILTER = escapeDots(CREATE_RESPONSE);
     private static final String IFACE_FILTER = escapeDots(IFACE);
+    private static final String IFACE_RESPONSE_FILTER = escapeDots(IFACE_RESPONSE);
 
     private final String optionCmd = optionCommand(CommonInterfacePlugin.class);
 
@@ -64,6 +68,7 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     @Test
     void testUsage() {
         var usage = new CommonInterfacePlugin().getUsage();
+        assertThat(usage).contains("-group");
         assertThat(usage).contains("-class");
         assertThat(usage).contains("-interface");
         assertThat(usage).contains("-fields");
@@ -73,6 +78,7 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     void generatesInterfaceWithGettersAndSettersForScalarCommonProps() throws Exception {
         var args = List.of(
             optionCmd,
+            "-group",
             "-class=.*RequestType",
             "-interface=" + IFACE
         );
@@ -96,6 +102,7 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     void collectionCommonPropertyHasGetterOnly() throws Exception {
         var args = List.of(
             optionCmd,
+            "-group",
             "-class=.*CreateRequestType",
             "-class=.*UpdateRequestType",
             "-interface=" + IFACE
@@ -117,6 +124,7 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     void fieldsOptionRestrictsInterfaceMethods() throws Exception {
         var args = List.of(
             optionCmd,
+            "-group",
             "-class=.*CreateRequestType",
             "-class=.*UpdateRequestType",
             "-interface=" + IFACE,
@@ -129,10 +137,47 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void multipleGroupsGenerateIndependentInterfaces() throws Exception {
+        var args = List.of(
+            optionCmd,
+            "-group",
+            "-class=.*CreateRequestType",
+            "-class=.*UpdateRequestType",
+            "-interface=" + IFACE,
+            "-fields=id",
+            "-group",
+            "-class=.*ResponseType",
+            "-interface=" + IFACE_RESPONSE
+        );
+        var classes = testExecute(args);
+        var names = classes.stream().map(Class::getName).toList();
+        assertThat(names).contains(IFACE, IFACE_RESPONSE, CREATE, CREATE_RESPONSE);
+
+        testExecute(args, IFACE_FILTER, (source, clazz) -> {
+            assertThat(clazz.isInterface()).isTrue();
+            assertThat(methodNames(clazz)).containsExactlyInAnyOrder("getId", "setId");
+        });
+        testExecute(args, IFACE_RESPONSE_FILTER, (source, clazz) -> {
+            assertThat(clazz.isInterface()).isTrue();
+            assertThat(methodNames(clazz)).containsExactlyInAnyOrder(
+                "getCode", "setCode", "getMessage", "setMessage");
+        });
+        testExecute(args, CREATE_FILTER, (source, clazz) -> {
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE));
+            assertThat(clazz.getInterfaces()).noneMatch(i -> i.getName().equals(IFACE_RESPONSE));
+        });
+        testExecute(args, CREATE_RESPONSE_FILTER, (source, clazz) -> {
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE_RESPONSE));
+            assertThat(clazz.getInterfaces()).noneMatch(i -> i.getName().equals(IFACE));
+        });
+    }
+
+    @Test
     void typeMismatchExcludesPropertyFromInterface() throws Exception {
         // CreateRequestType.id is String; IdMismatchType.id is int/Integer — not common.
         var args = List.of(
             optionCmd,
+            "-group",
             "-class=.*CreateRequestType",
             "-class=.*IdMismatchType",
             "-interface=" + IFACE
@@ -148,6 +193,7 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     void emptyIntersectionDoesNotGenerateInterface() throws Exception {
         var args = List.of(
             optionCmd,
+            "-group",
             "-class=.*CreateRequestType",
             "-class=.*UnrelatedType",
             "-interface=" + IFACE
@@ -161,7 +207,24 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     void noMatchingClassIsError() {
         var args = List.of(
             optionCmd,
+            "-group",
             "-class=.*DoesNotExist",
+            "-interface=" + IFACE
+        );
+        assertThatThrownBy(() -> testExecute(args))
+            .isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void duplicateInterfaceAcrossGroupsIsError() {
+        var args = List.of(
+            optionCmd,
+            "-group",
+            "-class=.*CreateRequestType",
+            "-class=.*UpdateRequestType",
+            "-interface=" + IFACE,
+            "-group",
+            "-class=.*ResponseType",
             "-interface=" + IFACE
         );
         assertThatThrownBy(() -> testExecute(args))
