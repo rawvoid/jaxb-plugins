@@ -16,8 +16,6 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
@@ -29,6 +27,7 @@ import org.xml.sax.SAXException;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -38,12 +37,17 @@ import java.util.regex.Pattern;
  * {@code @JsonInclude(NON_NULL)} and {@code @JsonIgnoreProperties(ignoreUnknown = true)}
  * when those annotations are not already present.</p>
  *
+ * <p>Jackson types are referenced only by FQCN so this plugin can be loaded by XJC SPI
+ * without {@code jackson-annotations} on the classpath. That dependency is required only
+ * when {@code -Xjackson} is enabled (and when compiling generated sources that use the
+ * annotations).</p>
+ *
  * <p><b>Intentional limitations (MVP):</b></p>
  * <ul>
  *   <li>Class-level annotations only; no field {@code @JsonProperty} from XML names.</li>
  *   <li>No {@code @JsonFormat}, {@code @JsonPropertyOrder}, {@code @JsonRootName}, or type info.</li>
  *   <li>Does not configure {@code ObjectMapper}; consumers must provide
- *       {@code jackson-annotations} at generation and compile time.</li>
+ *       {@code jackson-annotations} at generation and compile time when this plugin is used.</li>
  *   <li>Built-in {@code @JsonInclude} / {@code @JsonIgnoreProperties} are skipped when already
  *       present (does not replace). User {@code -anno} values use normal non-repeatable replace.</li>
  * </ul>
@@ -54,6 +58,23 @@ import java.util.regex.Pattern;
 public class JacksonPlugin extends AbstractPlugin {
 
     private static final String INCLUDE_NONE = "none";
+    private static final String JSON_INCLUDE = "com.fasterxml.jackson.annotation.JsonInclude";
+    private static final String JSON_INCLUDE_INCLUDE = "com.fasterxml.jackson.annotation.JsonInclude.Include";
+    private static final String JSON_IGNORE_PROPERTIES = "com.fasterxml.jackson.annotation.JsonIgnoreProperties";
+
+    /**
+     * Known {@code JsonInclude.Include} names (Jackson 2.x). Kept as strings so this class
+     * does not hard-link jackson-annotations at SPI load time.
+     */
+    private static final Set<String> KNOWN_INCLUDES = Set.of(
+        "ALWAYS",
+        "NON_NULL",
+        "NON_ABSENT",
+        "NON_EMPTY",
+        "NON_DEFAULT",
+        "CUSTOM",
+        "USE_DEFAULTS"
+    );
 
     @Option(name = "include", defaultValue = "NON_NULL",
         description = "JsonInclude.Include value, or 'none' to skip @JsonInclude (default: NON_NULL)")
@@ -75,23 +96,19 @@ public class JacksonPlugin extends AbstractPlugin {
 
     @Override
     protected void postParseArgument(Options opt, int consumedArgs) throws Exception {
+        requireJacksonAnnotations();
         if (include == null || include.isBlank()) {
             include = "NON_NULL";
         }
-        if (!INCLUDE_NONE.equalsIgnoreCase(include.trim())) {
-            try {
-                parseInclude(include);
-            } catch (IllegalArgumentException ex) {
-                throw new BadCommandLineException(
-                    "Invalid -include value '%s'; expected a JsonInclude.Include name or 'none'".formatted(include),
-                    ex);
-            }
+        if (!INCLUDE_NONE.equalsIgnoreCase(include.trim()) && !isKnownInclude(include)) {
+            throw new BadCommandLineException(
+                "Invalid -include value '%s'; expected a JsonInclude.Include name or 'none'".formatted(include));
         }
     }
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
-        var includeValue = resolveInclude();
+        var includeName = resolveIncludeName();
         var addIgnoreUnknown = !Boolean.FALSE.equals(ignoreUnknown);
 
         for (var classOutline : outline.getClasses()) {
@@ -99,18 +116,20 @@ public class JacksonPlugin extends AbstractPlugin {
             if (!matches(implClass.fullName())) {
                 continue;
             }
-            applyBuiltIns(implClass, includeValue, addIgnoreUnknown);
+            applyBuiltIns(implClass, includeName, addIgnoreUnknown);
             applyExtraAnnotations(implClass);
         }
         return true;
     }
 
-    private void applyBuiltIns(JDefinedClass implClass, JsonInclude.Include includeValue, boolean addIgnoreUnknown) {
-        if (includeValue != null && !AnnotationUtils.hasAnnotation(implClass, JsonInclude.class)) {
-            implClass.annotate(JsonInclude.class).param("value", includeValue);
+    private void applyBuiltIns(JDefinedClass implClass, String includeName, boolean addIgnoreUnknown) {
+        var cm = implClass.owner();
+        if (includeName != null && !AnnotationUtils.hasAnnotation(implClass, JSON_INCLUDE)) {
+            implClass.annotate(cm.ref(JSON_INCLUDE))
+                .param("value", cm.ref(JSON_INCLUDE_INCLUDE).staticRef(includeName));
         }
-        if (addIgnoreUnknown && !AnnotationUtils.hasAnnotation(implClass, JsonIgnoreProperties.class)) {
-            implClass.annotate(JsonIgnoreProperties.class).param("ignoreUnknown", true);
+        if (addIgnoreUnknown && !AnnotationUtils.hasAnnotation(implClass, JSON_IGNORE_PROPERTIES)) {
+            implClass.annotate(cm.ref(JSON_IGNORE_PROPERTIES)).param("ignoreUnknown", true);
         }
     }
 
@@ -129,16 +148,34 @@ public class JacksonPlugin extends AbstractPlugin {
     }
 
     /**
-     * @return resolved include, or {@code null} when {@code -include=none}
+     * @return resolved include enum name, or {@code null} when {@code -include=none}
      */
-    private JsonInclude.Include resolveInclude() {
+    private String resolveIncludeName() {
         if (include == null || INCLUDE_NONE.equalsIgnoreCase(include.trim())) {
             return null;
         }
-        return parseInclude(include);
+        return include.trim().toUpperCase(Locale.ROOT);
     }
 
-    private static JsonInclude.Include parseInclude(String raw) {
-        return JsonInclude.Include.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+    private static boolean isKnownInclude(String raw) {
+        return KNOWN_INCLUDES.contains(raw.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private static void requireJacksonAnnotations() throws BadCommandLineException {
+        if (isPresent(JSON_INCLUDE) && isPresent(JSON_IGNORE_PROPERTIES)) {
+            return;
+        }
+        throw new BadCommandLineException(
+            "Jackson annotations not found on the XJC classpath. "
+                + "Add com.fasterxml.jackson.core:jackson-annotations when using -Xjackson.");
+    }
+
+    private static boolean isPresent(String fqcn) {
+        try {
+            Class.forName(fqcn, false, JacksonPlugin.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError ex) {
+            return false;
+        }
     }
 }
