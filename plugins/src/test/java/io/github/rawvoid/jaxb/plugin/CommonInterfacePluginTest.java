@@ -231,6 +231,51 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
             .isInstanceOf(Exception.class);
     }
 
+    @Test
+    void lombokAfterCommonInterfaceStillImplementsAndCompiles() throws Exception {
+        assertLombokCombo(List.of(
+            optionCmd,
+            "-group",
+            "-class=.*CreateRequestType",
+            "-class=.*UpdateRequestType",
+            "-interface=" + IFACE,
+            "-Xlombok"
+        ));
+    }
+
+    @Test
+    void lombokBeforeCommonInterfaceStillImplementsAndCompiles() throws Exception {
+        assertLombokCombo(List.of(
+            "-Xlombok",
+            optionCmd,
+            "-group",
+            "-class=.*CreateRequestType",
+            "-class=.*UpdateRequestType",
+            "-interface=" + IFACE
+        ));
+    }
+
+    /**
+     * With {@code @Data}, shared list properties get setters on the generated interface.
+     */
+    private void assertLombokCombo(List<String> args) throws Exception {
+        testExecute(args, IFACE_FILTER, (source, clazz) -> {
+            assertThat(clazz.isInterface()).isTrue();
+            var names = methodNames(clazz);
+            assertThat(names).contains("getId", "setId", "getName", "setName", "getTags", "setTags");
+        });
+        testExecute(args, CREATE_FILTER, (source, clazz) -> {
+            assertThat(source).contains("@Data");
+            assertThat(source).contains("implements CommonRequest");
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE));
+            // APT restores accessors required by the interface.
+            assertThat(clazz.getMethod("getId")).isNotNull();
+            assertThat(clazz.getMethod("setId", String.class)).isNotNull();
+            assertThat(clazz.getMethod("getTags")).isNotNull();
+            assertThat(clazz.getMethod("setTags", List.class)).isNotNull();
+        });
+    }
+
     private static List<String> methodNames(Class<?> clazz) {
         return Arrays.stream(clazz.getDeclaredMethods())
             .filter(m -> Modifier.isPublic(m.getModifiers()))

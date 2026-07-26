@@ -24,7 +24,10 @@ import com.sun.codemodel.JMod;
 import com.sun.codemodel.JType;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.ClassOutline;
+import com.sun.tools.xjc.outline.FieldOutline;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.utils.AnnotationUtils;
+import io.github.rawvoid.jaxb.utils.LombokAccessors;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
@@ -61,17 +64,25 @@ import java.util.regex.Pattern;
  *   <li>{@code -interface} (required): FQCN of the interface to generate for this group.</li>
  *   <li>{@code -fields} (optional): comma-separated Java property names; omit for full
  *       intersection of matching classes.</li>
- *   <li>Getter is always declared when a property is common. Setter is declared only when
- *       every participating class has a one-argument setter with the same parameter type
- *       (collection properties usually have no setter under stock XJC).</li>
+ *   <li>Property discovery uses the field model ({@code FieldOutline}), not whether XJC
+ *       accessors are still present in source — so it works after {@code -Xlombok} strips methods.</li>
+ *   <li><b>Without</b> {@code @lombok.Data}: XJC-style accessors. Getter always; setter only for
+ *       non-collection properties (stock XJC has no {@code set} for live lists).</li>
+ *   <li><b>With</b> {@code @Data} (already on the class, or applied by an active
+ *       {@link LombokPlugin} with default/{@code @Data} annos): Lombok-style names via
+ *       {@link LombokAccessors}, and setters for collections too. Detection does not depend on
+ *       plugin {@code run} order.</li>
+ *   <li>Setter is declared only when every participating class will have a same-signature setter.</li>
  *   <li>Zero class matches → error. Empty common property set → warning, skip that group.</li>
- *   <li>Groups are independent; one class may implement several generated interfaces.</li>
+ *   <li>Naming follows Lombok <em>defaults</em> (no project {@code lombok.config} / {@code @Accessors}).</li>
  * </ul>
  *
  * @author Rawvoid
  */
 @Option(name = "Xcommon-interface", description = "Generate interfaces from common property accessors and implement them on matching classes")
 public class CommonInterfacePlugin extends AbstractPlugin {
+
+    private static final String LOMBOK_DATA = "lombok.Data";
 
     @Option(name = "group", required = true,
         description = "Interface generation group (repeatable; restatable group marker separates items)")
@@ -105,7 +116,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         var ok = true;
         var generatedInterfaces = new LinkedHashSet<String>();
         for (var group : groups) {
-            if (!processGroup(outline, group, generatedInterfaces, errorHandler)) {
+            if (!processGroup(outline, options, group, generatedInterfaces, errorHandler)) {
                 ok = false;
             }
         }
@@ -114,6 +125,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
 
     private boolean processGroup(
         Outline outline,
+        Options options,
         GroupConfig group,
         Set<String> generatedInterfaces,
         ErrorHandler errorHandler
@@ -136,7 +148,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         }
 
         var fieldFilter = parseFieldFilter(group.fields);
-        var common = intersectProperties(matched, fieldFilter, errorHandler);
+        var common = intersectProperties(matched, options, fieldFilter, errorHandler);
         if (common.isEmpty()) {
             warn(errorHandler, "No common properties for %d class(es) matching %s; interface '%s' not generated"
                 .formatted(matched.size(), patternSummary(group.classPatterns), ifaceFqcn));
@@ -152,10 +164,10 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         }
 
         for (var property : common) {
-            iface.method(0, property.getterReturnType(), property.getterName());
-            if (property.setterParamType() != null) {
+            iface.method(0, property.type(), property.getterName());
+            if (property.setterName() != null) {
                 var setter = iface.method(0, void.class, property.setterName());
-                setter.param(property.setterParamType(), "value");
+                setter.param(property.type(), "value");
             }
         }
 
@@ -187,12 +199,13 @@ public class CommonInterfacePlugin extends AbstractPlugin {
 
     private List<CommonProperty> intersectProperties(
         List<ClassOutline> classes,
+        Options options,
         Set<String> fieldFilter,
         ErrorHandler errorHandler
     ) throws SAXException {
         List<Map<String, ClassProperty>> perClass = new ArrayList<>(classes.size());
         for (var classOutline : classes) {
-            perClass.add(collectProperties(classOutline));
+            perClass.add(collectProperties(classOutline, options));
         }
 
         var first = perClass.getFirst();
@@ -203,27 +216,20 @@ public class CommonInterfacePlugin extends AbstractPlugin {
                 continue;
             }
             var seed = entry.getValue();
-            if (seed.getter() == null) {
-                continue;
-            }
-
-            var getterName = seed.getter().name();
-            var getterType = seed.getter().type();
-            var getterTypeKey = typeKey(getterType);
-            var setter = seed.setter();
-            var setterParamType = setter != null ? setter.params().getFirst().type() : null;
-            var setterParamKey = setterParamType != null ? typeKey(setterParamType) : null;
-            var includeSetter = setterParamType != null;
+            var getterName = seed.getterName();
+            var type = seed.type();
+            var typeKey = typeKey(type);
+            var setterName = seed.setterName();
+            var includeSetter = setterName != null;
 
             var presentOnAll = true;
             for (var i = 1; i < perClass.size(); i++) {
                 var other = perClass.get(i).get(propertyName);
-                if (other == null || other.getter() == null) {
+                if (other == null) {
                     presentOnAll = false;
                     break;
                 }
-                if (!getterName.equals(other.getter().name())
-                    || !getterTypeKey.equals(typeKey(other.getter().type()))) {
+                if (!getterName.equals(other.getterName()) || !typeKey.equals(typeKey(other.type()))) {
                     if (fieldFilter != null) {
                         warn(errorHandler,
                             "Skipping property '%s': getter signature differs across matching classes"
@@ -232,12 +238,10 @@ public class CommonInterfacePlugin extends AbstractPlugin {
                     presentOnAll = false;
                     break;
                 }
-                var otherSetter = other.setter();
                 if (includeSetter) {
-                    if (otherSetter == null || otherSetter.params().size() != 1
-                        || !setterParamKey.equals(typeKey(otherSetter.params().getFirst().type()))) {
+                    if (other.setterName() == null || !setterName.equals(other.setterName())) {
                         includeSetter = false;
-                        setterParamType = null;
+                        setterName = null;
                     }
                 }
             }
@@ -245,13 +249,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
                 continue;
             }
 
-            common.add(new CommonProperty(
-                propertyName,
-                getterName,
-                getterType,
-                includeSetter ? "set" + seed.seed() : null,
-                includeSetter ? setterParamType : null
-            ));
+            common.add(new CommonProperty(propertyName, getterName, includeSetter ? setterName : null, type));
         }
 
         if (fieldFilter != null) {
@@ -267,18 +265,73 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         return common;
     }
 
-    private static Map<String, ClassProperty> collectProperties(ClassOutline classOutline) {
+    private static Map<String, ClassProperty> collectProperties(ClassOutline classOutline, Options options) {
         var map = new LinkedHashMap<String, ClassProperty>();
         var implClass = classOutline.implClass;
+        var dataMode = usesLombokDataAccessors(implClass, options);
         for (var fieldOutline : classOutline.getDeclaredFields()) {
-            var prop = fieldOutline.getPropertyInfo();
-            var propertyName = prop.getName(false);
-            var seed = prop.getName(true);
-            var getter = findGetter(implClass, seed);
-            var setter = findSetter(implClass, seed);
-            map.put(propertyName, new ClassProperty(propertyName, seed, getter, setter));
+            var property = toClassProperty(fieldOutline, implClass, dataMode);
+            if (property != null) {
+                map.put(property.propertyName(), property);
+            }
         }
         return map;
+    }
+
+    private static ClassProperty toClassProperty(FieldOutline fieldOutline, JDefinedClass implClass, boolean dataMode) {
+        var prop = fieldOutline.getPropertyInfo();
+        var propertyName = prop.getName(false);
+        var seed = prop.getName(true);
+        var type = fieldOutline.getRawType();
+        var collection = prop.isCollection();
+        var isBoolean = isPrimitiveBoolean(type);
+
+        String getterName;
+        String setterName;
+        if (dataMode) {
+            // Lombok names from field name (property / field id), not XJC method seed.
+            getterName = LombokAccessors.toGetterName(propertyName, isBoolean);
+            setterName = LombokAccessors.toSetterName(propertyName, isBoolean);
+        } else {
+            var existingGetter = findGetter(implClass, seed);
+            if (existingGetter != null) {
+                getterName = existingGetter.name();
+                type = existingGetter.type();
+            } else {
+                getterName = isBoolean ? "is" + seed : "get" + seed;
+            }
+            var existingSetter = findSetter(implClass, seed);
+            if (collection) {
+                // Stock XJC: live list, no setX.
+                setterName = null;
+            } else if (existingSetter != null) {
+                setterName = existingSetter.name();
+                if (existingSetter.params().size() == 1) {
+                    type = existingSetter.params().getFirst().type();
+                }
+            } else {
+                setterName = "set" + seed;
+            }
+        }
+
+        if (getterName == null) {
+            return null;
+        }
+        return new ClassProperty(propertyName, getterName, setterName, type);
+    }
+
+    /**
+     * {@code @Data} already on the class, or an active {@link LombokPlugin} will apply {@code @Data}.
+     */
+    static boolean usesLombokDataAccessors(JDefinedClass implClass, Options options) {
+        if (AnnotationUtils.hasAnnotation(implClass, LOMBOK_DATA)) {
+            return true;
+        }
+        return LombokPlugin.anyActiveAppliesData(options, implClass.fullName());
+    }
+
+    private static boolean isPrimitiveBoolean(JType type) {
+        return type != null && type.isPrimitive() && "boolean".equals(type.name());
     }
 
     private static JMethod findGetter(JDefinedClass implClass, String seed) {
@@ -358,15 +411,9 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         errorHandler.warning(new SAXParseException(message, null));
     }
 
-    private record ClassProperty(String propertyName, String seed, JMethod getter, JMethod setter) {
+    private record ClassProperty(String propertyName, String getterName, String setterName, JType type) {
     }
 
-    private record CommonProperty(
-        String propertyName,
-        String getterName,
-        JType getterReturnType,
-        String setterName,
-        JType setterParamType
-    ) {
+    private record CommonProperty(String propertyName, String getterName, String setterName, JType type) {
     }
 }

@@ -1,0 +1,57 @@
+/*
+ * Copyright 2026 Rawvoid(https://github.com/rawvoid)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.github.rawvoid.jaxb.utils;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class LombokAccessorsTest {
+
+    @Test
+    void scalarNames() {
+        assertThat(LombokAccessors.toGetterName("id", false)).isEqualTo("getId");
+        assertThat(LombokAccessors.toSetterName("id", false)).isEqualTo("setId");
+        assertThat(LombokAccessors.toGetterName("requestId", false)).isEqualTo("getRequestId");
+        assertThat(LombokAccessors.toSetterName("requestId", false)).isEqualTo("setRequestId");
+    }
+
+    @Test
+    void primitiveBooleanUsesIsPrefix() {
+        assertThat(LombokAccessors.toGetterName("active", true)).isEqualTo("isActive");
+        assertThat(LombokAccessors.toSetterName("active", true)).isEqualTo("setActive");
+    }
+
+    @Test
+    void boxedBooleanUsesGetPrefix() {
+        assertThat(LombokAccessors.toGetterName("active", false)).isEqualTo("getActive");
+        assertThat(LombokAccessors.toSetterName("active", false)).isEqualTo("setActive");
+    }
+
+    @Test
+    void isPrefixedBooleanField() {
+        assertThat(LombokAccessors.toGetterName("isRunning", true)).isEqualTo("isRunning");
+        assertThat(LombokAccessors.toSetterName("isRunning", true)).isEqualTo("setRunning");
+    }
+
+    @Test
+    void basicCapitalizeMatchesLombokBasicShape() {
+        assertThat(LombokAccessors.basicCapitalize("id")).isEqualTo("Id");
+        assertThat(LombokAccessors.basicCapitalize("uRL")).isEqualTo("URL");
+        assertThat(LombokAccessors.basicCapitalize("Id")).isEqualTo("Id");
+    }
+}
