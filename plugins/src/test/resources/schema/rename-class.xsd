@@ -35,6 +35,13 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!-- Pipeline fixture: strip Type then strip IATA prefix → Widget. -->
+    <xs:complexType name="IATAWidgetType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
     <!-- Global enum for unconflicted rename. -->
     <xs:simpleType name="Color">
         <xs:restriction base="xs:string">
@@ -142,6 +149,7 @@
 
     <xs:element name="person" type="tns:Person"/>
     <xs:element name="address" type="tns:AddressType"/>
+    <xs:element name="iataWidget" type="tns:IATAWidgetType"/>
     <xs:element name="holder" type="tns:Holder"/>
     <xs:element name="namedAssoc" type="tns:NamedAssocType"/>
     <xs:element name="blockAddress" type="tns:BlockAddress"/>
