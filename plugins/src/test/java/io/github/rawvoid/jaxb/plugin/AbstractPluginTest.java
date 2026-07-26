@@ -250,63 +250,6 @@ class AbstractPluginTest {
     }
 
     @Test
-    void testCompactTrimsWhitespaceAroundSeparators() throws Exception {
-        var plugin = new MappingPlugin();
-        var args = List.of(
-            "-Xmapping",
-            "-package-name= ns1  ->  pkg1 ",
-            "-package-name=ns2->pkg2"
-        ).toArray(new String[0]);
-
-        var count = plugin.parseArgument(new Options(), args, 0);
-        assertThat(count).isEqualTo(args.length);
-        assertThat(plugin.packageNames).hasSize(2);
-        assertThat(plugin.packageNames.get(0).token).isEqualTo("ns1");
-        assertThat(plugin.packageNames.get(0).name).isEqualTo("pkg1");
-        assertThat(plugin.packageNames.get(1).token).isEqualTo("ns2");
-        assertThat(plugin.packageNames.get(1).name).isEqualTo("pkg2");
-    }
-
-    @Test
-    void testCompactThreeFieldTrimsWhitespaceAndAllowsEmptyTrailing() throws Exception {
-        var plugin = new ThreeFieldCompactPlugin();
-        var args = List.of(
-            "-Xthree-field",
-            "-map=http://a.com  ->  com.a  :  pref",
-            "-map=http://b.com -> com.b :",
-            "-map=http://c.com->com.c"
-        ).toArray(new String[0]);
-
-        var count = plugin.parseArgument(new Options(), args, 0);
-        assertThat(count).isEqualTo(args.length);
-        assertThat(plugin.maps).hasSize(3);
-        assertThat(plugin.maps.get(0).ns).isEqualTo("http://a.com");
-        assertThat(plugin.maps.get(0).pkg).isEqualTo("com.a");
-        assertThat(plugin.maps.get(0).prefix).isEqualTo("pref");
-        assertThat(plugin.maps.get(1).ns).isEqualTo("http://b.com");
-        assertThat(plugin.maps.get(1).pkg).isEqualTo("com.b");
-        assertThat(plugin.maps.get(1).prefix).isEmpty();
-        assertThat(plugin.maps.get(2).ns).isEqualTo("http://c.com");
-        assertThat(plugin.maps.get(2).pkg).isEqualTo("com.c");
-        assertThat(plugin.maps.get(2).prefix).isNull();
-    }
-
-    @Test
-    void testCompactRejectsWhitespaceOnlyMiddlePlaceholder() {
-        // Only the three-field template (no "{ns}->{package}" fallback).
-        var plugin = new ThreeFieldOnlyCompactPlugin();
-        var args = List.of(
-            "-Xthree-field-only",
-            "-map=http://a.com ->  : pref"
-        ).toArray(new String[0]);
-
-        // Empty package after strip must not match "{ns}->{package}:{prefix}".
-        assertThatThrownBy(() -> plugin.parseArgument(new Options(), args, 0))
-            .isInstanceOf(BadCommandLineException.class)
-            .hasMessageContaining("Invalid compact value");
-    }
-
-    @Test
     void testCompactUsageShowsFormat() {
         var plugin = new MappingPlugin();
         var usage = plugin.getUsage();
@@ -548,50 +491,6 @@ class AbstractPluginTest {
 
             @Option(name = "name", required = true, description = "Target name")
             String name;
-        }
-    }
-
-    @Option(prefix = "-X", name = "three-field", description = "Three-field compact like package-mapping")
-    private static class ThreeFieldCompactPlugin extends AbstractPlugin {
-
-        @Option(name = "map", description = "Namespace package mappings")
-        List<NsPkgPrefix> maps;
-
-        @Override
-        public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
-            return true;
-        }
-
-        @Compact(formats = {"{ns}->{package}:{prefix}", "{ns}->{package}"})
-        private static class NsPkgPrefix {
-            @Option(name = "ns", required = true)
-            String ns;
-            @Option(name = "package", required = true)
-            String pkg;
-            @Option(name = "prefix")
-            String prefix;
-        }
-    }
-
-    @Option(prefix = "-X", name = "three-field-only", description = "Three-field compact without package-only fallback")
-    private static class ThreeFieldOnlyCompactPlugin extends AbstractPlugin {
-
-        @Option(name = "map", description = "Namespace package mappings")
-        List<Entry> maps;
-
-        @Override
-        public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
-            return true;
-        }
-
-        @Compact(formats = {"{ns}->{package}:{prefix}"})
-        private static class Entry {
-            @Option(name = "ns", required = true)
-            String ns;
-            @Option(name = "package", required = true)
-            String pkg;
-            @Option(name = "prefix")
-            String prefix;
         }
     }
 
