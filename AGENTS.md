@@ -16,7 +16,7 @@ Instructions for AI assistants working in this repository.
 - **Dependencies**: Do NOT introduce new external libraries or frameworks without explicit user approval.
 - **Class Imports**: In Java sources and Javadoc, prefer explicit `import` statements over fully qualified names. Use FQCN only on name collision or in non-source contexts (SPI files, diagnostic strings, config that requires a type name).
 - **Local Source Inspection**: Prioritize reading local Maven repository (`~/.m2/repository`) source JARs over web searches when investigating third-party APIs. If local source JARs are missing, run `mvn dependency:sources` to download them before attempting online search.
-- **Code Hygiene**: No dead code, unused parameters, swallowed exceptions, or redundant comments. Code comments and Javadoc MUST be in **English only**.
+- **Code Hygiene**: No dead code, unused parameters, swallowed exceptions, or redundant comments.
 
 ## 3. Testing & Verification
 
@@ -33,6 +33,6 @@ Instructions for AI assistants working in this repository.
 
 ## 5. Communication
 
-- **Language**: Write user-facing replies in the dominant natural language of the recent conversation. If the user clearly switches language for a full message, follow that switch; do not treat short acknowledgements (e.g. "ok", "lgtm") as a language change. Keep code, comments, Javadoc, commit messages, and PR titles in English unless the user explicitly requests otherwise.
+- **Language**: Write user-facing replies in the dominant natural language of the recent conversation. If the user clearly switches language for a full message, follow that switch; do not treat short acknowledgements (e.g. "ok", "lgtm") as a language change. For code comments, Javadoc, documentation, commit messages, and PR titles, match the language and style already used in this repository (and in nearby files when editing); do not introduce a different language for these unless the user explicitly requests it.
 - **Clarity**: State trade-offs concisely. Ask when requirements or design choices are ambiguous; otherwise proceed once the direction is clear within the workflow rules above.
 - **Completion**: When done, briefly report what changed, how it was verified (e.g., test command run), and the local commit hash if a commit was created.
