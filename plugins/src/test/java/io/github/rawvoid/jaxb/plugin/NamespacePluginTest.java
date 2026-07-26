@@ -102,6 +102,20 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void mapsNamespaceCompactTrailingEmptyPrefix() throws Exception {
+        // "ns->pkg:" must not swallow the colon into the package name.
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping=" + NS + "->pkg1:"
+        );
+        testExecute(args, "pkg1\\.Item", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg1");
+            assertThat(xmlSchema(clazz).xmlns())
+                .noneMatch(xmlns -> NS.equals(xmlns.namespaceURI()) && "".equals(xmlns.prefix()));
+        });
+    }
+
+    @Test
     void nsPrefixBasic() throws Exception {
         var args = List.of(
             "-Xnamespace",
@@ -310,7 +324,7 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void generateBindingsUsesWildcardSchemaLocation() {
+    void generateBindingsUsesScdByTargetNamespace() {
         var plugin = new NamespacePlugin();
         var packageMapping = new NamespacePlugin.PackageMappingConfig();
         packageMapping.namespace = "http://example.com/a";
@@ -318,8 +332,44 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
         plugin.packageMappings = List.of(packageMapping);
 
         var bindings = plugin.generateBindings();
-        assertThat(bindings).contains("schemaLocation=\"*\"");
-        assertThat(bindings).contains("node=\"/xs:schema[@targetNamespace='http://example.com/a']\"");
+        assertThat(bindings).contains("scd=\"x-schema::ns0\"");
+        assertThat(bindings).contains("xmlns:ns0=\"http://example.com/a\"");
+        assertThat(bindings).contains("if-exists=\"true\"");
         assertThat(bindings).contains("name=\"com.example.a\"");
+        assertThat(bindings).doesNotContain("schemaLocation");
+    }
+
+    @Test
+    void generateBindingsEscapesXmlInAttributes() {
+        var plugin = new NamespacePlugin();
+        var packageMapping = new NamespacePlugin.PackageMappingConfig();
+        packageMapping.namespace = "http://example.com/a&b";
+        packageMapping.packageName = "com.example.\"a\"";
+        plugin.packageMappings = List.of(packageMapping);
+
+        var bindings = plugin.generateBindings();
+        assertThat(bindings).contains("xmlns:ns0=\"http://example.com/a&amp;b\"");
+        assertThat(bindings).contains("name=\"com.example.&quot;a&quot;\"");
+    }
+
+    @Test
+    void mapsPackageWhenMultipleDocumentsShareTargetNamespace() throws Exception {
+        // Same targetNamespace split across two documents must not raise
+        // "Multiple schemaBindings are defined for the target namespace".
+        schemaIncludes = List.of("namespace.xsd", "namespace-shared.xsd");
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping=" + NS + "->pkg.shared:n1"
+        );
+        var classes = testExecute(args, "pkg\\.shared\\.(Item|OtherItem)", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg.shared");
+        });
+        assertThat(classes.stream().map(Class::getName))
+            .contains("pkg.shared.Item", "pkg.shared.OtherItem");
+        var item = classes.stream()
+            .filter(c -> "pkg.shared.Item".equals(c.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(prefixFor(item, NS)).isEqualTo("n1");
     }
 }

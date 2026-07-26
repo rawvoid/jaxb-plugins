@@ -921,8 +921,10 @@ public abstract class AbstractPlugin extends Plugin {
                 value = text.substring(cursor, sepAt);
                 cursor = sepAt + nextLiteral.length();
             }
-            // Empty placeholders are not a match (helps more-specific templates win cleanly).
-            if (value.isEmpty()) {
+            // Empty middle placeholders are not a match (keeps more-specific templates from
+            // stealing values). Trailing empty is allowed so optional last fields work, e.g.
+            // "{ns}->{package}:{prefix}" with "uri->com.example:" → package set, prefix blank.
+            if (value.isEmpty() && i != optionNames.size() - 1) {
                 return null;
             }
             values.add(value);

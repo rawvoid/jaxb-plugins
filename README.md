@@ -306,7 +306,7 @@ Replaces the former `-Xns-prefix` plugin.
 - Explicit Java package mapping per XML target namespace URI.
 - Optional XML prefix on `@XmlSchema` for that namespace.
 - Package-scoped multi-`xmlns` prefix mappings with optional Java package regex filter.
-- Package bindings use `schemaLocation="*"` and match by `targetNamespace` (CLI schema order independent).
+- Package bindings use SCD (`x-schema::…`) so each mapping attaches once per target namespace (safe when many XSD files share one namespace).
 
 #### Quick Start
 
