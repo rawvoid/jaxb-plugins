@@ -353,6 +353,50 @@ class AbstractPluginTest {
         assertThat(plugin.legacyMap.getFirst().name).isEqualTo("d");
     }
 
+    @Test
+    void testCompactPlaceholderBoundToListFieldGetsSingleton() throws Exception {
+        var plugin = new ListPlaceholderCompactPlugin();
+        var args = List.of(
+            "-Xlist-compact",
+            "-group=.*Request->com.example.CommonRequest",
+            "-group=  .*Response  ->  com.example.CommonResponse "
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.groups).hasSize(2);
+
+        var first = plugin.groups.getFirst();
+        assertThat(first.classPatterns).hasSize(1);
+        assertThat(first.classPatterns.getFirst().pattern()).isEqualTo(".*Request");
+        assertThat(first.interfaceName).isEqualTo("com.example.CommonRequest");
+
+        var second = plugin.groups.get(1);
+        assertThat(second.classPatterns).hasSize(1);
+        assertThat(second.classPatterns.getFirst().pattern()).isEqualTo(".*Response");
+        assertThat(second.interfaceName).isEqualTo("com.example.CommonResponse");
+    }
+
+    @Test
+    void testCompactListPlaceholderStillAllowsStructuredMultiClass() throws Exception {
+        var plugin = new ListPlaceholderCompactPlugin();
+        var args = List.of(
+            "-Xlist-compact",
+            "-group",
+            "-class=.*CreateRequest",
+            "-class=.*UpdateRequest",
+            "-interface=com.example.CommonRequest"
+        ).toArray(new String[0]);
+
+        var count = plugin.parseArgument(new Options(), args, 0);
+        assertThat(count).isEqualTo(args.length);
+        assertThat(plugin.groups).hasSize(1);
+        assertThat(plugin.groups.getFirst().classPatterns).hasSize(2);
+        assertThat(plugin.groups.getFirst().classPatterns.get(0).pattern()).isEqualTo(".*CreateRequest");
+        assertThat(plugin.groups.getFirst().classPatterns.get(1).pattern()).isEqualTo(".*UpdateRequest");
+        assertThat(plugin.groups.getFirst().interfaceName).isEqualTo("com.example.CommonRequest");
+    }
+
     @Option(prefix = "-X", name = "multi-format", description = "Multi-template compact")
     private static class MultiFormatPlugin extends AbstractPlugin {
 
@@ -548,6 +592,26 @@ class AbstractPluginTest {
 
             @Option(name = "name", required = true, description = "Target name")
             String name;
+        }
+    }
+
+    @Option(prefix = "-X", name = "list-compact", description = "Compact with List placeholder")
+    private static class ListPlaceholderCompactPlugin extends AbstractPlugin {
+
+        @Option(name = "group", required = true, description = "Groups")
+        List<GroupConfig> groups;
+
+        @Override
+        public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
+            return true;
+        }
+
+        @Compact(formats = {"{class}->{interface}"})
+        private static class GroupConfig {
+            @Option(name = "class", required = true)
+            List<Pattern> classPatterns;
+            @Option(name = "interface", required = true)
+            String interfaceName;
         }
     }
 

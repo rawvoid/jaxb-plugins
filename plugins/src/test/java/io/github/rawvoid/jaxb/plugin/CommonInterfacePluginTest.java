@@ -69,6 +69,7 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     void testUsage() {
         var usage = new CommonInterfacePlugin().getUsage();
         assertThat(usage).contains("-group");
+        assertThat(usage).contains("{class}->{interface}");
         assertThat(usage).contains("-class");
         assertThat(usage).contains("-interface");
         assertThat(usage).contains("-fields");
@@ -133,6 +134,45 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
         testExecute(args, IFACE_FILTER, (source, clazz) -> {
             assertThat(methodNames(clazz)).containsExactlyInAnyOrder("getId", "setId");
             assertThat(methodNames(clazz)).doesNotContain("getName", "getTags");
+        });
+    }
+
+    @Test
+    void compactGroupFormGeneratesInterfaceAndImplements() throws Exception {
+        var args = List.of(
+            optionCmd,
+            "-group=.*RequestType->" + IFACE
+        );
+        testExecute(args, IFACE_FILTER, (source, clazz) -> {
+            assertThat(clazz.isInterface()).isTrue();
+            assertThat(methodNames(clazz)).containsExactlyInAnyOrder("getId", "setId");
+        });
+        testExecute(args, CREATE_FILTER, (source, clazz) -> {
+            assertThat(source).contains("implements CommonRequest");
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE));
+        });
+        testExecute(args, DELETE_FILTER, (source, clazz) ->
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE)));
+    }
+
+    @Test
+    void compactMultipleGroupsGenerateIndependentInterfaces() throws Exception {
+        var args = List.of(
+            optionCmd,
+            "-group=.*CreateRequestType->" + IFACE,
+            "-group=.*ResponseType->" + IFACE_RESPONSE
+        );
+        var classes = testExecute(args);
+        var names = classes.stream().map(Class::getName).toList();
+        assertThat(names).contains(IFACE, IFACE_RESPONSE, CREATE, CREATE_RESPONSE);
+
+        testExecute(args, CREATE_FILTER, (source, clazz) -> {
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE));
+            assertThat(clazz.getInterfaces()).noneMatch(i -> i.getName().equals(IFACE_RESPONSE));
+        });
+        testExecute(args, CREATE_RESPONSE_FILTER, (source, clazz) -> {
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE_RESPONSE));
+            assertThat(clazz.getInterfaces()).noneMatch(i -> i.getName().equals(IFACE));
         });
     }
 
