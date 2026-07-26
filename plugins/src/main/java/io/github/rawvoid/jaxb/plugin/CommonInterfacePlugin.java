@@ -210,7 +210,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
             var getterName = seed.getter().name();
             var getterType = seed.getter().type();
             var getterTypeKey = typeKey(getterType);
-            JMethod setter = seed.setter();
+            var setter = seed.setter();
             var setterParamType = setter != null ? setter.params().getFirst().type() : null;
             var setterParamKey = setterParamType != null ? typeKey(setterParamType) : null;
             var includeSetter = setterParamType != null;
@@ -285,7 +285,7 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         var getName = "get" + seed;
         var isName = "is" + seed;
         for (var method : implClass.methods()) {
-            if (method.params().size() != 0) {
+            if (!method.params().isEmpty()) {
                 continue;
             }
             var name = method.name();
