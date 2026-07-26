@@ -57,4 +57,14 @@ class LombokAccessorsTest {
         assertThat(LombokAccessors.fallbackName("active", true, true)).isEqualTo("isActive");
         assertThat(LombokAccessors.fallbackName("isRunning", true, false)).isEqualTo("setRunning");
     }
+
+    @Test
+    void basicCapitalizeMatchesLombokBasicStrategy() {
+        assertThat(LombokAccessors.basicCapitalize("id")).isEqualTo("Id");
+        assertThat(LombokAccessors.basicCapitalize("requestId")).isEqualTo("RequestId");
+        // Second char upper → first char uppercased (BASIC), not only title-cased.
+        assertThat(LombokAccessors.basicCapitalize("uRL")).isEqualTo("URL");
+        assertThat(LombokAccessors.basicCapitalize("ID")).isEqualTo("ID");
+        assertThat(LombokAccessors.fallbackName("uRL", false, true)).isEqualTo("getURL");
+    }
 }

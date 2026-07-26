@@ -34,8 +34,8 @@ import java.nio.charset.StandardCharsets;
  * is loaded for the dummy URI).
  * </p>
  * <p>
- * If bootstrap fails, falls back to a minimal {@code get}/{@code is}/{@code set} + title-case
- * rule so callers still get a name.
+ * If bootstrap fails, falls back to a minimal {@code get}/{@code is}/{@code set} rule with
+ * capitalization matching Lombok {@code CapitalizationStrategy.BASIC}.
  * </p>
  *
  * @author Rawvoid
@@ -118,7 +118,7 @@ public final class LombokAccessors {
     }
 
     /**
-     * Minimal fallback when Lombok is unavailable (mirrors common default bean naming only).
+     * Minimal fallback when Lombok is unavailable (default bean naming + BASIC capitalization).
      */
     static String fallbackName(String fieldName, boolean isBoolean, boolean getter) {
         if (isBoolean && fieldName.startsWith("is") && fieldName.length() > 2
@@ -126,10 +126,13 @@ public final class LombokAccessors {
             return getter ? fieldName : "set" + fieldName.substring(2);
         }
         var prefix = getter ? (isBoolean ? "is" : "get") : "set";
-        return prefix + titleCase(fieldName);
+        return prefix + basicCapitalize(fieldName);
     }
 
-    private static String titleCase(String in) {
+    /**
+     * Same shape as Lombok {@code CapitalizationStrategy.BASIC}.
+     */
+    static String basicCapitalize(String in) {
         if (in.isEmpty()) {
             return in;
         }
@@ -137,7 +140,9 @@ public final class LombokAccessors {
         if (!Character.isLowerCase(first)) {
             return in;
         }
-        return Character.toTitleCase(first) + in.substring(1);
+        var useUpperCase = in.length() > 2
+            && (Character.isTitleCase(in.charAt(1)) || Character.isUpperCase(in.charAt(1)));
+        return (useUpperCase ? Character.toUpperCase(first) : Character.toTitleCase(first)) + in.substring(1);
     }
 
     private static ClassLoader shadowClassLoader() throws ReflectiveOperationException {
