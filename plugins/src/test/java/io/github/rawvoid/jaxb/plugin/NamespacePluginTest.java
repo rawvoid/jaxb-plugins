@@ -103,15 +103,14 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void mapsNamespaceCompactTrailingEmptyPrefix() throws Exception {
-        // "ns->pkg:" must not swallow the colon into the package name.
+        // "ns->pkg:" keeps package clean and writes an explicit empty XmlNs prefix.
         var args = List.of(
             "-Xnamespace",
             "-package-mapping=" + NS + "->pkg1:"
         );
         testExecute(args, "pkg1\\.Item", (source, clazz) -> {
             assertThat(clazz.getPackageName()).isEqualTo("pkg1");
-            assertThat(xmlSchema(clazz).xmlns())
-                .noneMatch(xmlns -> NS.equals(xmlns.namespaceURI()) && "".equals(xmlns.prefix()));
+            assertThat(prefixFor(clazz, NS)).isEmpty();
         });
     }
 

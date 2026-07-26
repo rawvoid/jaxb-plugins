@@ -176,8 +176,8 @@ public class NamespacePlugin extends AbstractPlugin {
     }
 
     private void applyPackageMappingXmlns(PackageOutline packageOutline, PackageMappingConfig packageMapping) {
-        // Compact form "ns->pkg:" yields an empty prefix string; treat blank as absent.
-        var hasPrefix = packageMapping.prefix != null && !packageMapping.prefix.isBlank();
+        // null = prefix not configured; "" (e.g. compact "ns->pkg:") is an explicit empty prefix.
+        var hasPrefix = packageMapping.prefix != null;
         var hasXmlNsList = packageMapping.xmlNsConfigs != null && !packageMapping.xmlNsConfigs.isEmpty();
         if (!hasPrefix && !hasXmlNsList) {
             return;
