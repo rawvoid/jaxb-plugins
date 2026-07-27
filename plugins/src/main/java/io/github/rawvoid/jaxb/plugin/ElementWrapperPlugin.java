@@ -50,6 +50,12 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  * always returns null).
  * </p>
  * <p>
+ * Flatten records hold the owner {@link CClassInfo} identity from the model phase. If a later
+ * model plugin removes that class (for example {@link DedupeClassPlugin} merges it into a host),
+ * the record is dropped in {@link #run} — the class is not generated, and any isomorphic host
+ * was already flattened in this plugin's own model pass when it was still present.
+ * </p>
+ * <p>
  * Scope: a non-collection property whose type is a wrapper class (exactly one
  * non-value-list collection element property, no base class). Nested “list of wrappers” is
  * not recursively unwrapped.
@@ -122,6 +128,12 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+        // Flatten records are captured in postProcessModel. A later model-phase plugin
+        // (e.g. -Xdedupe-class) may remove some owner CClassInfo instances. Those classes
+        // are never generated; any merge host that shared the same shape was flattened in
+        // the same pass and still has its own record. Drop stale records — do not treat as
+        // outline corruption.
+        flattenedFields.removeIf(f -> outline.getClazz(f.owner()) == null);
         for (var flattened : flattenedFields) {
             annotateXmlElementWrapper(outline, flattened);
         }
@@ -457,12 +469,8 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     private void annotateXmlElementWrapper(Outline outline, FlattenedField flattened) {
+        // Caller only passes owners that still have a ClassOutline (see run()).
         var classOutline = outline.getClazz(flattened.owner());
-        if (classOutline == null) {
-            // Owner may have been removed by a later model plugin (e.g. dedupe).
-            log.warn("Could not find class outline for {}", flattened.owner().fullName());
-            return;
-        }
         var field = classOutline.implClass.fields().get(flattened.propertyName());
         if (field == null) {
             log.warn("Could not find field {} on {}",

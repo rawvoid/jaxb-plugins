@@ -282,9 +282,6 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         var implClass = classOutline.implClass;
         var dataMode = usesLombokDataAccessors(implClass, options);
         for (var fieldOutline : classOutline.getDeclaredFields()) {
-            if (fieldOutline == null) {
-                continue;
-            }
             var property = toClassProperty(fieldOutline, implClass, dataMode);
             if (property != null) {
                 map.put(property.propertyName(), property);

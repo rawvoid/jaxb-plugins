@@ -99,9 +99,6 @@ public class ValidationPlugin extends AbstractPlugin {
                 continue;
             }
             for (var fieldOutline : classOutline.getDeclaredFields()) {
-                if (fieldOutline == null) {
-                    continue;
-                }
                 var prop = fieldOutline.getPropertyInfo();
                 var name = prop.getName(false);
                 if (!matches(fieldNames, name)) {
