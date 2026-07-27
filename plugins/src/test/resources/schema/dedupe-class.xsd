@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/dedupe"
+           xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/dedupe"
+           jaxb:version="3.0"
+           elementFormDefault="qualified">
+
+    <!-- Named superset: AircraftCodeType with value + context -->
+    <xs:complexType name="AircraftCodeType">
+        <xs:simpleContent>
+            <xs:extension base="xs:string">
+                <xs:attribute name="Context" type="xs:string"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+
+    <!-- Holder A: anonymous AircraftCode (value only) — subset of AircraftCodeType -->
+    <xs:complexType name="HolderA">
+        <xs:sequence>
+            <xs:element name="AircraftCode" minOccurs="0">
+                <xs:complexType>
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string"/>
+                    </xs:simpleContent>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="Group">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Holder B: identical anonymous Group shape; Party is isomorphic but different nameKey -->
+    <xs:complexType name="HolderB">
+        <xs:sequence>
+            <xs:element name="Group">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="Party">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <!-- Same name, different structure — must not merge with Group -->
+            <xs:element name="Details">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="note" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderC">
+        <xs:sequence>
+            <xs:element name="Details">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="amount" type="xs:decimal"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="namedCode" type="tns:AircraftCodeType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="holderA" type="tns:HolderA"/>
+    <xs:element name="holderB" type="tns:HolderB"/>
+    <xs:element name="holderC" type="tns:HolderC"/>
+</xs:schema>

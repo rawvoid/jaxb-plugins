@@ -527,6 +527,39 @@ When used with `-Xpromote-nested-class`, running **rename before promote** lets 
 
 ---
 
+### Dedupe Class Plugin (`-Xdedupe-class`)
+
+Merges structurally redundant generated beans to reduce class count (NDC-style anonymous type copies).
+
+#### Key Features
+
+- Groups candidates by **name key**: short name with a trailing `Type` removed (`AircraftCodeType` ≡ `AircraftCode`). Different name keys never merge.
+- **Exact** merge: identical property structure (names, collection, attribute/element/value, recursive type shape).
+- **`-merge-subset`**: when every property of `B` exists on `A` with a compatible type, merge `B` into `A` (default off; surplus host fields remain).
+- **`-anonymous-only`** (default true): only delete anonymous beans; named global types may still be merge hosts.
+- **`-dry-run`**: log planned merges without changing the model.
+
+#### Quick Start
+
+```bash
+-Xdedupe-class \
+  -merge-subset
+```
+
+Suggested order with other model plugins:
+
+```bash
+-Xelement-wrapper \
+-Xflatten-multi-element-prop \
+-Xdedupe-class -merge-subset \
+-Xrename-class -strip-type-suffix \
+-Xpromote-nested-class
+```
+
+Subset merge can make extra fields visible on former subset sites when marshalling — review with `-dry-run` first on large schemas.
+
+---
+
 ### Rename Multi-Element Property Plugin (`-Xrename-multi-element-prop`)
 
 Renames multi-element properties produced by XJC to a short plural base name (e.g. `items`, `items2`).
