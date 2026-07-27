@@ -39,6 +39,7 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
     private static final String PLAIN = PKG + "\\.PlainList";
     private static final String CHOICE_WITH_CLASS = PKG + "\\.ChoiceWithClass";
     private static final String CONFLICT = PKG + "\\.ConflictDerived";
+    private static final String MIXED_CLASS_REFS = PKG + "\\.MixedClassRefs";
 
     private static final String OPTION = "-Xflatten-multi-element-prop";
 
@@ -141,6 +142,21 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
             var names = fieldNames(clazz);
             assertThat(names).containsExactlyInAnyOrder("time2", "note");
             assertThat(clazz.getDeclaredField("time2").getType()).isEqualTo(java.util.List.class);
+        });
+    }
+
+    /**
+     * mixed content + global element classes → CReferencePropertyInfo of CClassInfo elements.
+     * Regression for BeanGenerator NPE when id was left null on the rewritten property.
+     */
+    @Test
+    void flattensMixedClassRefsWithoutNpe() throws Exception {
+        testExecute(List.of(OPTION), MIXED_CLASS_REFS, (source, clazz) -> {
+            var names = fieldNames(clazz);
+            assertThat(names).contains("alphaBlock", "betaBlock");
+            assertThat(clazz.getDeclaredField("alphaBlock").getType()).isEqualTo(java.util.List.class);
+            assertThat(clazz.getDeclaredField("betaBlock").getType()).isEqualTo(java.util.List.class);
+            assertThat(source).doesNotContain("@XmlElementRefs");
         });
     }
 }

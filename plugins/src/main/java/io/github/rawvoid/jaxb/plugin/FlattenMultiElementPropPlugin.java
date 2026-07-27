@@ -22,6 +22,7 @@ import com.sun.tools.xjc.model.CElementPropertyInfo.CollectionMode;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XSElementDecl;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
+import org.glassfish.jaxb.core.v2.model.core.ID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
@@ -255,10 +256,11 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
 
         } else if (element instanceof CClassInfo classInfo) {
             // CClassInfo is itself a CNonElement — can serve as a CTypeRef target.
+            // ID.NONE: class-bound elements are never ID/IDREF; null would NPE in BeanGenerator.
             var newProp = new CElementPropertyInfo(
                 publicName,
                 original.isCollection() ? CollectionMode.REPEATED_ELEMENT : CollectionMode.NOT_REPEATED,
-                null,
+                ID.NONE,
                 null,
                 original.getSchemaComponent(),
                 new CCustomizations(original.getCustomizations()),
