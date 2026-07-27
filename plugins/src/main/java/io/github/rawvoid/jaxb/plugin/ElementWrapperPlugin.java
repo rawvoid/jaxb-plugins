@@ -458,6 +458,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     private void annotateXmlElementWrapper(Outline outline, FlattenedField flattened) {
         var classOutline = outline.getClazz(flattened.owner());
+        if (classOutline == null) {
+            // Owner may have been removed by a later model plugin (e.g. dedupe).
+            log.warn("Could not find class outline for {}", flattened.owner().fullName());
+            return;
+        }
         var field = classOutline.implClass.fields().get(flattened.propertyName());
         if (field == null) {
             log.warn("Could not find field {} on {}",

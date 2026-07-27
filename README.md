@@ -551,10 +551,12 @@ Suggested order with other model plugins:
 ```bash
 -Xelement-wrapper \
 -Xflatten-multi-element-prop \
+-Xpromote-nested-class \
 -Xdedupe-class -merge-subset \
--Xrename-class -strip-type-suffix \
--Xpromote-nested-class
+-Xrename-class -strip-type-suffix
 ```
+
+Nested copies merge into **package-level** hosts (named global types, or types already promoted). Prefer **promote before dedupe** so more hosts sit at package scope. Cross-outer nested-to-nested merges are skipped (avoids ObjectFactory / FieldOutline corruption).
 
 Subset merge can make extra fields visible on former subset sites when marshalling — review with `-dry-run` first on large schemas.
 

@@ -26,6 +26,7 @@ import org.xml.sax.ErrorHandler;
 
 import java.util.*;
 
+import static io.github.rawvoid.jaxb.utils.ModelUtils.CELEMENTINFO_CLASSNAME_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
 import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 
@@ -51,6 +52,12 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * By default only <em>anonymous</em> beans ({@link CClassInfo#getTypeName()} {@code null}) are
  * deleted; named global types may still act as merge hosts. Nested children of a victim are
  * merged or re-parented onto the host before the victim is removed.
+ * </p>
+ * <p>
+ * Cross-message merges are allowed only when the host is already package-level (typically a
+ * named global type, or a type previously promoted). Nested-to-nested merges across different
+ * outers are skipped — lifting a nested host to package during dedupe corrupts element-class
+ * and ObjectFactory wiring.
  * </p>
  *
  * @author Rawvoid
@@ -161,13 +168,17 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return "CYCLE";
         }
         try {
+            // Inheritance is part of identity — e.g. BagDisclosure vs BagDisclosureType
+            // share local props but extend different bases and must not merge.
+            var base = bean.getBaseClass();
+            var baseFp = base == null ? "base:none" : "base:" + classFp(base, stack);
             var props = new ArrayList<>(bean.getProperties());
             props.sort(Comparator.comparing(p -> p.getName(false)));
             var parts = new ArrayList<String>(props.size());
             for (var prop : props) {
                 parts.add(propFp(prop, stack));
             }
-            return "{" + String.join(";", parts) + "}";
+            return baseFp + "{" + String.join(";", parts) + "}";
         } finally {
             stack.remove(bean);
         }
@@ -252,6 +263,13 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return true;
         }
         try {
+            // Require compatible inheritance: same base identity, or both none.
+            // (Do not treat "no base" as subset of "has base" — different XSD extensions.)
+            var subsetBase = subset.getBaseClass();
+            var hostBase = host.getBaseClass();
+            if (subsetBase != hostBase) {
+                return false;
+            }
             for (var sp : subset.getProperties()) {
                 var hp = findProperty(host, sp.getName(false));
                 if (hp == null || !propertySubsetCompatible(sp, hp, visiting)) {
@@ -387,9 +405,102 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (subset) {
             merged += mergeSubsets(model, anonOnly, dry);
         }
+        // Final sweep: nested anonymous leftovers with same nameKey as a package-level host
+        // (e.g. empty shells after cross-hierarchy merge/lift) still break ObjectFactory.
+        merged += mergeNestedIntoPackageHosts(model, anonOnly, dry, subset);
+        if (!dry) {
+            collapseRedundantElementClasses(model);
+        }
         if (merged > 0) {
             log.info("Deduped {} bean merge(s){}", merged, dry ? " (dry-run)" : "");
         }
+    }
+
+    /**
+     * When a local/global element's content type is already a bean class but the element still
+     * has its own generated class name, drop the element class. Otherwise ObjectFactory emits
+     * methods with conflicting type parameters (e.g. {@code JAXBElement<Outer.Terminal>} vs
+     * package {@code Terminal}).
+     */
+    private static void collapseRedundantElementClasses(Model model) {
+        var cleared = 0;
+        for (var elementInfo : model.getAllElements()) {
+            if (!elementInfo.hasClass()) {
+                continue;
+            }
+            var content = elementInfo.getContentType();
+            // Content may be a bean after merge while the element still declares its own class.
+            if (content instanceof CClassInfo contentClass
+                && nameKey(elementInfo.shortName()).equals(nameKey(contentClass.shortName))) {
+                setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
+                cleared++;
+                continue;
+            }
+            // Scoped element class with the same short name as a package-level bean: drop the
+            // element class so ObjectFactory uses the package bean (avoids Outer.Foo vs Foo).
+            if (elementInfo.getScope() != null) {
+                var key = nameKey(elementInfo.shortName());
+                for (var bean : model.beans().values()) {
+                    if (isPackageLevel(bean) && nameKey(bean.shortName).equals(key)) {
+                        setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
+                        cleared++;
+                        break;
+                    }
+                }
+            }
+        }
+        if (cleared > 0) {
+            log.info("Cleared {} redundant element class name(s) after dedupe", cleared);
+        }
+    }
+
+    /**
+     * Merges remaining nested anonymous beans into package-level hosts with the same name key
+     * when structures match (exact, or subset if enabled).
+     */
+    private int mergeNestedIntoPackageHosts(Model model, boolean anonOnly, boolean dry, boolean subset) {
+        var count = 0;
+        boolean changed;
+        do {
+            changed = false;
+            Map<String, List<CClassInfo>> packageHosts = new LinkedHashMap<>();
+            for (var bean : model.beans().values()) {
+                if (isPackageLevel(bean)) {
+                    packageHosts.computeIfAbsent(nameKey(bean.shortName), k -> new ArrayList<>()).add(bean);
+                }
+            }
+            for (var victim : List.copyOf(model.beans().values())) {
+                if (isPackageLevel(victim) || !mayDelete(victim, anonOnly)) {
+                    continue;
+                }
+                var hosts = packageHosts.get(nameKey(victim.shortName));
+                if (hosts == null || hosts.isEmpty()) {
+                    continue;
+                }
+                hosts.sort(Comparator
+                    .comparingInt(DedupeClassPlugin::hostScore).reversed()
+                    .thenComparing(CClassInfo::fullName));
+                for (var host : hosts) {
+                    if (victim == host || !model.beans().containsValue(host)) {
+                        continue;
+                    }
+                    var exact = classFp(victim).equals(classFp(host));
+                    var sub = subset && isStructuralSubset(victim, host);
+                    // Empty shell only when same base (including both null).
+                    var emptyShell = propertyCount(victim) == 0
+                        && victim.getBaseClass() == host.getBaseClass();
+                    if (!exact && !sub && !emptyShell) {
+                        continue;
+                    }
+                    if (tryMerge(model, victim, host, emptyShell && !exact ? "empty-shell" : exact ? "exact-pkg" : "subset-pkg", dry)) {
+                        count++;
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+        } while (changed && !dry);
+        return count;
     }
 
     @Override
@@ -511,6 +622,17 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
         // Never merge a class into one of its descendants (parent cycle).
         if (isAncestor(victim, host)) {
+            return false;
+        }
+
+        // Package-level host may absorb any victim; nested host only same parent (no lift).
+        if (!isPackageLevel(host) && host.parent() != victim.parent()) {
+            log.debug(
+                "Skip dedupe {}: cross-hierarchy nested '{}' vs '{}'",
+                reason,
+                victim.fullName(),
+                host.fullName()
+            );
             return false;
         }
 

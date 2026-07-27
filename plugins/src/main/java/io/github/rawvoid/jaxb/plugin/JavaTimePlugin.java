@@ -92,6 +92,9 @@ public class JavaTimePlugin extends AbstractPlugin {
             var jDefinedClass = classOutline.implClass;
             var className = jDefinedClass.fullName();
             for (var fieldOutline : fieldOutlines) {
+                if (fieldOutline == null) {
+                    continue;
+                }
                 var propertyInfo = fieldOutline.getPropertyInfo();
                 var schemaType = getSchemaType(propertyInfo);
 

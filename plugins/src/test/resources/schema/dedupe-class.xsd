@@ -22,7 +22,13 @@
            jaxb:version="3.0"
            elementFormDefault="qualified">
 
-    <!-- Named superset: AircraftCodeType with value + context -->
+    <!-- Named package-level hosts (nameKey Group / AircraftCode) -->
+    <xs:complexType name="GroupType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:complexType name="AircraftCodeType">
         <xs:simpleContent>
             <xs:extension base="xs:string">
@@ -31,7 +37,7 @@
         </xs:simpleContent>
     </xs:complexType>
 
-    <!-- Holder A: anonymous AircraftCode (value only) — subset of AircraftCodeType -->
+    <!-- Holder A: anonymous Group (exact match for GroupType) + AircraftCode subset -->
     <xs:complexType name="HolderA">
         <xs:sequence>
             <xs:element name="AircraftCode" minOccurs="0">
@@ -51,7 +57,7 @@
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Holder B: identical anonymous Group shape; Party is isomorphic but different nameKey -->
+    <!-- Holder B: another anonymous Group (exact → GroupType); Party isomorphic but different nameKey -->
     <xs:complexType name="HolderB">
         <xs:sequence>
             <xs:element name="Group">
@@ -68,7 +74,6 @@
                     </xs:sequence>
                 </xs:complexType>
             </xs:element>
-            <!-- Same name, different structure — must not merge with Group -->
             <xs:element name="Details">
                 <xs:complexType>
                     <xs:sequence>
@@ -89,6 +94,7 @@
                 </xs:complexType>
             </xs:element>
             <xs:element name="namedCode" type="tns:AircraftCodeType"/>
+            <xs:element name="namedGroup" type="tns:GroupType"/>
         </xs:sequence>
     </xs:complexType>
 

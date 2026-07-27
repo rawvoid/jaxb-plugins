@@ -50,21 +50,28 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         var classes = testExecute(List.of(), ".*", null);
         var byName = bySimpleName(classes);
 
+        // Nested Group under holders + named GroupType
         assertThat(byName.get("Group")).hasSizeGreaterThanOrEqualTo(2);
         assertThat(byName.get("Group")).allMatch(Class::isMemberClass);
+        assertThat(byName).containsKey("GroupType");
     }
 
     @Test
-    void exactMergeCollapsesIsomorphicGroups() throws Exception {
+    void exactMergeCollapsesIsomorphicGroupsIntoNamedHost() throws Exception {
         var args = List.of("-Xdedupe-class");
         var classes = testExecute(args, ".*Group.*|.*Holder.*|.*Party.*", null);
         var byName = bySimpleName(classes);
 
-        // Two isomorphic Group nesteds collapse to one type (shared).
-        assertThat(byName.get("Group")).hasSize(1);
-        // Party is isomorphic to Group but different nameKey — kept separate.
+        // Anonymous Groups merge into package GroupType (nameKey Group ≡ GroupType).
+        assertThat(byName).containsKey("GroupType");
+        assertThat(byName.get("GroupType")).anyMatch(c -> !c.isMemberClass());
+        assertThat(byName).doesNotContainKey("Group");
+        // Party is isomorphic but different nameKey — kept separate.
         assertThat(byName).containsKey("Party");
         assertThat(byName.get("Party")).hasSize(1);
+
+        var holderA = byName.get("HolderA").getFirst();
+        assertThat(holderA.getDeclaredField("group").getType().getSimpleName()).isEqualTo("GroupType");
     }
 
     @Test

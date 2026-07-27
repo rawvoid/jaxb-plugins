@@ -101,6 +101,10 @@ public final class OutlineUtils {
         }
         var properties = new ArrayList<PropertyAccessors>();
         for (var fieldOutline : classOutline.getDeclaredFields()) {
+            // BeanGenerator may leave null slots when a model property has no field outline.
+            if (fieldOutline == null) {
+                continue;
+            }
             var prop = fieldOutline.getPropertyInfo();
             properties.add(new PropertyAccessors(prop.getName(true), prop.isCollection()));
         }
