@@ -28,6 +28,7 @@ import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
+import javax.xml.namespace.QName;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -50,12 +51,24 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * generation. Name checks are case-insensitive for short names.
  * </p>
  * <p>
- * <strong>Mapping pipeline.</strong> {@code -mapping} entries run in declaration order as a
- * single forward pass. Each rule matches against the <em>current intermediate</em> short name
- * (not only the original), so multi-step renames work, for example
- * {@code IATAFooType} → strip {@code Type} → strip {@code IATA} → {@code Foo}.
- * A rule that would produce a non-identifier is skipped with a warning; later rules still run.
- * Optional package filters always use the type's owner package.
+ * <strong>Mapping pipeline.</strong> Explicit {@code -mapping} entries run first, in
+ * declaration order, as a single forward pass. Each rule matches against the
+ * <em>current intermediate</em> short name (not only the original), so multi-step renames
+ * work, for example {@code IATAFooType} → strip {@code Type} → strip {@code IATA} →
+ * {@code Foo}. A rule that would produce a non-identifier is skipped with a warning; later
+ * rules still run. Optional package filters always use the type's owner package. Mappings
+ * apply to every candidate (including anonymous / element-derived classes).
+ * </p>
+ * <p>
+ * <strong>Named-type {@code Type} suffix strip.</strong> Optional {@code -strip-type-suffix}
+ * (default off) removes a trailing {@code Type} from the short name of <em>named</em> schema
+ * types only ({@link CClassInfo#getTypeName()} / enum type name non-null and local part ends
+ * with {@code Type}, including {@code Foo_Type}). Anonymous types and element classes are
+ * skipped so element names like {@code ActionType} are not mis-renamed. Eligibility uses the
+ * schema type name; the replacement is applied to the current short name (after mappings),
+ * so XJC name conversion such as {@code OrderID_Type} → {@code OrderIDType} → {@code OrderID}
+ * still works. Prefer this flag over a bare {@code -mapping=^(.+)Type$->$1} when schemas mix
+ * type-suffix conventions with element names that end in {@code Type}.
  * </p>
  * <p>
  * <strong>Conflict policy.</strong> Conflicting types keep their original names; non-conflicting
@@ -71,8 +84,9 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  *       {@code getSqueezedName()} after writing provisional short names onto the model</li>
  * </ul>
  * <p>
- * Prefer running plugins that re-parent types (for example {@link PromoteNestedClassPlugin})
- * before this plugin when both are active.
+ * When both this plugin and {@link PromoteNestedClassPlugin} are active, running rename
+ * <em>before</em> promote lets named global types claim short names first; promote-first is
+ * safer for some ObjectFactory edge cases but can leave dual names ({@code Foo} + {@code FooType}).
  * </p>
  *
  * @author Rawvoid
@@ -82,8 +96,21 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RenameClassPlugin.class);
 
+    /**
+     * Matches short names that end with a non-empty prefix plus {@code Type}
+     * (bare {@code Type} does not match).
+     */
+    private static final Pattern TYPE_SUFFIX = Pattern.compile("^(.+)Type$");
+
     @Option(name = "mapping", description = "Class name mapping (package filter + from pattern + to)")
     List<MappingConfig> mappings;
+
+    /**
+     * When true, strip a trailing {@code Type} from named schema types only (see class Javadoc).
+     * Flag form: {@code -strip-type-suffix}. Default off.
+     */
+    @Option(name = "strip-type-suffix", description = "Strip Type suffix from named schema types only (default: false)")
+    Boolean stripTypeSuffix;
 
     /**
      * Collects this bean and its {@link CClassInfo} ancestors that still have a pending rename.
@@ -115,7 +142,8 @@ public class RenameClassPlugin extends AbstractPlugin {
                 bean.getOwnerPackage().name(),
                 bean.getLocator(),
                 name -> setFieldValue(CCLASSINFO_SHORTNAME_FIELD, bean, name),
-                bean
+                bean,
+                localPart(bean.getTypeName())
             ));
         }
         for (var enumInfo : model.enums().values()) {
@@ -127,7 +155,8 @@ public class RenameClassPlugin extends AbstractPlugin {
                 enumInfo.parent.getOwnerPackage().name(),
                 enumInfo.getLocator(),
                 name -> setFieldValue(CENUMLEAFINFO_SHORTNAME_FIELD, enumInfo, name),
-                null
+                null,
+                localPart(enumInfo.getTypeName())
             ));
         }
         for (var element : model.getAllElements()) {
@@ -142,10 +171,15 @@ public class RenameClassPlugin extends AbstractPlugin {
                 element.getOwnerPackage().name(),
                 element.getLocator(),
                 name -> setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, element, name),
+                null,
                 null
             ));
         }
         return result;
+    }
+
+    private static String localPart(QName typeName) {
+        return typeName == null ? null : typeName.getLocalPart();
     }
 
     private static Map<CClassInfo, Candidate> beansByClass(List<Candidate> candidates) {
@@ -196,7 +230,8 @@ public class RenameClassPlugin extends AbstractPlugin {
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
-        if (mappings == null || mappings.isEmpty()) {
+        var strip = Boolean.TRUE.equals(stripTypeSuffix);
+        if ((mappings == null || mappings.isEmpty()) && !strip) {
             return;
         }
 
@@ -388,31 +423,63 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * Applies every matching {@link #mappings} entry in order as a pipeline. Each rule
-     * matches against the current intermediate short name. The list is non-null and
-     * non-empty when this is called from {@link #postProcessModel}.
+     * Applies explicit {@link #mappings} (if any), then optional named-type {@code Type}
+     * suffix strip. Each step matches against the current intermediate short name.
      */
     private String mapName(Candidate candidate) {
         var current = candidate.shortName;
-        for (var mapping : mappings) {
-            if (!matches(mapping, candidate.packageName, current)) {
-                continue;
+        if (mappings != null) {
+            for (var mapping : mappings) {
+                if (!matches(mapping, candidate.packageName, current)) {
+                    continue;
+                }
+                var next = current.replaceAll(mapping.from.pattern(), mapping.to);
+                if (next.equals(current)) {
+                    continue;
+                }
+                if (!JJavaName.isJavaIdentifier(next)) {
+                    log.warn(
+                        "Invalid Java class name after mapping: '{}' (from {}); skipping rule",
+                        next,
+                        candidate.fullName
+                    );
+                    continue;
+                }
+                current = next;
             }
-            var next = current.replaceAll(mapping.from.pattern(), mapping.to);
-            if (next.equals(current)) {
-                continue;
+        }
+        if (Boolean.TRUE.equals(stripTypeSuffix) && isStripTypeEligible(candidate)) {
+            var stripped = stripTypeSuffix(current);
+            if (stripped != null && !stripped.equals(current)) {
+                if (!JJavaName.isJavaIdentifier(stripped)) {
+                    log.warn(
+                        "Invalid Java class name after Type suffix strip: '{}' (from {}); skipping strip",
+                        stripped,
+                        candidate.fullName
+                    );
+                } else {
+                    current = stripped;
+                }
             }
-            if (!JJavaName.isJavaIdentifier(next)) {
-                log.warn(
-                    "Invalid Java class name after mapping: '{}' (from {}); skipping rule",
-                    next,
-                    candidate.fullName
-                );
-                continue;
-            }
-            current = next;
         }
         return current;
+    }
+
+    /**
+     * Named schema type whose local name ends with {@code Type} (includes {@code Foo_Type}).
+     * Anonymous beans, element classes, and types without a {@code Type} suffix are excluded.
+     */
+    private static boolean isStripTypeEligible(Candidate candidate) {
+        var local = candidate.schemaTypeLocalName;
+        return local != null && local.endsWith("Type");
+    }
+
+    /**
+     * Strips a trailing {@code Type} from the short name, or returns {@code name} unchanged.
+     */
+    private static String stripTypeSuffix(String name) {
+        var matcher = TYPE_SUFFIX.matcher(name);
+        return matcher.matches() ? matcher.group(1) : name;
     }
 
     private static boolean matches(MappingConfig mapping, String packageName, String shortName) {
@@ -467,6 +534,8 @@ public class RenameClassPlugin extends AbstractPlugin {
      * One rename target. {@link #shortName} is always the <em>original</em> model name;
      * the provisional target lives in the {@code names} map. {@link #bean} is non-null only
      * for beans (needed for ObjectFactory ancestor walks).
+     * {@link #schemaTypeLocalName} is the schema type QName local part when the type is
+     * named; {@code null} for anonymous beans and element classes.
      */
     private record Candidate(
         String kind,
@@ -476,7 +545,8 @@ public class RenameClassPlugin extends AbstractPlugin {
         String packageName,
         Locator locator,
         Consumer<String> apply,
-        CClassInfo bean
+        CClassInfo bean,
+        String schemaTypeLocalName
     ) {
     }
 
