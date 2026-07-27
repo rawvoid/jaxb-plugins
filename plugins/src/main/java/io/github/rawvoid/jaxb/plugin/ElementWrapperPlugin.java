@@ -30,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
 
 import javax.xml.namespace.QName;
 import java.util.ArrayList;
@@ -61,8 +62,9 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  *       from {@link Model#beans()}, desynchronizing outline and model.</li>
  * </ul>
  * {@link #run} therefore tests liveness via {@code model.beans()}, rebinds orphaned records onto
- * surviving same-package / same-nameKey hosts that still expose the property, and warns if none
- * is found.
+ * surviving same-package / same-nameKey hosts that still expose the property, and
+ * <strong>fails the build</strong> if none is found (missing {@code @XmlElementWrapper} would
+ * silently change XML shape).
  * </p>
  * <p>
  * Scope: a non-collection property whose type is a wrapper class (exactly one
@@ -137,7 +139,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        for (var flattened : resolveFlattenedFields(outline)) {
+        var resolved = resolveFlattenedFields(outline, errorHandler);
+        if (resolved == null) {
+            return false;
+        }
+        for (var flattened : resolved) {
             annotateXmlElementWrapper(outline, flattened);
         }
         return true;
@@ -154,8 +160,11 @@ public class ElementWrapperPlugin extends AbstractPlugin {
      * desynchronizes the outline from the model ({@code beans.size() != classes.size()}) and
      * can resurrect deleted types in generated code.
      * </p>
+     *
+     * @return resolved records, or {@code null} if rebind failed (error already reported)
      */
-    private List<FlattenedField> resolveFlattenedFields(Outline outline) {
+    private List<FlattenedField> resolveFlattenedFields(Outline outline, ErrorHandler errorHandler)
+        throws SAXException {
         var resolved = new ArrayList<FlattenedField>(flattenedFields.size());
         for (var flattened : flattenedFields) {
             if (isLiveBean(outline, flattened.owner())) {
@@ -164,15 +173,17 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             }
             var rebound = rebindToSurvivingHosts(outline, flattened);
             if (rebound.isEmpty()) {
-                log.warn(
-                    "Flatten record for removed class '{}' property '{}' could not be reattached; "
-                        + "@XmlElementWrapper may be missing on the merge host",
-                    flattened.owner().fullName(),
-                    flattened.propertyName()
-                );
-            } else {
-                resolved.addAll(rebound);
+                var message = (
+                    "Element-wrapper flatten record for removed class '%s' property '%s' "
+                        + "could not be reattached to any surviving same-package/nameKey host. "
+                        + "@XmlElementWrapper would be missing and XML shape would change. "
+                        + "Check plugin order (e.g. -Xdedupe-class vs -Xelement-wrapper) or rename conflicts."
+                ).formatted(flattened.owner().fullName(), flattened.propertyName());
+                log.error(message);
+                errorHandler.error(new SAXParseException(message, flattened.owner().getLocator()));
+                return null;
             }
+            resolved.addAll(rebound);
         }
         return resolved;
     }
