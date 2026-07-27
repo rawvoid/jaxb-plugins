@@ -135,13 +135,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             // Never use Outline#getClazz to test liveness: it lazily creates ClassOutline for
             // beans already removed from the model and desynchronizes beans vs classes.
             if (!outline.getModel().beans().containsValue(flattened.owner())) {
-                var message = (
-                    "Element-wrapper flatten owner '%s' (property '%s') was removed by a later "
-                        + "model-phase plugin. Put -Xelement-wrapper after all model-mutating "
-                        + "plugins (e.g. -Xdedupe-class, -Xpromote-nested-class, -Xrename-class) "
-                        + "so @XmlElementWrapper is not lost and deleted types are not resurrected."
-                ).formatted(flattened.owner().fullName(), flattened.propertyName());
-                log.error(message);
+                // Do not also log.error: ErrorReceiver already prints the SAXParseException once.
+                var message = """
+                    Element-wrapper flatten owner '%s' (property '%s') was removed by a later \
+                    model-phase plugin. Put -Xelement-wrapper after all model-mutating plugins \
+                    (e.g. -Xdedupe-class, -Xpromote-nested-class, -Xrename-class) so \
+                    @XmlElementWrapper is not lost and deleted types are not resurrected.\
+                    """.formatted(flattened.owner().fullName(), flattened.propertyName());
                 var exception = new SAXParseException(message, flattened.owner().getLocator());
                 errorHandler.error(exception);
                 // XJC ignores run()'s boolean; abort so the build cannot succeed without wrappers.
