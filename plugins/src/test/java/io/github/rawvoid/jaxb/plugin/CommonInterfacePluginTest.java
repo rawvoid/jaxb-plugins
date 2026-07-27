@@ -296,6 +296,36 @@ class CommonInterfacePluginTest extends AbstractXJCMojoTestCase {
     }
 
     /**
+     * {@link JavaTimePlugin} rewrites field types before this plugin runs. Under {@code @Data}
+     * (no XJC getters to inspect), the interface must use the rewritten type — not
+     * {@code FieldOutline#getRawType()} ({@code XMLGregorianCalendar}).
+     */
+    @Test
+    void javaTimeBeforeCommonInterfaceUsesRewrittenFieldType() throws Exception {
+        var args = List.of(
+            "-Xlombok",
+            "-Xjava-time",
+            optionCmd,
+            "-group",
+            "-class=.*CreateRequestType",
+            "-class=.*UpdateRequestType",
+            "-interface=" + IFACE
+        );
+        testExecute(args, IFACE_FILTER, (source, clazz) -> {
+            assertThat(clazz.isInterface()).isTrue();
+            assertThat(clazz.getMethod("getTimeStamp").getReturnType())
+                .isEqualTo(java.time.OffsetDateTime.class);
+            assertThat(clazz.getMethod("setTimeStamp", java.time.OffsetDateTime.class)).isNotNull();
+            assertThat(source).doesNotContain("XMLGregorianCalendar");
+        });
+        testExecute(args, CREATE_FILTER, (source, clazz) -> {
+            assertThat(clazz.getInterfaces()).anyMatch(i -> i.getName().equals(IFACE));
+            assertThat(clazz.getDeclaredField("timeStamp").getType())
+                .isEqualTo(java.time.OffsetDateTime.class);
+        });
+    }
+
+    /**
      * With {@code @Data}, shared list properties get setters on the generated interface.
      */
     private void assertLombokCombo(List<String> args) throws Exception {
