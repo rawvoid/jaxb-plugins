@@ -89,9 +89,37 @@
         </xs:complexContent>
     </xs:complexType>
 
+    <!--
+      Global element classes (CClassInfo implements CElement). mixed="true" forces
+      CReferencePropertyInfo so convertToElementProperty hits the CClassInfo branch
+      (must pass ID.NONE, not null — BeanGenerator NPEs on prop.id() == null).
+    -->
+    <xs:element name="AlphaBlock">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="code" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="BetaBlock">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="code" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="MixedClassRefs" mixed="true">
+        <xs:choice maxOccurs="unbounded">
+            <xs:element ref="tns:AlphaBlock"/>
+            <xs:element ref="tns:BetaBlock"/>
+        </xs:choice>
+    </xs:complexType>
+
     <xs:element name="flight" type="tns:Flight"/>
     <xs:element name="dual" type="tns:DualChoice"/>
     <xs:element name="plain" type="tns:PlainList"/>
     <xs:element name="choiceWithClass" type="tns:ChoiceWithClass"/>
     <xs:element name="conflictDerived" type="tns:ConflictDerived"/>
+    <xs:element name="mixedClassRefs" type="tns:MixedClassRefs"/>
 </xs:schema>
