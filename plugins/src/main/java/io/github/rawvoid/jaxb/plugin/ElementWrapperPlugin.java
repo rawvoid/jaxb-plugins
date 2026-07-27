@@ -51,22 +51,12 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  * always returns null).
  * </p>
  * <p>
- * Flatten records hold the owner {@link CClassInfo} identity from the model phase. A later
- * model plugin (for example {@link DedupeClassPlugin}) may <em>delete</em> that owner after
- * merge. Two hazards follow:
- * </p>
- * <ul>
- *   <li><b>Lost annotation</b> — {@code @XmlElementWrapper} lives only in this side list, not
- *       in the C* model. Dropping the record without rebind can omit the wrapper on marshal.</li>
- *   <li><b>Outline resurrection</b> — {@link Outline#getClazz(CClassInfo)} must not be used to
- *       test liveness: it lazily generates a {@link ClassOutline} even for beans already removed
- *       from {@link Model#beans()}, desynchronizing outline and model.</li>
- * </ul>
- * <p>
- * {@link #run} therefore tests liveness via {@code model.beans()}, rebinds orphaned records onto
- * surviving same-package / same-nameKey hosts that still expose the property, and
- * <strong>fails the build</strong> if none is found (missing {@code @XmlElementWrapper} would
- * silently change XML shape).
+ * <strong>Plugin order:</strong> run this plugin's model phase <em>after</em> every other plugin
+ * that mutates the C* model (for example {@link DedupeClassPlugin}, promote, rename, flatten-multi).
+ * Flatten records keep the owner {@link CClassInfo} identity; if a later model plugin deletes that
+ * owner, {@link #run} fails the build instead of guessing a merge host or calling
+ * {@link Outline#getClazz(CClassInfo)} on a dead bean (that API lazily resurrects outlines and
+ * desynchronizes {@code model.beans()} from generated classes).
  * </p>
  * <p>
  * Scope: a non-collection property whose type is a wrapper class (exactly one
@@ -141,103 +131,25 @@ public class ElementWrapperPlugin extends AbstractPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
-        var resolved = resolveFlattenedFields(outline, errorHandler);
-        if (resolved == null) {
-            return false;
-        }
-        for (var flattened : resolved) {
+        for (var flattened : flattenedFields) {
+            // Never use Outline#getClazz to test liveness: it lazily creates ClassOutline for
+            // beans already removed from the model and desynchronizes beans vs classes.
+            if (!outline.getModel().beans().containsValue(flattened.owner())) {
+                var message = (
+                    "Element-wrapper flatten owner '%s' (property '%s') was removed by a later "
+                        + "model-phase plugin. Put -Xelement-wrapper after all model-mutating "
+                        + "plugins (e.g. -Xdedupe-class, -Xpromote-nested-class, -Xrename-class) "
+                        + "so @XmlElementWrapper is not lost and deleted types are not resurrected."
+                ).formatted(flattened.owner().fullName(), flattened.propertyName());
+                log.error(message);
+                var exception = new SAXParseException(message, flattened.owner().getLocator());
+                errorHandler.error(exception);
+                // XJC ignores run()'s boolean; abort so the build cannot succeed without wrappers.
+                throw exception;
+            }
             annotateXmlElementWrapper(outline, flattened);
         }
         return true;
-    }
-
-    /**
-     * Live owners annotate as recorded. Owners removed by a later model plugin are rebound
-     * onto surviving merge hosts (same package + {@link #nameKey(String)} + property name)
-     * so {@link XmlElementWrapper} is not lost with the deleted class.
-     * <p>
-     * <strong>Do not</strong> use {@link Outline#getClazz(CClassInfo)} to test liveness:
-     * {@code BeanGenerator#getClazz} lazily creates a {@link ClassOutline} for any
-     * {@link CClassInfo}, including beans already removed from {@link Model#beans()}. That
-     * desynchronizes the outline from the model ({@code beans.size() != classes.size()}) and
-     * can resurrect deleted types in generated code.
-     * </p>
-     *
-     * @return resolved records, or {@code null} if rebind failed (error already reported)
-     */
-    private List<FlattenedField> resolveFlattenedFields(Outline outline, ErrorHandler errorHandler)
-        throws SAXException {
-        var resolved = new ArrayList<FlattenedField>(flattenedFields.size());
-        for (var flattened : flattenedFields) {
-            if (isLiveBean(outline, flattened.owner())) {
-                resolved.add(flattened);
-                continue;
-            }
-            var rebound = rebindToSurvivingHosts(outline, flattened);
-            if (rebound.isEmpty()) {
-                var message = (
-                    "Element-wrapper flatten record for removed class '%s' property '%s' "
-                        + "could not be reattached to any surviving same-package/nameKey host. "
-                        + "@XmlElementWrapper would be missing and XML shape would change. "
-                        + "Check plugin order (e.g. -Xdedupe-class vs -Xelement-wrapper) or rename conflicts."
-                ).formatted(flattened.owner().fullName(), flattened.propertyName());
-                log.error(message);
-                errorHandler.error(new SAXParseException(message, flattened.owner().getLocator()));
-                return null;
-            }
-            resolved.addAll(rebound);
-        }
-        return resolved;
-    }
-
-    /** Whether {@code bean} is still a generated model bean (present in {@link Model#beans()}). */
-    private static boolean isLiveBean(Outline outline, CClassInfo bean) {
-        return outline.getModel().beans().containsValue(bean);
-    }
-
-    /**
-     * Dedupe and similar plugins merge by package + name key. Map orphaned flatten intent onto
-     * generated classes that match that grouping and still declare the property field.
-     */
-    private List<FlattenedField> rebindToSurvivingHosts(Outline outline, FlattenedField stale) {
-        var key = nameKey(stale.owner().shortName);
-        var pkg = stale.owner().getOwnerPackage();
-        var rebound = new ArrayList<FlattenedField>();
-        for (var classOutline : outline.getClasses()) {
-            var host = classOutline.target;
-            if (host.getOwnerPackage() != pkg) {
-                continue;
-            }
-            if (!nameKey(host.shortName).equals(key)) {
-                continue;
-            }
-            if (classOutline.implClass.fields().get(stale.propertyName()) == null) {
-                continue;
-            }
-            log.info(
-                "Reattached @XmlElementWrapper intent {}.{} -> {}.{}",
-                stale.owner().fullName(),
-                stale.propertyName(),
-                host.fullName(),
-                stale.propertyName()
-            );
-            rebound.add(new FlattenedField(
-                host,
-                stale.propertyName(),
-                stale.wrapperName(),
-                stale.wrapperNillable(),
-                stale.wrapperRequired()
-            ));
-        }
-        return rebound;
-    }
-
-    /** Same rule as {@link DedupeClassPlugin#nameKey(String)} for merge-host lookup. */
-    private static String nameKey(String shortName) {
-        if (shortName != null && shortName.length() > 4 && shortName.endsWith("Type")) {
-            return shortName.substring(0, shortName.length() - 4);
-        }
-        return shortName == null ? "" : shortName;
     }
 
     private Set<CClassInfo> findWrapperClasses(Model model) {
@@ -569,7 +481,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     private void annotateXmlElementWrapper(Outline outline, FlattenedField flattened) {
-        // Caller only passes owners still in model.beans() (see resolveFlattenedFields).
+        // Owner already verified live in model.beans() (see run()).
         var classOutline = outline.getClazz(flattened.owner());
         var field = classOutline.implClass.fields().get(flattened.propertyName());
         if (field == null) {

@@ -269,6 +269,10 @@ Flattens XML collection wrapper elements by moving `@XmlElementWrapper` and `@Xm
 - Removes redundant wrapper DTO classes.
 - Simplifies object graphs and cleans up API signatures.
 
+#### Plugin order
+
+Run **`-Xelement-wrapper` after every other model-mutating plugin** (`-Xdedupe-class`, `-Xpromote-nested-class`, `-Xrename-class`, `-Xflatten-multi-element-prop`, …). Flatten records keep the owner class identity; if a later model plugin deletes that owner, generation fails with a clear error instead of emitting incomplete `@XmlElementWrapper` annotations.
+
 #### Quick Start
 
 ```bash
@@ -549,12 +553,14 @@ Merges structurally redundant generated beans to reduce class count (NDC-style a
 Suggested order with other model plugins:
 
 ```bash
--Xelement-wrapper \
 -Xflatten-multi-element-prop \
 -Xpromote-nested-class \
 -Xdedupe-class -merge-subset \
--Xrename-class -strip-type-suffix
+-Xrename-class -strip-type-suffix \
+-Xelement-wrapper
 ```
+
+Put **`-Xelement-wrapper` last among model plugins** so flatten owners are not removed by dedupe/rename/promote after flatten records are captured.
 
 Nested copies merge into **package-level** hosts (named global types, or types already promoted). Prefer **promote before dedupe** so more hosts sit at package scope. Cross-outer nested-to-nested merges are skipped (avoids ObjectFactory / FieldOutline corruption).
 
