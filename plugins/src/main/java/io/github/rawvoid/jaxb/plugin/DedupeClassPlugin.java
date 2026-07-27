@@ -63,7 +63,9 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(DedupeClassPlugin.class);
 
-    /** Final in XJC; set when collapsing an element-class into a pure type host. */
+    /**
+     * Final in XJC; set when collapsing an element-class into a pure type host.
+     */
     private static final Field CCLASSINFO_ELEMENTNAME_FIELD = getField(CClassInfo.class, "elementName");
 
     private static final Comparator<CClassInfo> HOST_ORDER = Comparator
@@ -98,7 +100,9 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     // ── naming / host preference ─────────────────────────────────────────────
 
-    /** Name equivalence key: strip a trailing {@code Type} when the remainder is non-empty. */
+    /**
+     * Name equivalence key: strip a trailing {@code Type} when the remainder is non-empty.
+     */
     static String nameKey(String shortName) {
         if (shortName != null && shortName.length() > 4 && shortName.endsWith("Type")) {
             return shortName.substring(0, shortName.length() - 4);
@@ -118,7 +122,9 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return bean.getOwnerPackage().name();
     }
 
-    /** Package-local name-key group (cross-package merges are never considered). */
+    /**
+     * Package-local name-key group (cross-package merges are never considered).
+     */
     private static String groupKey(CClassInfo bean) {
         return packageName(bean) + '\0' + nameKey(bean.shortName);
     }
@@ -228,18 +234,22 @@ public class DedupeClassPlugin extends AbstractPlugin {
     }
 
     private static String nonElementFp(CNonElement info, Set<CClassInfo> stack) {
-        if (info == null) {
-            return "null";
-        }
-        if (info instanceof CClassInfo classInfo) {
-            return "bean:" + classFp(classInfo, stack);
-        }
-        if (info instanceof CEnumLeafInfo enumInfo) {
-            return "enum:" + enumFp(enumInfo);
-        }
-        if (info instanceof CBuiltinLeafInfo builtin) {
-            var qn = builtin.getTypeName();
-            return "leaf:" + (qn == null ? builtin.toString() : qn.toString());
+        switch (info) {
+            case null -> {
+                return "null";
+            }
+            case CClassInfo classInfo -> {
+                return "bean:" + classFp(classInfo, stack);
+            }
+            case CEnumLeafInfo enumInfo -> {
+                return "enum:" + enumFp(enumInfo);
+            }
+            case CBuiltinLeafInfo builtin -> {
+                var qn = builtin.getTypeName();
+                return "leaf:" + (qn == null ? builtin.toString() : qn.toString());
+            }
+            default -> {
+            }
         }
         return "other:" + info.getClass().getSimpleName();
     }
@@ -366,18 +376,15 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     && sa.id() == ha.id()
                     && Objects.equals(sa.getSchemaType(), ha.getSchemaType())
                     && nonElementSubsetCompatible(sa.getTarget(), ha.getTarget(), visiting);
-            case CValuePropertyInfo sv when host instanceof CValuePropertyInfo hv ->
-                sv.id() == hv.id()
-                    && Objects.equals(sv.getSchemaType(), hv.getSchemaType())
-                    && nonElementSubsetCompatible(sv.getTarget(), hv.getTarget(), visiting);
-            case CElementPropertyInfo se when host instanceof CElementPropertyInfo he ->
-                se.isValueList() == he.isValueList()
-                    && se.id() == he.id()
-                    && elementTypesSubset(se, he, visiting);
-            case CReferencePropertyInfo sr when host instanceof CReferencePropertyInfo hr ->
-                sr.isMixed() == hr.isMixed()
-                    && sr.id() == hr.id()
-                    && referenceSubset(sr, hr, visiting);
+            case CValuePropertyInfo sv when host instanceof CValuePropertyInfo hv -> sv.id() == hv.id()
+                && Objects.equals(sv.getSchemaType(), hv.getSchemaType())
+                && nonElementSubsetCompatible(sv.getTarget(), hv.getTarget(), visiting);
+            case CElementPropertyInfo se when host instanceof CElementPropertyInfo he -> se.isValueList() == he.isValueList()
+                && se.id() == he.id()
+                && elementTypesSubset(se, he, visiting);
+            case CReferencePropertyInfo sr when host instanceof CReferencePropertyInfo hr -> sr.isMixed() == hr.isMixed()
+                && sr.id() == hr.id()
+                && referenceSubset(sr, hr, visiting);
             default -> false;
         };
     }
@@ -486,7 +493,9 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return true;
     }
 
-    /** Same fingerprint within a package+nameKey group → one host. */
+    /**
+     * Same fingerprint within a package+nameKey group → one host.
+     */
     private int mergeExact(Model model, boolean dry) {
         Map<String, Map<String, List<CClassInfo>>> groups = new LinkedHashMap<>();
         for (var bean : List.copyOf(model.beans().values())) {
@@ -691,9 +700,11 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return nested;
     }
 
-    /** True if {@code ancestor} appears in the nesting parent chain of {@code node}. */
+    /**
+     * True if {@code ancestor} appears in the nesting parent chain of {@code node}.
+     */
     private static boolean isNestingAncestor(CClassInfo ancestor, CClassInfo node) {
-        CClassInfoParent p = node.parent();
+        var p = node.parent();
         while (p instanceof CClassInfo c) {
             if (c == ancestor) {
                 return true;
