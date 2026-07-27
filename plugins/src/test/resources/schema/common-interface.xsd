@@ -28,13 +28,15 @@
     <xs:element name="IdMismatch" type="tns:IdMismatchType"/>
     <xs:element name="Unrelated" type="tns:UnrelatedType"/>
 
-    <!-- Shares id, name, tags with UpdateRequestType -->
+    <!-- Shares id, name, tags, timeStamp with UpdateRequestType -->
     <xs:complexType name="CreateRequestType">
         <xs:sequence>
             <xs:element name="id" type="xs:string"/>
             <xs:element name="name" type="xs:string"/>
             <xs:element name="tags" type="xs:string" maxOccurs="unbounded"/>
         </xs:sequence>
+        <!-- Shared dateTime for JavaTime + CommonInterface interaction tests. -->
+        <xs:attribute name="timeStamp" type="xs:dateTime"/>
     </xs:complexType>
 
     <xs:complexType name="UpdateRequestType">
@@ -43,6 +45,7 @@
             <xs:element name="name" type="xs:string"/>
             <xs:element name="tags" type="xs:string" maxOccurs="unbounded"/>
         </xs:sequence>
+        <xs:attribute name="timeStamp" type="xs:dateTime"/>
     </xs:complexType>
 
     <!-- Only id is common with the other *RequestType types -->

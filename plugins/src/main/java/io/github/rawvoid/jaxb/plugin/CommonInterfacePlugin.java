@@ -74,7 +74,9 @@ import java.util.regex.Pattern;
  *   <li>{@code -fields} (optional, structured form only): comma-separated Java property names; omit for full
  *       intersection of matching classes.</li>
  *   <li>Property discovery uses the field model ({@code FieldOutline}), not whether XJC
- *       accessors are still present in source — so it works after {@code -Xlombok} strips methods.</li>
+ *       accessors are still present in source — so it works after {@code -Xlombok} strips methods.
+ *       Declared types are taken from the CodeModel field (after plugins such as
+ *       {@link JavaTimePlugin}), not from {@code FieldOutline#getRawType()}.</li>
  *   <li><b>Without</b> {@code @lombok.Data}: XJC-style accessors. Getter always; setter only for
  *       non-collection properties (stock XJC has no {@code set} for live lists).</li>
  *   <li><b>With</b> {@code @Data} (already on the class, or applied by an active
@@ -292,7 +294,10 @@ public class CommonInterfacePlugin extends AbstractPlugin {
         var prop = fieldOutline.getPropertyInfo();
         var propertyName = prop.getName(false);
         var seed = prop.getName(true);
-        var type = fieldOutline.getRawType();
+        // Prefer the CodeModel field type so rewrites by earlier plugins (e.g. JavaTimePlugin)
+        // are reflected. FieldOutline.getRawType() still reports the original XJC binding.
+        var field = implClass.fields().get(propertyName);
+        var type = field != null ? field.type() : fieldOutline.getRawType();
         var collection = prop.isCollection();
         var isBoolean = isPrimitiveBoolean(type);
 
