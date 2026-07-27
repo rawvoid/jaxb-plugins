@@ -60,6 +60,14 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * aligned with CodeModel's nested-class maps and case-insensitive filesystems.
  * </p>
  * <p>
+ * <strong>Outer self-name.</strong> BeanGenerator rejects a nested type whose
+ * simple name equals its enclosing class. Each bean therefore reserves its own
+ * short name under itself, so a deep nested {@code TaxCouponInfo} is not lifted
+ * into a parent that was renamed from {@code TaxCouponInfoType} to
+ * {@code TaxCouponInfo} (rename-before-promote). Immediate siblings already
+ * occupy names under the parent; this covers the outer class itself.
+ * </p>
+ * <p>
  * <strong>Beans and enums share one namespace</strong> under each parent: a bean
  * named {@code Status} and an enum named {@code Status} block each other.
  * Types whose parent is already a package (or a {@code CElementInfo}) are left
@@ -154,6 +162,8 @@ public class PromoteNestedClassPlugin extends AbstractPlugin {
         Map<CClassInfoParent, Set<String>> occupied = new HashMap<>();
         for (var bean : model.beans().values()) {
             occupy(occupied, canonicalParent(model, bean.parent()), bean.shortName);
+            // BeanGenerator forbids nested type shortName == enclosing class shortName.
+            occupy(occupied, bean, bean.shortName);
         }
         for (var enumInfo : model.enums().values()) {
             occupy(occupied, canonicalParent(model, enumInfo.parent), enumInfo.shortName);

@@ -172,6 +172,26 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      NDC TaxCouponInfo-shaped: rename strip first then promote must not lift nested
+      TaxCouponInfo into renamed outer TaxCouponInfo (BeanGenerator parent/child clash).
+    -->
+    <xs:complexType name="TaxCouponInfoType">
+        <xs:sequence>
+            <xs:element name="TicketDocument">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="TaxCouponInfo" minOccurs="0">
+                            <xs:complexType>
+                                <xs:attribute name="cabin" type="xs:string"/>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="person" type="tns:Person"/>
     <xs:element name="address" type="tns:AddressType"/>
     <xs:element name="iataWidget" type="tns:IATAWidgetType"/>
@@ -182,4 +202,5 @@
     <xs:element name="email" type="tns:EmailType"/>
     <xs:element name="orderId" type="tns:OrderID_Type"/>
     <xs:element name="actionHolder" type="tns:ActionHolder"/>
+    <xs:element name="taxCouponInfo" type="tns:TaxCouponInfoType"/>
 </xs:schema>
