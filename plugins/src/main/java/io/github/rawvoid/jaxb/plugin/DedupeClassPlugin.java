@@ -20,6 +20,7 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
 import io.github.rawvoid.jaxb.utils.ModelUtils;
+import org.glassfish.jaxb.core.v2.model.core.ID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
@@ -34,19 +35,24 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * Merges structurally redundant generated beans in {@link #postProcessModel(Model, ErrorHandler)}
  * to reduce class count.
  * <p>
- * Candidates are grouped by {@linkplain #nameKey(String) name key}: the Java short name with a
- * trailing {@code Type} suffix removed ({@code AircraftCodeType} ≡ {@code AircraftCode}). Classes
- * with different name keys are never merged, even when their shapes match.
+ * Candidates are grouped by <em>owner package</em> and {@linkplain #nameKey(String) name key}: the
+ * Java short name with a trailing {@code Type} suffix removed ({@code AircraftCodeType} ≡
+ * {@code AircraftCode}). Classes in different packages or with different name keys are never
+ * merged, even when their shapes match.
  * </p>
  * <p>
  * <strong>Exact merge.</strong> Beans with identical structural fingerprints (properties: name,
- * collection flag, attribute/element/value kind, recursive type shape) collapse to one canonical
- * host.
+ * collection flag, attribute/element/value kind, XML names, nillable, defaults, adapters, ID use,
+ * value-list vs repeated element, recursive type shape, attribute wildcard) collapse to one
+ * canonical host. Property declaration order and {@code required}/{@code minOccurs} are
+ * intentionally <em>not</em> part of the fingerprint — they rarely differ among copy-pasted
+ * isomorphic types and would block useful merges.
  * </p>
  * <p>
  * <strong>Subset merge</strong> ({@code -merge-subset}): when every property of {@code B} exists on
  * {@code A} with a compatible type, {@code B} is merged into {@code A}. Extra fields on the host
- * remain. Prefer this only when surplus fields on marshal paths are acceptable.
+ * remain. Prefer this only when surplus fields on marshal paths are acceptable. Empty-shell and
+ * nested-child subset merges also require this flag.
  * </p>
  * <p>
  * By default only <em>anonymous</em> beans ({@link CClassInfo#getTypeName()} {@code null}) are
@@ -95,6 +101,15 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     private static boolean isPackageLevel(CClassInfo bean) {
         return !(bean.parent() instanceof CClassInfo);
+    }
+
+    private static String packageName(CClassInfo bean) {
+        return bean.getOwnerPackage().name();
+    }
+
+    /** Package-local name-key group (cross-package merges are never considered). */
+    private static String groupKey(CClassInfo bean) {
+        return packageName(bean) + '\0' + nameKey(bean.shortName);
     }
 
     private static int propertyCount(CClassInfo bean) {
@@ -156,8 +171,39 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return nameKey(enumInfo.shortName) + "{" + String.join(",", values) + "}";
     }
 
+    private static String adapterBit(CPropertyInfo prop) {
+        var adapter = prop.getAdapter();
+        if (adapter == null) {
+            return "";
+        }
+        var known = adapter.getAdapterIfKnown();
+        if (known != null) {
+            return "/ad:" + known.getName();
+        }
+        try {
+            return "/ad:" + adapter.adapterType.fullName();
+        } catch (UnsupportedOperationException e) {
+            return "/ad:?";
+        }
+    }
+
+    private static String idBit(ID id) {
+        if (id == null || id == ID.NONE) {
+            return "";
+        }
+        return "/id:" + id.name();
+    }
+
+    private static String schemaTypeBit(CPropertyInfo prop) {
+        var st = prop.getSchemaType();
+        return st == null ? "" : "/st:" + st;
+    }
+
     /**
      * Structural fingerprint of a bean (properties only; identity-free for isomorphic trees).
+     * <p>
+     * Omits property declaration order and {@code required} on purpose (see class Javadoc).
+     * </p>
      */
     static String classFp(CClassInfo bean) {
         return classFp(bean, new HashSet<>());
@@ -172,13 +218,14 @@ public class DedupeClassPlugin extends AbstractPlugin {
             // share local props but extend different bases and must not merge.
             var base = bean.getBaseClass();
             var baseFp = base == null ? "base:none" : "base:" + classFp(base, stack);
+            var flags = bean.hasAttributeWildcard() ? "W" : "";
             var props = new ArrayList<>(bean.getProperties());
             props.sort(Comparator.comparing(p -> p.getName(false)));
             var parts = new ArrayList<String>(props.size());
             for (var prop : props) {
                 parts.add(propFp(prop, stack));
             }
-            return baseFp + "{" + String.join(";", parts) + "}";
+            return baseFp + flags + "{" + String.join(";", parts) + "}";
         } finally {
             stack.remove(bean);
         }
@@ -191,21 +238,36 @@ public class DedupeClassPlugin extends AbstractPlugin {
         switch (prop) {
             case CAttributePropertyInfo attr -> {
                 sb.append("@A:");
+                sb.append(attr.getXmlName());
+                sb.append(':');
                 sb.append(nonElementFp(attr.getTarget(), stack));
+                sb.append(adapterBit(attr));
+                sb.append(idBit(attr.id()));
+                sb.append(schemaTypeBit(attr));
             }
             case CValuePropertyInfo value -> {
                 sb.append("@V:");
                 sb.append(nonElementFp(value.getTarget(), stack));
+                sb.append(adapterBit(value));
+                sb.append(idBit(value.id()));
+                sb.append(schemaTypeBit(value));
             }
             case CElementPropertyInfo element -> {
                 sb.append("@E:");
+                if (element.isValueList()) {
+                    sb.append("L");
+                }
+                sb.append(adapterBit(element));
+                sb.append(idBit(element.id()));
                 var typeBits = new ArrayList<String>();
                 for (var typeRef : element.getTypes()) {
+                    var def = typeRef.getDefaultValue();
                     typeBits.add(
                         nonElementFp(typeRef.getTarget(), stack)
                             + "/"
                             + typeRef.getTagName()
                             + (typeRef.isNillable() ? "?" : "")
+                            + (def == null ? "" : "=" + def)
                     );
                 }
                 Collections.sort(typeBits);
@@ -213,6 +275,11 @@ public class DedupeClassPlugin extends AbstractPlugin {
             }
             case CReferencePropertyInfo ref -> {
                 sb.append("@R:");
+                if (ref.isMixed()) {
+                    sb.append("M");
+                }
+                sb.append(adapterBit(ref));
+                sb.append(idBit(ref.id()));
                 var els = new ArrayList<String>();
                 for (var el : ref.getElements()) {
                     if (el instanceof CClassInfo ci) {
@@ -242,13 +309,16 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     /**
      * Whether {@code subset} is structurally a subset of {@code host} (or equal).
-     * Requires matching {@link #nameKey(String)}.
+     * Requires matching {@link #nameKey(String)} and the same owner package.
      */
     static boolean isStructuralSubset(CClassInfo subset, CClassInfo host) {
         if (subset == host) {
             return true;
         }
         if (!nameKey(subset.shortName).equals(nameKey(host.shortName))) {
+            return false;
+        }
+        if (!packageName(subset).equals(packageName(host))) {
             return false;
         }
         return isStructuralSubset(subset, host, new HashSet<>());
@@ -268,6 +338,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
             var subsetBase = subset.getBaseClass();
             var hostBase = host.getBaseClass();
             if (subsetBase != hostBase) {
+                return false;
+            }
+            // Host must cover wildcard if subset declares one.
+            if (subset.hasAttributeWildcard() && !host.hasAttributeWildcard()) {
                 return false;
             }
             for (var sp : subset.getProperties()) {
@@ -295,15 +369,28 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 return false;
             }
         }
+        // Shared binding flags must not diverge (host may only be "wider" where subset allows).
+        if (!Objects.equals(adapterBit(subset), adapterBit(host))) {
+            return false;
+        }
         return switch (subset) {
             case CAttributePropertyInfo sa when host instanceof CAttributePropertyInfo ha ->
-                nonElementSubsetCompatible(sa.getTarget(), ha.getTarget(), visiting);
+                Objects.equals(sa.getXmlName(), ha.getXmlName())
+                    && sa.id() == ha.id()
+                    && Objects.equals(sa.getSchemaType(), ha.getSchemaType())
+                    && nonElementSubsetCompatible(sa.getTarget(), ha.getTarget(), visiting);
             case CValuePropertyInfo sv when host instanceof CValuePropertyInfo hv ->
-                nonElementSubsetCompatible(sv.getTarget(), hv.getTarget(), visiting);
+                sv.id() == hv.id()
+                    && Objects.equals(sv.getSchemaType(), hv.getSchemaType())
+                    && nonElementSubsetCompatible(sv.getTarget(), hv.getTarget(), visiting);
             case CElementPropertyInfo se when host instanceof CElementPropertyInfo he ->
-                elementTypesSubset(se, he, visiting);
+                se.isValueList() == he.isValueList()
+                    && se.id() == he.id()
+                    && elementTypesSubset(se, he, visiting);
             case CReferencePropertyInfo sr when host instanceof CReferencePropertyInfo hr ->
-                referenceSubset(sr, hr, visiting);
+                sr.isMixed() == hr.isMixed()
+                    && sr.id() == hr.id()
+                    && referenceSubset(sr, hr, visiting);
             default -> false;
         };
     }
@@ -321,6 +408,11 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     continue;
                 }
                 if (st.isNillable() && !ht.isNillable()) {
+                    continue;
+                }
+                // Host default must match when subset declares one (host may add a default).
+                var sd = st.getDefaultValue();
+                if (sd != null && !sd.equals(ht.getDefaultValue())) {
                     continue;
                 }
                 if (nonElementSubsetCompatible(st.getTarget(), ht.getTarget(), visiting)) {
@@ -380,16 +472,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return nonElementFp(subset, new HashSet<>(visiting)).equals(nonElementFp(host, new HashSet<>(visiting)));
     }
 
-    private static CClassInfo pickHost(CClassInfo a, CClassInfo b) {
-        var sa = hostScore(a);
-        var sb = hostScore(b);
-        if (sa != sb) {
-            return sa >= sb ? a : b;
-        }
-        // Stable: fullName order.
-        return a.fullName().compareTo(b.fullName()) <= 0 ? a : b;
-    }
-
     private static boolean mayDelete(CClassInfo bean, boolean anonymousOnly) {
         return !anonymousOnly || isAnonymous(bean);
     }
@@ -401,26 +483,44 @@ public class DedupeClassPlugin extends AbstractPlugin {
         var dry = Boolean.TRUE.equals(dryRun);
 
         var merged = 0;
-        merged += mergeExact(model, anonOnly, dry);
+        merged += mergeExact(model, anonOnly, dry, subset);
         if (subset) {
-            merged += mergeSubsets(model, anonOnly, dry);
+            merged += mergeSubsets(model, anonOnly, dry, subset);
         }
-        // Final sweep: nested anonymous leftovers with same nameKey as a package-level host
-        // (e.g. empty shells after cross-hierarchy merge/lift) still break ObjectFactory.
+        // Final sweep: nested anonymous leftovers with same nameKey as a package-level host.
         merged += mergeNestedIntoPackageHosts(model, anonOnly, dry, subset);
         if (!dry) {
             collapseRedundantElementClasses(model);
+            warnObjectFactoryCollisions(model);
         }
         if (merged > 0) {
             log.info("Deduped {} bean merge(s){}", merged, dry ? " (dry-run)" : "");
         }
     }
 
+    private static void warnObjectFactoryCollisions(Model model) {
+        var collisions = ModelUtils.objectFactorySqueezedCollisions(model);
+        if (collisions.isEmpty()) {
+            return;
+        }
+        for (var group : collisions) {
+            var names = group.stream().map(CClassInfo::fullName).toList();
+            log.warn(
+                "ObjectFactory squeezed-name collision after dedupe (package-local createXxx): {}",
+                names
+            );
+        }
+    }
+
     /**
-     * When a local/global element's content type is already a bean class but the element still
-     * has its own generated class name, drop the element class. Otherwise ObjectFactory emits
-     * methods with conflicting type parameters (e.g. {@code JAXBElement<Outer.Terminal>} vs
-     * package {@code Terminal}).
+     * When a local/global element's content type is already a bean whose name key matches the
+     * element short name, drop the element class. Otherwise ObjectFactory emits methods with
+     * conflicting type parameters (e.g. {@code JAXBElement<Outer.Terminal>} vs package
+     * {@code Terminal}).
+     * <p>
+     * Only the content-type path is used — clearing an element class merely because some
+     * unrelated package bean shares a name key is unsafe.
+     * </p>
      */
     private static void collapseRedundantElementClasses(Model model) {
         var cleared = 0;
@@ -429,24 +529,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 continue;
             }
             var content = elementInfo.getContentType();
-            // Content may be a bean after merge while the element still declares its own class.
             if (content instanceof CClassInfo contentClass
                 && nameKey(elementInfo.shortName()).equals(nameKey(contentClass.shortName))) {
                 setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
                 cleared++;
-                continue;
-            }
-            // Scoped element class with the same short name as a package-level bean: drop the
-            // element class so ObjectFactory uses the package bean (avoids Outer.Foo vs Foo).
-            if (elementInfo.getScope() != null) {
-                var key = nameKey(elementInfo.shortName());
-                for (var bean : model.beans().values()) {
-                    if (isPackageLevel(bean) && nameKey(bean.shortName).equals(key)) {
-                        setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
-                        cleared++;
-                        break;
-                    }
-                }
             }
         }
         if (cleared > 0) {
@@ -456,7 +542,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     /**
      * Merges remaining nested anonymous beans into package-level hosts with the same name key
-     * when structures match (exact, or subset if enabled).
+     * when structures match (exact, or subset / empty-shell if {@code -merge-subset}).
      */
     private int mergeNestedIntoPackageHosts(Model model, boolean anonOnly, boolean dry, boolean subset) {
         var count = 0;
@@ -466,14 +552,14 @@ public class DedupeClassPlugin extends AbstractPlugin {
             Map<String, List<CClassInfo>> packageHosts = new LinkedHashMap<>();
             for (var bean : model.beans().values()) {
                 if (isPackageLevel(bean)) {
-                    packageHosts.computeIfAbsent(nameKey(bean.shortName), k -> new ArrayList<>()).add(bean);
+                    packageHosts.computeIfAbsent(groupKey(bean), k -> new ArrayList<>()).add(bean);
                 }
             }
             for (var victim : List.copyOf(model.beans().values())) {
                 if (isPackageLevel(victim) || !mayDelete(victim, anonOnly)) {
                     continue;
                 }
-                var hosts = packageHosts.get(nameKey(victim.shortName));
+                var hosts = packageHosts.get(groupKey(victim));
                 if (hosts == null || hosts.isEmpty()) {
                     continue;
                 }
@@ -486,13 +572,17 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     }
                     var exact = classFp(victim).equals(classFp(host));
                     var sub = subset && isStructuralSubset(victim, host);
-                    // Empty shell only when same base (including both null).
-                    var emptyShell = propertyCount(victim) == 0
+                    // Empty shell only under -merge-subset (same base, including both null).
+                    var emptyShell = subset
+                        && propertyCount(victim) == 0
                         && victim.getBaseClass() == host.getBaseClass();
                     if (!exact && !sub && !emptyShell) {
                         continue;
                     }
-                    if (tryMerge(model, victim, host, emptyShell && !exact ? "empty-shell" : exact ? "exact-pkg" : "subset-pkg", dry)) {
+                    var reason = emptyShell && !exact
+                        ? "empty-shell"
+                        : exact ? "exact-pkg" : "subset-pkg";
+                    if (tryMerge(model, victim, host, reason, dry, subset)) {
                         count++;
                         changed = true;
                         break;
@@ -508,14 +598,13 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return true;
     }
 
-    private int mergeExact(Model model, boolean anonOnly, boolean dry) {
-        // nameKey -> fingerprint -> members
+    private int mergeExact(Model model, boolean anonOnly, boolean dry, boolean subset) {
+        // package+nameKey -> fingerprint -> members
         Map<String, Map<String, List<CClassInfo>>> groups = new LinkedHashMap<>();
         for (var bean : List.copyOf(model.beans().values())) {
-            var key = nameKey(bean.shortName);
             var fp = classFp(bean);
             groups
-                .computeIfAbsent(key, k -> new LinkedHashMap<>())
+                .computeIfAbsent(groupKey(bean), k -> new LinkedHashMap<>())
                 .computeIfAbsent(fp, k -> new ArrayList<>())
                 .add(bean);
         }
@@ -536,14 +625,14 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     if (!mayDelete(victim, anonOnly)) {
                         // Try swapping if host is deletable and victim is a better named host.
                         if (mayDelete(host, anonOnly) && hostScore(victim) > hostScore(host)) {
-                            if (tryMerge(model, host, victim, "exact", dry)) {
+                            if (tryMerge(model, host, victim, "exact", dry, subset)) {
                                 count++;
                                 host = victim;
                             }
                         }
                         continue;
                     }
-                    if (tryMerge(model, victim, host, "exact", dry)) {
+                    if (tryMerge(model, victim, host, "exact", dry, subset)) {
                         count++;
                     }
                 }
@@ -552,15 +641,15 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return count;
     }
 
-    private int mergeSubsets(Model model, boolean anonOnly, boolean dry) {
+    private int mergeSubsets(Model model, boolean anonOnly, boolean dry, boolean subset) {
         var count = 0;
         boolean changed;
         do {
             changed = false;
-            // Group live beans by nameKey
+            // Group live beans by package + nameKey
             Map<String, List<CClassInfo>> byKey = new LinkedHashMap<>();
             for (var bean : model.beans().values()) {
-                byKey.computeIfAbsent(nameKey(bean.shortName), k -> new ArrayList<>()).add(bean);
+                byKey.computeIfAbsent(groupKey(bean), k -> new ArrayList<>()).add(bean);
             }
             for (var members : byKey.values()) {
                 if (members.size() < 2) {
@@ -588,9 +677,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
                         if (!isStructuralSubset(victim, host)) {
                             continue;
                         }
-                        // Strict subset or equal with fewer-or-equal props already filtered;
-                        // allow equal fingerprints only if not same class (should be gone).
-                        if (tryMerge(model, victim, host, "subset", dry)) {
+                        if (tryMerge(model, victim, host, "subset", dry, subset)) {
                             count++;
                             changed = true;
                         }
@@ -609,7 +696,8 @@ public class DedupeClassPlugin extends AbstractPlugin {
         CClassInfo victim,
         CClassInfo host,
         String reason,
-        boolean dry
+        boolean dry,
+        boolean mergeSubset
     ) {
         if (victim == host) {
             return false;
@@ -620,12 +708,15 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (!nameKey(victim.shortName).equals(nameKey(host.shortName))) {
             return false;
         }
+        if (!packageName(victim).equals(packageName(host))) {
+            return false;
+        }
         // Never merge a class into one of its descendants (parent cycle).
         if (isAncestor(victim, host)) {
             return false;
         }
 
-        // Package-level host may absorb any victim; nested host only same parent (no lift).
+        // Package-level host may absorb any same-package victim; nested host only same parent.
         if (!isPackageLevel(host) && host.parent() != victim.parent()) {
             log.debug(
                 "Skip dedupe {}: cross-hierarchy nested '{}' vs '{}'",
@@ -636,7 +727,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return false;
         }
 
-        if (!prepareNestedMerges(model, victim, host, dry)) {
+        if (!prepareNestedMerges(model, victim, host, dry, mergeSubset)) {
             return false;
         }
 
@@ -666,12 +757,14 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     /**
      * Ensures nested beans under {@code victim} can sit under {@code host} (merge or free name).
+     * Nested subset merges require {@code mergeSubset}; exact structural matches always qualify.
      */
     private boolean prepareNestedMerges(
         Model model,
         CClassInfo victim,
         CClassInfo host,
-        boolean dry
+        boolean dry,
+        boolean mergeSubset
     ) {
         for (var child : List.copyOf(directNestedBeans(model, victim))) {
             if (!model.beans().containsValue(child)) {
@@ -700,23 +793,25 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 .comparingInt(DedupeClassPlugin::hostScore).reversed()
                 .thenComparing(CClassInfo::fullName));
             var target = matches.getFirst();
-            if (classFp(child).equals(classFp(target)) || isStructuralSubset(child, target)) {
-                if (!mayDelete(child, !Boolean.FALSE.equals(anonymousOnly))
-                    && mayDelete(target, !Boolean.FALSE.equals(anonymousOnly))) {
-                    // Prefer deleting anonymous target into named child if needed.
-                    if (!tryMerge(model, target, child, "exact-nested", dry)) {
-                        return false;
-                    }
-                } else if (!tryMerge(model, child, target, "exact-nested", dry)) {
-                    return false;
-                }
-            } else {
+            var exact = classFp(child).equals(classFp(target));
+            var sub = mergeSubset && isStructuralSubset(child, target);
+            if (!exact && !sub) {
                 log.debug(
                     "Skip dedupe: nested {} incompatible with {} under {}",
                     child.fullName(),
                     target.fullName(),
                     host.fullName()
                 );
+                return false;
+            }
+            var reason = exact ? "exact-nested" : "subset-nested";
+            if (!mayDelete(child, !Boolean.FALSE.equals(anonymousOnly))
+                && mayDelete(target, !Boolean.FALSE.equals(anonymousOnly))) {
+                // Prefer deleting anonymous target into named child if needed.
+                if (!tryMerge(model, target, child, reason, dry, mergeSubset)) {
+                    return false;
+                }
+            } else if (!tryMerge(model, child, target, reason, dry, mergeSubset)) {
                 return false;
             }
         }

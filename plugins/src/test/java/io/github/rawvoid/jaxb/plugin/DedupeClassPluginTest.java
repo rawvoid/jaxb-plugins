@@ -17,9 +17,16 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBElement;
+import jakarta.xml.bind.Marshaller;
+import jakarta.xml.bind.Unmarshaller;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,8 +35,63 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
 
+    private static final String NS = "https://www.github.com/rawvoid/xjc-plugins/dedupe";
+
     private static Map<String, List<Class<?>>> bySimpleName(List<Class<?>> classes) {
         return classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
+    }
+
+    private static Class<?> require(Map<String, List<Class<?>>> byName, String simpleName) {
+        var list = byName.get(simpleName);
+        assertThat(list).as(simpleName).isNotNull().isNotEmpty();
+        return list.getFirst();
+    }
+
+    private static Object invoke(Object target, String method) throws Exception {
+        Method m = target.getClass().getMethod(method);
+        return m.invoke(target);
+    }
+
+    private static void invokeSet(Object target, String method, Class<?> argType, Object value) throws Exception {
+        target.getClass().getMethod(method, argType).invoke(target, value);
+    }
+
+    /**
+     * Classes are loaded by a disposable URLClassLoader; build the context from the Class
+     * array so ObjectFactory resolves via the defining loader. Skip synthetic package-info /
+     * debug helpers — JAXB rejects package-info when passed as a context class.
+     */
+    private static JAXBContext contextFor(List<Class<?>> classes) throws Exception {
+        var jaxbClasses = classes.stream()
+            .filter(c -> !c.isInterface())
+            .filter(c -> !c.getSimpleName().startsWith("package-info"))
+            .filter(c -> !c.getSimpleName().equals("JAXBDebug"))
+            .toArray(Class[]::new);
+        return JAXBContext.newInstance(jaxbClasses);
+    }
+
+    private static Object wrapRoot(List<Class<?>> classes, Class<?> valueType, Object value) throws Exception {
+        var ofClass = require(bySimpleName(classes), "ObjectFactory");
+        var of = ofClass.getDeclaredConstructor().newInstance();
+        // ObjectFactory#createHolderA(HolderA) etc. — factory method name matches type simple name.
+        return ofClass.getMethod("create" + valueType.getSimpleName(), valueType).invoke(of, value);
+    }
+
+    private static String marshal(JAXBContext ctx, Object root) throws Exception {
+        var marshaller = ctx.createMarshaller();
+        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, false);
+        var sw = new StringWriter();
+        marshaller.marshal(root, sw);
+        return sw.toString();
+    }
+
+    private static Object unmarshalValue(JAXBContext ctx, String xml) throws Exception {
+        Unmarshaller unmarshaller = ctx.createUnmarshaller();
+        var result = unmarshaller.unmarshal(new StringReader(xml));
+        if (result instanceof JAXBElement<?> element) {
+            return element.getValue();
+        }
+        return result;
     }
 
     @BeforeEach
@@ -70,8 +132,11 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(byName).containsKey("Party");
         assertThat(byName.get("Party")).hasSize(1);
 
-        var holderA = byName.get("HolderA").getFirst();
+        var holderA = require(byName, "HolderA");
         assertThat(holderA.getDeclaredField("group").getType().getSimpleName()).isEqualTo("GroupType");
+        // Without -merge-subset, subset AircraftCode must remain nested.
+        assertThat(byName).containsKey("AircraftCode");
+        assertThat(byName.get("AircraftCode")).allMatch(Class::isMemberClass);
     }
 
     @Test
@@ -89,7 +154,7 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(byName).doesNotContainKey("AircraftCode");
 
         // HolderA.AircraftCode field type should be AircraftCodeType
-        var holderA = byName.get("HolderA").getFirst();
+        var holderA = require(byName, "HolderA");
         var field = holderA.getDeclaredField("aircraftCode");
         assertThat(field.getType().getSimpleName()).isEqualTo("AircraftCodeType");
     }
@@ -105,5 +170,89 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
 
         // HolderB.Details {note} vs HolderC.Details {amount} — two distinct types.
         assertThat(byName.get("Details")).hasSize(2);
+    }
+
+    @Test
+    void exactMergeRoundTripPreservesElementNamesAndContent() throws Exception {
+        var classes = testExecute(List.of("-Xdedupe-class"), ".*", null);
+        var byName = bySimpleName(classes);
+        var holderAClass = require(byName, "HolderA");
+        var groupTypeClass = require(byName, "GroupType");
+        var aircraftCodeClass = require(byName, "AircraftCode");
+
+        var ctx = contextFor(classes);
+        var holder = holderAClass.getDeclaredConstructor().newInstance();
+        var group = groupTypeClass.getDeclaredConstructor().newInstance();
+        invokeSet(group, "setCode", String.class, "G1");
+        invokeSet(holder, "setGroup", groupTypeClass, group);
+
+        var aircraft = aircraftCodeClass.getDeclaredConstructor().newInstance();
+        invokeSet(aircraft, "setValue", String.class, "AB");
+        invokeSet(holder, "setAircraftCode", aircraftCodeClass, aircraft);
+
+        var xml = marshal(ctx, wrapRoot(classes, holderAClass, holder));
+        assertThat(xml)
+            .contains("<Group>")
+            .contains("<code>G1</code>")
+            .contains("<AircraftCode>AB</AircraftCode>")
+            .doesNotContain("Context");
+
+        var roundTripped = unmarshalValue(ctx, xml);
+        assertThat(roundTripped.getClass()).isEqualTo(holderAClass);
+        var group2 = invoke(roundTripped, "getGroup");
+        assertThat(invoke(group2, "getCode")).isEqualTo("G1");
+        assertThat(group2.getClass()).isEqualTo(groupTypeClass);
+        var aircraft2 = invoke(roundTripped, "getAircraftCode");
+        assertThat(invoke(aircraft2, "getValue")).isEqualTo("AB");
+        // Nested anonymous type kept (no subset merge).
+        assertThat(aircraft2.getClass().getSimpleName()).isEqualTo("AircraftCode");
+        assertThat(aircraft2.getClass().isMemberClass()).isTrue();
+    }
+
+    @Test
+    void subsetMergeRoundTripValueOnlyXml() throws Exception {
+        var classes = testExecute(
+            List.of("-Xdedupe-class", "-merge-subset"),
+            ".*"
+        );
+        var byName = bySimpleName(classes);
+        var holderAClass = require(byName, "HolderA");
+        var groupTypeClass = require(byName, "GroupType");
+        var aircraftCodeTypeClass = require(byName, "AircraftCodeType");
+
+        var ctx = contextFor(classes);
+
+        // Inbound XML shaped like the original anonymous AircraftCode (value only).
+        var inbound = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <holderA xmlns="%s">
+              <AircraftCode>AB</AircraftCode>
+              <Group><code>G1</code></Group>
+            </holderA>
+            """.formatted(NS);
+
+        var unmarshalled = unmarshalValue(ctx, inbound);
+        var aircraft = invoke(unmarshalled, "getAircraftCode");
+        assertThat(aircraft.getClass()).isEqualTo(aircraftCodeTypeClass);
+        assertThat(invoke(aircraft, "getValue")).isEqualTo("AB");
+        assertThat(invoke(aircraft, "getContext")).isNull();
+
+        var xml = marshal(ctx, wrapRoot(classes, holderAClass, unmarshalled));
+        assertThat(xml)
+            .contains("<AircraftCode>AB</AircraftCode>")
+            .contains("<Group>")
+            .contains("<code>G1</code>")
+            .doesNotContain("Context");
+
+        // Programmatic construction via host type still marshals value-only when context null.
+        var holder = holderAClass.getDeclaredConstructor().newInstance();
+        var group = groupTypeClass.getDeclaredConstructor().newInstance();
+        invokeSet(group, "setCode", String.class, "G2");
+        invokeSet(holder, "setGroup", groupTypeClass, group);
+        var code = aircraftCodeTypeClass.getDeclaredConstructor().newInstance();
+        invokeSet(code, "setValue", String.class, "CD");
+        invokeSet(holder, "setAircraftCode", aircraftCodeTypeClass, code);
+        var out = marshal(ctx, wrapRoot(classes, holderAClass, holder));
+        assertThat(out).contains("<AircraftCode>CD</AircraftCode>").doesNotContain("Context");
     }
 }
