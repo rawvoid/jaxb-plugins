@@ -72,6 +72,25 @@
             <xs:element name="groups" type="tns:GroupList" minOccurs="0"/>
 
             <xs:element name="total" type="xs:int"/>
+
+            <!--
+              Dedupe interaction: nested anonymous TagCarrier (wrapper-shaped) is isomorphic
+              to TagCarrierType after flatten (nameKey TagCarrier ≡ TagCarrierType).
+            -->
+            <xs:element name="TagCarrier">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="tags" type="tns:TagList" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="namedTagCarrier" type="tns:TagCarrierType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TagCarrierType">
+        <xs:sequence>
+            <xs:element name="tags" type="tns:TagList" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 

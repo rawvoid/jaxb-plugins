@@ -110,7 +110,7 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
             // Flattened properties keep original propOrder slots.
             assertThat(clazz.getAnnotation(XmlType.class).propOrder()).containsExactly(
                 "title", "tags", "products", "codes", "aliases", "notes", "itemBatch", "shared", "mixed", "groups",
-                "total");
+                "total", "tagCarrier", "namedTagCarrier");
 
             var fieldNames = Arrays.stream(clazz.getDeclaredFields())
                 .map(Field::getName)
@@ -118,7 +118,7 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
                 .toList();
             assertThat(fieldNames).containsExactly(
                 "title", "tags", "products", "codes", "aliases", "notes", "itemBatch", "shared", "mixed", "groups",
-                "total");
+                "total", "tagCarrier", "namedTagCarrier");
 
             // Collection properties: getter only.
             assertThat(methodNames(clazz)).contains("getTags", "getProducts", "getNotes");
@@ -213,6 +213,33 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
             assertThat(clazz.getDeclaredField("value").getType()).isEqualTo(String.class);
             assertThat(clazz.getDeclaredField("count").getType()).isEqualTo(int.class);
         });
+    }
+
+    /**
+     * Element-wrapper then dedupe: nested anonymous {@code TagCarrier} merges into
+     * {@code TagCarrierType}. {@code @XmlElementWrapper} must remain on the host (rebind or
+     * host's own flatten record) — silent drop of the nested record would risk missing wrappers.
+     */
+    @Test
+    void withDedupeKeepsWrapperAnnotationOnMergeHost() throws Exception {
+        var classes = testExecute(
+            List.of("-Xelement-wrapper", "-Xdedupe-class"),
+            ".*TagCarrier.*|" + ROOT,
+            null
+        );
+        var byName = classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
+
+        // Nested anonymous TagCarrier collapsed into named host.
+        assertThat(byName.getOrDefault("TagCarrier", List.of())).isEmpty();
+        assertThat(byName).containsKey("TagCarrierType");
+        var host = byName.get("TagCarrierType").getFirst();
+        assertThat(host.isMemberClass()).isFalse();
+        assertListField(host, "tags", String.class, "tag");
+
+        // Root fields use the package host type.
+        var root = byName.get("Root").getFirst();
+        assertThat(root.getDeclaredField("tagCarrier").getType()).isEqualTo(host);
+        assertThat(root.getDeclaredField("namedTagCarrier").getType()).isEqualTo(host);
     }
 
     @Test
