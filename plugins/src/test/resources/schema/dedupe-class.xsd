@@ -37,7 +37,19 @@
         </xs:simpleContent>
     </xs:complexType>
 
-    <!-- Holder A: anonymous Group (exact match for GroupType) + AircraftCode subset -->
+    <!--
+      IATA/NDC empty element-class: global element whose anonymous type only extends the named *Type.
+      XJC emits `class AircraftCode extends AircraftCodeType {}` + @XmlRootElement.
+    -->
+    <xs:element name="AircraftCode">
+        <xs:complexType>
+            <xs:complexContent>
+                <xs:extension base="tns:AircraftCodeType"/>
+            </xs:complexContent>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- Holder A: anonymous Group (exact match for GroupType) + local AircraftCode subset -->
     <xs:complexType name="HolderA">
         <xs:sequence>
             <xs:element name="AircraftCode" minOccurs="0">

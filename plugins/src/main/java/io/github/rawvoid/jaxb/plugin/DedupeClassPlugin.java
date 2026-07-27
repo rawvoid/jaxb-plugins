@@ -25,10 +25,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 
+import java.lang.reflect.Field;
 import java.util.*;
 
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CELEMENTINFO_CLASSNAME_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
+import static io.github.rawvoid.jaxb.utils.ReflectUtils.getField;
 import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 
 /**
@@ -49,10 +51,17 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * isomorphic types and would block useful merges.
  * </p>
  * <p>
+ * <strong>Empty extension</strong> (always on). Common IATA/NDC pattern — a global element with an
+ * anonymous complex type that only {@code extends} the named {@code *Type}:
+ * {@code class AircraftCode extends AircraftCodeType {}}. The empty subclass is merged into the
+ * named host (no extra fields; safe without {@code -merge-subset}).
+ * </p>
+ * <p>
  * <strong>Subset merge</strong> ({@code -merge-subset}): when every property of {@code B} exists on
  * {@code A} with a compatible type, {@code B} is merged into {@code A}. Extra fields on the host
  * remain. Prefer this only when surplus fields on marshal paths are acceptable. Empty-shell and
- * nested-child subset merges also require this flag.
+ * nested-child subset merges also require this flag. Subset also allows a bean that
+ * <em>extends</em> the host when its local properties are covered by the host.
  * </p>
  * <p>
  * By default only <em>anonymous</em> beans ({@link CClassInfo#getTypeName()} {@code null}) are
@@ -72,6 +81,12 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 public class DedupeClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(DedupeClassPlugin.class);
+
+    /**
+     * {@link CClassInfo} element name (global element-class binding). Final in XJC; set via
+     * reflection when collapsing an empty element class into a named type host.
+     */
+    private static final Field CCLASSINFO_ELEMENTNAME_FIELD = getField(CClassInfo.class, "elementName");
 
     @Option(name = "merge-subset", defaultValue = "false",
         description = "Merge subset beans into superset hosts (default: false)")
@@ -324,6 +339,24 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return isStructuralSubset(subset, host, new HashSet<>());
     }
 
+    /**
+     * IATA/NDC empty element-class: {@code Foo} with no local properties that only extends
+     * {@code FooType}. Safe to collapse without {@code -merge-subset} (no extra fields).
+     */
+    static boolean isEmptyExtensionOf(CClassInfo victim, CClassInfo host) {
+        if (victim == host || host == null) {
+            return false;
+        }
+        if (victim.getBaseClass() != host) {
+            return false;
+        }
+        if (propertyCount(victim) != 0) {
+            return false;
+        }
+        // Declaring a new attribute wildcard on the subclass is extra structure.
+        return !victim.hasAttributeWildcard() || host.hasAttributeWildcard();
+    }
+
     private static boolean isStructuralSubset(CClassInfo subset, CClassInfo host, Set<CClassInfo> visiting) {
         if (subset == host) {
             return true;
@@ -333,11 +366,13 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return true;
         }
         try {
-            // Require compatible inheritance: same base identity, or both none.
-            // (Do not treat "no base" as subset of "has base" — different XSD extensions.)
+            // Compatible inheritance:
+            //  - same base identity (including both null), or
+            //  - subset directly extends host (empty / property-subset extension of host itself).
+            // Do not treat "no base" as subset of "has base" for unrelated trees.
             var subsetBase = subset.getBaseClass();
             var hostBase = host.getBaseClass();
-            if (subsetBase != hostBase) {
+            if (subsetBase != hostBase && subsetBase != host) {
                 return false;
             }
             // Host must cover wildcard if subset declares one.
@@ -484,6 +519,8 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
         var merged = 0;
         merged += mergeExact(model, anonOnly, dry, subset);
+        // Always: empty element-class extends named *Type (IATA/NDC), independent of -merge-subset.
+        merged += mergeEmptyExtensions(model, anonOnly, dry, subset);
         if (subset) {
             merged += mergeSubsets(model, anonOnly, dry, subset);
         }
@@ -496,6 +533,51 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (merged > 0) {
             log.info("Deduped {} bean merge(s){}", merged, dry ? " (dry-run)" : "");
         }
+    }
+
+    /**
+     * Collapses empty subclasses that only extend a same-{@link #nameKey(String)} host
+     * ({@code class Foo extends FooType {}}).
+     */
+    private int mergeEmptyExtensions(Model model, boolean anonOnly, boolean dry, boolean subset) {
+        var count = 0;
+        boolean changed;
+        do {
+            changed = false;
+            Map<String, List<CClassInfo>> byKey = new LinkedHashMap<>();
+            for (var bean : model.beans().values()) {
+                byKey.computeIfAbsent(groupKey(bean), k -> new ArrayList<>()).add(bean);
+            }
+            for (var members : byKey.values()) {
+                if (members.size() < 2) {
+                    continue;
+                }
+                members.sort(Comparator
+                    .comparingInt(DedupeClassPlugin::hostScore).reversed()
+                    .thenComparing(CClassInfo::fullName));
+                for (var host : List.copyOf(members)) {
+                    if (!model.beans().containsValue(host)) {
+                        continue;
+                    }
+                    for (var victim : List.copyOf(members)) {
+                        if (victim == host || !model.beans().containsValue(victim)) {
+                            continue;
+                        }
+                        if (!mayDelete(victim, anonOnly)) {
+                            continue;
+                        }
+                        if (!isEmptyExtensionOf(victim, host)) {
+                            continue;
+                        }
+                        if (tryMerge(model, victim, host, "empty-ext", dry, subset)) {
+                            count++;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        } while (changed && !dry);
+        return count;
     }
 
     private static void warnObjectFactoryCollisions(Model model) {
@@ -571,17 +653,20 @@ public class DedupeClassPlugin extends AbstractPlugin {
                         continue;
                     }
                     var exact = classFp(victim).equals(classFp(host));
+                    var emptyExt = isEmptyExtensionOf(victim, host);
                     var sub = subset && isStructuralSubset(victim, host);
                     // Empty shell only under -merge-subset (same base, including both null).
                     var emptyShell = subset
                         && propertyCount(victim) == 0
                         && victim.getBaseClass() == host.getBaseClass();
-                    if (!exact && !sub && !emptyShell) {
+                    if (!exact && !emptyExt && !sub && !emptyShell) {
                         continue;
                     }
-                    var reason = emptyShell && !exact
-                        ? "empty-shell"
-                        : exact ? "exact-pkg" : "subset-pkg";
+                    var reason = emptyExt && !exact
+                        ? "empty-ext-pkg"
+                        : emptyShell && !exact
+                            ? "empty-shell"
+                            : exact ? "exact-pkg" : "subset-pkg";
                     if (tryMerge(model, victim, host, reason, dry, subset)) {
                         count++;
                         changed = true;
@@ -741,6 +826,12 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
         if (dry) {
             return true;
+        }
+
+        // Preserve global element-class root binding when collapsing into a pure type host
+        // (e.g. AircraftCode @XmlRootElement → AircraftCodeType).
+        if (victim.isElement() && !host.isElement()) {
+            setFieldValue(CCLASSINFO_ELEMENTNAME_FIELD, host, victim.getElementName());
         }
 
         // Re-parent enums nested under victim.

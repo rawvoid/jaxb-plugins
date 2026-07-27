@@ -121,7 +121,7 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
     @Test
     void exactMergeCollapsesIsomorphicGroupsIntoNamedHost() throws Exception {
         var args = List.of("-Xdedupe-class");
-        var classes = testExecute(args, ".*Group.*|.*Holder.*|.*Party.*", null);
+        var classes = testExecute(args, ".*Group.*|.*Holder.*|.*Party.*|.*AircraftCode.*", null);
         var byName = bySimpleName(classes);
 
         // Anonymous Groups merge into package GroupType (nameKey Group ≡ GroupType).
@@ -134,9 +134,29 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
 
         var holderA = require(byName, "HolderA");
         assertThat(holderA.getDeclaredField("group").getType().getSimpleName()).isEqualTo("GroupType");
-        // Without -merge-subset, subset AircraftCode must remain nested.
-        assertThat(byName).containsKey("AircraftCode");
-        assertThat(byName.get("AircraftCode")).allMatch(Class::isMemberClass);
+        // Empty global element-class AircraftCode extends AircraftCodeType → always collapsed.
+        assertThat(byName).containsKey("AircraftCodeType");
+        // Nested HolderA.AircraftCode is a true field subset — needs -merge-subset (may remain).
+        assertThat(holderA.getDeclaredField("aircraftCode").getType().isMemberClass()).isTrue();
+        assertThat(byName.get("AircraftCode")).isNotNull().allMatch(Class::isMemberClass);
+        // Root element binding transferred onto the named host.
+        assertThat(require(byName, "AircraftCodeType").isAnnotationPresent(
+            jakarta.xml.bind.annotation.XmlRootElement.class)).isTrue();
+    }
+
+    @Test
+    void emptyElementExtensionMergesWithoutSubsetFlag() throws Exception {
+        var classes = testExecute(List.of("-Xdedupe-class"), ".*AircraftCode.*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("AircraftCodeType");
+        // Package-level empty element-class gone; nested subset class may remain.
+        assertThat(byName.getOrDefault("AircraftCode", List.of())).allMatch(Class::isMemberClass);
+        var host = require(byName, "AircraftCodeType");
+        assertThat(host.getSuperclass()).isEqualTo(Object.class);
+        var root = host.getAnnotation(jakarta.xml.bind.annotation.XmlRootElement.class);
+        assertThat(root).isNotNull();
+        assertThat(root.name()).isEqualTo("AircraftCode");
     }
 
     @Test
@@ -148,10 +168,10 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         var classes = testExecute(args, ".*AircraftCode.*|.*HolderA.*|.*HolderC.*", null);
         var byName = bySimpleName(classes);
 
-        // Named AircraftCodeType remains; anonymous AircraftCode under HolderA is gone.
+        // Named AircraftCodeType remains; empty element-class and nested subset both gone.
         assertThat(byName).containsKey("AircraftCodeType");
         assertThat(byName.get("AircraftCodeType")).anyMatch(c -> !c.isMemberClass());
-        assertThat(byName).doesNotContainKey("AircraftCode");
+        assertThat(byName.getOrDefault("AircraftCode", List.of())).isEmpty();
 
         // HolderA.AircraftCode field type should be AircraftCodeType
         var holderA = require(byName, "HolderA");
@@ -178,7 +198,9 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         var byName = bySimpleName(classes);
         var holderAClass = require(byName, "HolderA");
         var groupTypeClass = require(byName, "GroupType");
-        var aircraftCodeClass = require(byName, "AircraftCode");
+        // Nested subset type under HolderA (not the collapsed global empty-ext class).
+        var nestedAircraftClass = holderAClass.getDeclaredField("aircraftCode").getType();
+        assertThat(nestedAircraftClass.isMemberClass()).isTrue();
 
         var ctx = contextFor(classes);
         var holder = holderAClass.getDeclaredConstructor().newInstance();
@@ -186,9 +208,9 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         invokeSet(group, "setCode", String.class, "G1");
         invokeSet(holder, "setGroup", groupTypeClass, group);
 
-        var aircraft = aircraftCodeClass.getDeclaredConstructor().newInstance();
+        var aircraft = nestedAircraftClass.getDeclaredConstructor().newInstance();
         invokeSet(aircraft, "setValue", String.class, "AB");
-        invokeSet(holder, "setAircraftCode", aircraftCodeClass, aircraft);
+        invokeSet(holder, "setAircraftCode", nestedAircraftClass, aircraft);
 
         var xml = marshal(ctx, wrapRoot(classes, holderAClass, holder));
         assertThat(xml)
@@ -205,8 +227,32 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         var aircraft2 = invoke(roundTripped, "getAircraftCode");
         assertThat(invoke(aircraft2, "getValue")).isEqualTo("AB");
         // Nested anonymous type kept (no subset merge).
-        assertThat(aircraft2.getClass().getSimpleName()).isEqualTo("AircraftCode");
-        assertThat(aircraft2.getClass().isMemberClass()).isTrue();
+        assertThat(aircraft2.getClass()).isEqualTo(nestedAircraftClass);
+    }
+
+    @Test
+    void emptyElementExtensionRootRoundTrip() throws Exception {
+        var classes = testExecute(List.of("-Xdedupe-class"), ".*", null);
+        var byName = bySimpleName(classes);
+        var host = require(byName, "AircraftCodeType");
+        assertThat(byName.getOrDefault("AircraftCode", List.of())).allMatch(Class::isMemberClass);
+
+        var ctx = contextFor(classes);
+        var code = host.getDeclaredConstructor().newInstance();
+        invokeSet(code, "setValue", String.class, "318");
+        invokeSet(code, "setContext", String.class, "IATA");
+
+        // Host carries transferred @XmlRootElement(name=AircraftCode).
+        var xml = marshal(ctx, code);
+        assertThat(xml)
+            .contains("AircraftCode")
+            .contains(">318<")
+            .contains("Context");
+
+        var round = unmarshalValue(ctx, xml);
+        assertThat(round.getClass()).isEqualTo(host);
+        assertThat(invoke(round, "getValue")).isEqualTo("318");
+        assertThat(invoke(round, "getContext")).isEqualTo("IATA");
     }
 
     @Test
