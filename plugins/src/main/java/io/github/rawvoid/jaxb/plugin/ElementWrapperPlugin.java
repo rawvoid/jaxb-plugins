@@ -54,6 +54,7 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  * Flatten records hold the owner {@link CClassInfo} identity from the model phase. A later
  * model plugin (for example {@link DedupeClassPlugin}) may <em>delete</em> that owner after
  * merge. Two hazards follow:
+ * </p>
  * <ul>
  *   <li><b>Lost annotation</b> — {@code @XmlElementWrapper} lives only in this side list, not
  *       in the C* model. Dropping the record without rebind can omit the wrapper on marshal.</li>
@@ -61,6 +62,7 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  *       test liveness: it lazily generates a {@link ClassOutline} even for beans already removed
  *       from {@link Model#beans()}, desynchronizing outline and model.</li>
  * </ul>
+ * <p>
  * {@link #run} therefore tests liveness via {@code model.beans()}, rebinds orphaned records onto
  * surviving same-package / same-nameKey hosts that still expose the property, and
  * <strong>fails the build</strong> if none is found (missing {@code @XmlElementWrapper} would
