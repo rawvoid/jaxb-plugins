@@ -76,8 +76,9 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * </p>
  * <ul>
  *   <li>Same simple name under one parent (beans / enums / element classes)</li>
- *   <li>Parent and nested child sharing the same simple name after rename
- *       (BeanGenerator rejects that shape)</li>
+ *   <li>An ancestor and a nested type sharing the same simple name after rename
+ *       (Java forbids a nested type simple name equal to any enclosing class; BeanGenerator
+ *       also rejects the immediate parent-child case)</li>
  *   <li>Duplicate {@link CClassInfo#getSqueezedName()} values in a package — ObjectFactory
  *       value-factory methods use that name. A parent rename can change nested types' squeezed
  *       names; those renames are rolled back when they collide. Detection uses XJC's own
@@ -304,8 +305,11 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * Outer type and nested member must not share a simple name after rename.
-     * Prefer undoing the parent's rename; if the parent was not renamed, undo the child.
+     * A type and any of its enclosing beans must not share a simple name after rename.
+     * Walks the full ancestor chain (not only the immediate parent): Java rejects nested
+     * {@code TaxCouponInfo} under {@code TaxCouponInfo.TicketDocument} as well as an
+     * immediate parent-child clash. Prefer undoing the ancestor's rename; if the ancestor
+     * was not renamed, undo the nested type.
      */
     private void blockParentChildClashes(
         List<Candidate> candidates,
@@ -317,7 +321,7 @@ public class RenameClassPlugin extends AbstractPlugin {
         do {
             changed = false;
             for (var child : candidates) {
-                if (revertParentChildClash(child, beans, names, errorHandler)) {
+                if (revertAncestorNameClash(child, beans, names, errorHandler)) {
                     changed = true;
                 }
             }
@@ -325,41 +329,43 @@ public class RenameClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * When {@code child} and its parent would share a simple name after rename, reverts one
-     * of them (prefer the parent) and reports a warning.
+     * When {@code child} and any enclosing bean would share a simple name after rename,
+     * reverts one of them (prefer the ancestor) and reports a warning.
      *
      * @return {@code true} if a rename was reverted
      */
-    private boolean revertParentChildClash(
+    private boolean revertAncestorNameClash(
         Candidate child,
         Map<CClassInfo, Candidate> beans,
         Map<Candidate, String> names,
         ErrorHandler errorHandler
     ) {
-        if (!(child.parent instanceof CClassInfo parentBean)) {
-            return false;
+        var childName = normalize(names.get(child));
+        CClassInfoParent current = child.parent;
+        while (current instanceof CClassInfo parentBean) {
+            var ancestor = beans.get(parentBean);
+            if (ancestor != null && childName.equals(normalize(names.get(ancestor)))) {
+                // Prefer undoing the ancestor's rename; otherwise undo the nested type.
+                var undo = isPending(ancestor, names) ? ancestor : isPending(child, names) ? child : null;
+                if (undo == null) {
+                    return false;
+                }
+                names.put(undo, undo.shortName);
+                warn(
+                    errorHandler,
+                    undo.locator,
+                    "Ancestor-nested name conflict after rename ('"
+                        + ancestor.fullName
+                        + "' / '"
+                        + child.fullName
+                        + "'); keeping original name for "
+                        + undo.fullName
+                );
+                return true;
+            }
+            current = parentBean.parent();
         }
-        var parent = beans.get(parentBean);
-        if (parent == null || !normalize(names.get(child)).equals(normalize(names.get(parent)))) {
-            return false;
-        }
-        // Prefer undoing the parent's rename; otherwise undo the child's.
-        var undo = isPending(parent, names) ? parent : isPending(child, names) ? child : null;
-        if (undo == null) {
-            return false;
-        }
-        names.put(undo, undo.shortName);
-        warn(
-            errorHandler,
-            undo.locator,
-            "Parent-child name conflict after rename ('"
-                + parent.fullName
-                + "' / '"
-                + child.fullName
-                + "'); keeping original name for "
-                + undo.fullName
-        );
-        return true;
+        return false;
     }
 
     /**

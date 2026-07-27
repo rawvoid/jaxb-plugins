@@ -280,4 +280,41 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(byName.get("Address"))
             .anyMatch(c -> !c.isMemberClass() && c.getSimpleName().equals("Address"));
     }
+
+    @Test
+    void stripTypeSuffixBlocksWhenDescendantUsesBareName() throws Exception {
+        // TaxCouponInfoType → TaxCouponInfo would clash with nested TaxCouponInfo under
+        // TicketDocument (Java forbids nested simple name equal to any enclosing class).
+        var args = List.of(
+            "-Xrename-class",
+            "-strip-type-suffix"
+        );
+        var classes = testExecute(args, ".*TaxCouponInfo.*|.*TicketDocument.*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("TaxCouponInfoType");
+        assertThat(byName.get("TaxCouponInfoType").getFirst().isMemberClass()).isFalse();
+        assertThat(byName).containsKey("TaxCouponInfo");
+        assertThat(byName.get("TaxCouponInfo")).allMatch(Class::isMemberClass);
+    }
+
+    @Test
+    void renameThenPromoteDoesNotCreateIllegalNesting() throws Exception {
+        // After strip keeps TaxCouponInfoType, promote may lift nested TaxCouponInfo /
+        // TicketDocument without parent/child same-name failure.
+        var args = List.of(
+            "-Xrename-class",
+            "-strip-type-suffix",
+            "-Xpromote-nested-class"
+        );
+        var classes = testExecute(args, ".*TaxCouponInfo.*|.*TicketDocument.*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("TaxCouponInfoType");
+        assertThat(byName.get("TaxCouponInfoType").getFirst().isMemberClass()).isFalse();
+        // Nested TaxCouponInfo may promote to package when outer keeps the Type suffix.
+        assertThat(byName).containsKey("TaxCouponInfo");
+        assertThat(byName.get("TaxCouponInfo"))
+            .anyMatch(c -> !c.isMemberClass() || c.getEnclosingClass() != null);
+    }
 }
