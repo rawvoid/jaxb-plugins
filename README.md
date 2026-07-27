@@ -495,20 +495,35 @@ Renames generated classes, enums, and element classes post-model building with s
 
 #### Key Features
 
-- Rewrites short class names using regex replacement patterns.
+- Rewrites short class names using regex replacement patterns (`-mapping`).
 - Mappings run as an ordered pipeline: each rule sees the intermediate name from previous rules (single forward pass).
-- Safe execution: detects squeezed name collisions and rolls back conflicting renames with build warnings.
+- **`-strip-type-suffix`** (default off): industry-convention strip of a trailing `Type` on **named** schema types only (`complexType` / `simpleType` whose type name ends with `Type`, including `Foo_Type`). Anonymous types and element classes are left alone, so an element named `ActionType` is not mis-renamed to `Action`.
+- Explicit `-mapping` still applies to every class (use it to force renames, including anonymous / element-derived names).
+- Safe execution: detects simple-name, parent-child, and ObjectFactory squeezed-name collisions and rolls back conflicting renames with build warnings.
 
 #### Quick Start
 
+Prefer the dedicated flag for bulk type-suffix cleanup (NDC / EDIST style):
+
 ```bash
 -Xrename-class \
-  -mapping=^(.+)Type$->$1 \
-  -mapping=^IATA(.+)$->$1 \
-  -mapping=Person->CustomPerson
+  -strip-type-suffix
 ```
 
-Example pipeline: `IATAFooType` → strip `Type` → `IATAFoo` → strip `IATA` → `Foo`.
+Avoid a bare `-mapping=^(.+)Type$->$1` when the schema also has **elements** whose local name ends with `Type` — that regex cannot tell type-suffix convention from element business names.
+
+Custom renames and forced names still use mappings (run before the optional strip):
+
+```bash
+-Xrename-class \
+  -mapping=^IATA(.+)$->$1 \
+  -mapping=Person->CustomPerson \
+  -strip-type-suffix
+```
+
+Example: named `IATAFooType` → after optional prefix mapping / strip → `Foo`; element-derived `ActionType` stays `ActionType` unless you map it explicitly.
+
+When used with `-Xpromote-nested-class`, running **rename before promote** lets global named types claim short names first; promote-first can leave dual names such as `Fare` + `FareType`.
 
 ---
 

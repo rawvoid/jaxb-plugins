@@ -147,6 +147,31 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      Named type vs element-name *Type (strip-type-suffix fixture):
+      - OrderID_Type → shortName OrderIDType → strip → OrderID
+      - element ActionType (anonymous) must keep ActionType under -strip-type-suffix
+    -->
+    <xs:complexType name="OrderID_Type">
+        <xs:sequence>
+            <xs:element name="value" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ActionHolder">
+        <xs:sequence>
+            <xs:element name="ActionType" minOccurs="0">
+                <xs:complexType>
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string">
+                            <xs:attribute name="Context" type="xs:string"/>
+                        </xs:extension>
+                    </xs:simpleContent>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="person" type="tns:Person"/>
     <xs:element name="address" type="tns:AddressType"/>
     <xs:element name="iataWidget" type="tns:IATAWidgetType"/>
@@ -155,4 +180,6 @@
     <xs:element name="blockAddress" type="tns:BlockAddress"/>
     <xs:element name="holderType" type="tns:HolderType"/>
     <xs:element name="email" type="tns:EmailType"/>
+    <xs:element name="orderId" type="tns:OrderID_Type"/>
+    <xs:element name="actionHolder" type="tns:ActionHolder"/>
 </xs:schema>

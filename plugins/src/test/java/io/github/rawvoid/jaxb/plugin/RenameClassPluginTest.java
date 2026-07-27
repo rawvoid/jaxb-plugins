@@ -224,4 +224,60 @@ public class RenameClassPluginTest extends AbstractXJCMojoTestCase {
         // Promoted EmailAddress is top-level.
         assertThat(byName.get("EmailAddress").getFirst().isMemberClass()).isFalse();
     }
+
+    @Test
+    void stripTypeSuffixOffByDefault() throws Exception {
+        var args = List.of("-Xrename-class");
+        var classes = testExecute(args, ".*(AddressType|ActionType|OrderID).*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("AddressType");
+        assertThat(byName).containsKey("ActionType");
+        // XJC name-converts OrderID_Type → OrderIDType
+        assertThat(byName).containsKey("OrderIDType");
+        assertThat(byName).doesNotContainKey("OrderID");
+        // Nested Address under other holders may exist; top-level AddressType must stay
+        assertThat(byName.get("AddressType").getFirst().getSimpleName()).isEqualTo("AddressType");
+        assertThat(byName.get("AddressType").getFirst().isMemberClass()).isFalse();
+    }
+
+    @Test
+    void stripTypeSuffixOnlyNamedTypes() throws Exception {
+        var args = List.of(
+            "-Xrename-class",
+            "-strip-type-suffix"
+        );
+        var classes = testExecute(args, ".*(Address|ActionType|OrderID|ActionHolder).*", null);
+        var byName = bySimpleName(classes);
+
+        // Named complexType AddressType → top-level Address
+        assertThat(byName).doesNotContainKey("AddressType");
+        assertThat(byName.get("Address"))
+            .anyMatch(c -> !c.isMemberClass() && c.getSimpleName().equals("Address"));
+        // Named OrderID_Type → OrderIDType → OrderID
+        assertThat(byName).containsKey("OrderID");
+        assertThat(byName).doesNotContainKey("OrderIDType");
+        // Element-derived anonymous ActionType must keep Type
+        assertThat(byName).containsKey("ActionType");
+        assertThat(byName.get("ActionType").getFirst().getSimpleName()).isEqualTo("ActionType");
+        assertThat(byName).doesNotContainKey("Action");
+    }
+
+    @Test
+    void mappingStillForcesAnonymousTypeRename() throws Exception {
+        var args = List.of(
+            "-Xrename-class",
+            "-strip-type-suffix",
+            "-mapping=ActionType->CustomAction"
+        );
+        var classes = testExecute(args, ".*(ActionType|CustomAction|Address).*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName).containsKey("CustomAction");
+        assertThat(byName).doesNotContainKey("ActionType");
+        // Named AddressType still stripped to top-level Address
+        assertThat(byName).doesNotContainKey("AddressType");
+        assertThat(byName.get("Address"))
+            .anyMatch(c -> !c.isMemberClass() && c.getSimpleName().equals("Address"));
+    }
 }
