@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://github.com/rawvoid/xjc_plugins/remove_unused_class"
+           xmlns:tns="http://github.com/rawvoid/xjc_plugins/remove_unused_class"
+           elementFormDefault="qualified">
+
+    <!-- Global Element (Root) -->
+    <xs:element name="MainRequest" type="tns:MainRequestType"/>
+
+    <xs:complexType name="MainRequestType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="usedChild" type="tns:UsedChildType"/>
+            <xs:element name="usedEnum" type="tns:UsedEnum"/>
+            <xs:element name="polyItem" type="tns:BasePolymorphicType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="UsedChildType">
+        <xs:sequence>
+            <xs:element name="detail" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="UsedEnum">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="ACTIVE"/>
+            <xs:enumeration value="INACTIVE"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Polymorphic Base & Derived -->
+    <xs:complexType name="BasePolymorphicType">
+        <xs:sequence>
+            <xs:element name="baseName" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DerivedPolymorphicType">
+        <xs:complexContent>
+            <xs:extension base="tns:BasePolymorphicType">
+                <xs:sequence>
+                    <xs:element name="extraData" type="xs:string"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Completely Unreferenced Types -->
+    <xs:complexType name="UnusedType">
+        <xs:sequence>
+            <xs:element name="foo" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="UnusedEnum">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="FOO"/>
+            <xs:enumeration value="BAR"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Unreferenced Cyclic Types -->
+    <xs:complexType name="CyclicA">
+        <xs:sequence>
+            <xs:element name="refB" type="tns:CyclicB"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CyclicB">
+        <xs:sequence>
+            <xs:element name="refA" type="tns:CyclicA"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Unreferenced Keep Candidate -->
+    <xs:complexType name="KeepCandidateType">
+        <xs:sequence>
+            <xs:element name="val" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

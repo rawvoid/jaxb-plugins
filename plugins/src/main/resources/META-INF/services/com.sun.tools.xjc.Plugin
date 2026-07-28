@@ -32,5 +32,6 @@ io.github.rawvoid.jaxb.plugin.ValidationPlugin
 io.github.rawvoid.jaxb.plugin.InheritancePlugin
 io.github.rawvoid.jaxb.plugin.CommonInterfacePlugin
 io.github.rawvoid.jaxb.plugin.DedupeClassPlugin
+io.github.rawvoid.jaxb.plugin.RemoveUnusedClassPlugin
 
 
