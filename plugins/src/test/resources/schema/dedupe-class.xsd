@@ -193,6 +193,117 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      Isomorphic named targets with different nameKeys (CrewType vs TeamType).
+      HolderIso*.Bundle both have property `member` — must NOT exact-merge Bundles
+      (would rewrite CrewType fields into TeamType).
+    -->
+    <xs:complexType name="CrewType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TeamType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderIsoA">
+        <xs:sequence>
+            <xs:element name="Bundle">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="member" type="tns:CrewType"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderIsoB">
+        <xs:sequence>
+            <xs:element name="Bundle">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="member" type="tns:TeamType"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Package-level PackType host + anonymous Packs (with typesafe nested Status enums).
+      Anonymous Packs merge into PackType; nested Status enums collapse via prepareNestedEnums.
+    -->
+    <xs:complexType name="PackType">
+        <xs:sequence>
+            <xs:element name="status">
+                <xs:simpleType>
+                    <xs:annotation>
+                        <xs:appinfo>
+                            <jaxb:typesafeEnumClass name="Status"/>
+                        </xs:appinfo>
+                    </xs:annotation>
+                    <xs:restriction base="xs:string">
+                        <xs:enumeration value="OPEN"/>
+                        <xs:enumeration value="CLOSED"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderEnumA">
+        <xs:sequence>
+            <xs:element name="Pack">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="status">
+                            <xs:simpleType>
+                                <xs:annotation>
+                                    <xs:appinfo>
+                                        <jaxb:typesafeEnumClass name="Status"/>
+                                    </xs:appinfo>
+                                </xs:annotation>
+                                <xs:restriction base="xs:string">
+                                    <xs:enumeration value="OPEN"/>
+                                    <xs:enumeration value="CLOSED"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderEnumB">
+        <xs:sequence>
+            <xs:element name="Pack">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="status">
+                            <xs:simpleType>
+                                <xs:annotation>
+                                    <xs:appinfo>
+                                        <jaxb:typesafeEnumClass name="Status"/>
+                                    </xs:appinfo>
+                                </xs:annotation>
+                                <xs:restriction base="xs:string">
+                                    <xs:enumeration value="OPEN"/>
+                                    <xs:enumeration value="CLOSED"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="holderA" type="tns:HolderA"/>
     <xs:element name="holderB" type="tns:HolderB"/>
     <xs:element name="holderC" type="tns:HolderC"/>

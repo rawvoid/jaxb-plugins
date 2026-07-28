@@ -288,6 +288,41 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
+    void isomorphicButDifferentlyNamedTargetsDoNotExactMerge() throws Exception {
+        var classes = testExecute(
+            List.of("-Xdedupe-class"),
+            ".*Bundle.*|.*CrewType.*|.*TeamType.*|.*HolderIso.*",
+            null
+        );
+        var byName = bySimpleName(classes);
+
+        // CrewType vs TeamType stay distinct; Bundles must not collapse across them.
+        assertThat(byName).containsKeys("CrewType", "TeamType");
+        assertThat(byName.get("Bundle")).hasSize(2);
+        assertThat(byName.get("Bundle")).allMatch(Class::isMemberClass);
+
+        var holderA = require(byName, "HolderIsoA");
+        assertThat(holderA.getDeclaredField("bundle").getType().getDeclaredField("member").getType()
+            .getSimpleName()).isEqualTo("CrewType");
+        var holderB = require(byName, "HolderIsoB");
+        assertThat(holderB.getDeclaredField("bundle").getType().getDeclaredField("member").getType()
+            .getSimpleName()).isEqualTo("TeamType");
+    }
+
+    @Test
+    void nestedEqualEnumsMergeWithOuterAnonymousPacks() throws Exception {
+        var classes = testExecute(List.of("-Xdedupe-class"), ".*Pack.*|.*Status.*|.*HolderEnum.*", null);
+        var byName = bySimpleName(classes);
+
+        // Anonymous Packs merge into package PackType; nested Status enums collapse to one.
+        assertThat(byName).containsKey("PackType");
+        assertThat(byName.getOrDefault("Pack", List.of())).isEmpty();
+        var status = byName.get("Status");
+        assertThat(status).isNotNull().hasSize(1);
+        assertThat(status.getFirst().isEnum()).isTrue();
+    }
+
+    @Test
     void subsetMergeRoundTripValueOnlyXml() throws Exception {
         var classes = testExecute(
             List.of("-Xdedupe-class", "-merge-subset"),
