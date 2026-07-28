@@ -176,8 +176,11 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return score;
     }
 
-    private boolean mayDelete(boolean anonymousOnly, CClassInfo bean) {
-        return !anonymousOnly || isAnonymous(bean);
+    /**
+     * When {@code anonymousOnly} is on, named beans must be kept (only anonymous victims merge away).
+     */
+    private static boolean mustKeep(boolean anonymousOnly, CClassInfo bean) {
+        return anonymousOnly && !isAnonymous(bean);
     }
 
     // ── structural equality ──────────────────────────────────────────────────
@@ -886,7 +889,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 var host = cluster.getFirst();
                 for (var i = 1; i < cluster.size(); i++) {
                     var victim = cluster.get(i);
-                    if (!mayDelete(session.anonymousOnly, victim)) {
+                    if (mustKeep(session.anonymousOnly, victim)) {
                         continue;
                     }
                     if (tryMerge(model, session, victim, host, "exact", false)) {
@@ -920,7 +923,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     if (victim == host || !model.beans().containsValue(victim)) {
                         continue;
                     }
-                    if (!mayDelete(session.anonymousOnly, victim)) {
+                    if (mustKeep(session.anonymousOnly, victim)) {
                         continue;
                     }
                     String reason = null;
@@ -1082,10 +1085,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
      * Choose which of two nested beans to keep when aligning children of an outer merge pair.
      */
     private static CClassInfo preferredNestedHost(CClassInfo a, CClassInfo b, boolean anonymousOnly) {
-        var aDeletable = !anonymousOnly || isAnonymous(a);
-        var bDeletable = !anonymousOnly || isAnonymous(b);
-        if (aDeletable != bDeletable) {
-            return aDeletable ? b : a; // keep the non-deletable one
+        var aKeep = mustKeep(anonymousOnly, a);
+        var bKeep = mustKeep(anonymousOnly, b);
+        if (aKeep != bKeep) {
+            return aKeep ? a : b;
         }
         return hostScore(a) >= hostScore(b) ? a : b;
     }
