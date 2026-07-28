@@ -90,7 +90,7 @@ class RemoveUnusedClassPluginTest extends AbstractXJCMojoTestCase {
     void keepsClassesMatchingKeepRegex() throws Exception {
         var args = List.of(
             optionCmd,
-            "-keepClasses=.*KeepCandidate.*"
+            "-keep-classes=.*KeepCandidate.*"
         );
         var classes = testExecute(args, ".*", null);
         var names = classes.stream().map(Class::getName).toList();
@@ -103,13 +103,13 @@ class RemoveUnusedClassPluginTest extends AbstractXJCMojoTestCase {
     void respectsPreservePolymorphismFalse() throws Exception {
         var args = List.of(
             optionCmd,
-            "-preservePolymorphism=false"
+            "-preserve-polymorphism=false"
         );
         var classes = testExecute(args, ".*", null);
         var names = classes.stream().map(Class::getName).toList();
 
         assertThat(names).contains(PKG + "BasePolymorphicType");
-        // Derived type is not explicitly referenced in fields, so when preservePolymorphism=false, it gets pruned
+        // Derived type is not explicitly referenced in fields, so when preserve-polymorphism=false, it gets pruned
         assertThat(names).doesNotContain(PKG + "DerivedPolymorphicType");
     }
 }

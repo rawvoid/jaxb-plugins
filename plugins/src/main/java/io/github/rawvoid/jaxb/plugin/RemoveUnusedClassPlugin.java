@@ -41,10 +41,10 @@ public class RemoveUnusedClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RemoveUnusedClassPlugin.class);
 
-    @Option(name = "keepClasses", description = "Repeatable regex patterns to forcibly keep matching classes or enums as root elements.")
+    @Option(name = "keep-classes", description = "Repeatable regex patterns to forcibly keep matching classes or enums as root elements.")
     List<Pattern> keepClasses = new ArrayList<>();
 
-    @Option(name = "preservePolymorphism", defaultValue = "true", description = "Whether to treat subclasses of a reachable base class as reachable (default: true)")
+    @Option(name = "preserve-polymorphism", defaultValue = "true", description = "Whether to treat subclasses of a reachable base class as reachable (default: true)")
     Boolean preservePolymorphism = true;
 
     @Option(name = "verbose", defaultValue = "false", description = "Enable detailed logging of reachability and deleted classes (default: false)")
@@ -68,7 +68,7 @@ public class RemoveUnusedClassPlugin extends AbstractPlugin {
         collectRoots(model, roots, queue);
 
         // 2. Traverse reachability graph
-        var reachable = new HashSet<CTypeInfo>(roots);
+        var reachable = new HashSet<>(roots);
         while (!queue.isEmpty()) {
             var current = queue.poll();
             traverseReachableEdges(current, reachable, queue);
@@ -200,7 +200,7 @@ public class RemoveUnusedClassPlugin extends AbstractPlugin {
     }
 
     private void addReachable(CTypeInfo target, Set<CTypeInfo> reachable, Queue<CTypeInfo> queue) {
-        if (target != null && (target instanceof CClassInfo || target instanceof CEnumLeafInfo || target instanceof CElementInfo)) {
+        if (target instanceof CClassInfo || target instanceof CEnumLeafInfo || target instanceof CElementInfo) {
             if (reachable.add(target)) {
                 queue.add(target);
             }
