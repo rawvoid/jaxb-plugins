@@ -21,6 +21,8 @@ import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.Marshaller;
 import jakarta.xml.bind.Unmarshaller;
+import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlElementWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -367,5 +369,79 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         invokeSet(holder, "setAircraftCode", aircraftCodeTypeClass, code);
         var out = marshal(ctx, wrapRoot(classes, holderAClass, holder));
         assertThat(out).contains("<AircraftCode>CD</AircraftCode>").doesNotContain("Context");
+    }
+
+    /**
+     * Without {@code -preserve-wrapper-shells}, subset merge replaces pure shell {@code Items}
+     * with non-shell {@code ItemsType} — field type becomes the superset host.
+     */
+    @Test
+    void subsetMergesPureShellIntoNonShellHostByDefault() throws Exception {
+        var classes = testExecute(
+            List.of("-Xdedupe-class", "-merge-subset"),
+            ".*HolderShell.*|.*Items.*"
+        );
+        var byName = bySimpleName(classes);
+        var holder = require(byName, "HolderShell");
+        assertThat(holder.getDeclaredField("items").getType().getSimpleName()).isEqualTo("ItemsType");
+        assertThat(byName.getOrDefault("Items", List.of())).isEmpty();
+        assertThat(byName).containsKey("ItemsType");
+    }
+
+    /**
+     * With {@code -preserve-wrapper-shells}, pure shell is not merged into non-shell host.
+     */
+    @Test
+    void preserveWrapperShellsBlocksShellIntoNonShellSubsetMerge() throws Exception {
+        var classes = testExecute(
+            List.of("-Xdedupe-class", "-merge-subset", "-preserve-wrapper-shells"),
+            ".*HolderShell.*|.*Items.*"
+        );
+        var byName = bySimpleName(classes);
+        var holder = require(byName, "HolderShell");
+        var itemsType = holder.getDeclaredField("items").getType();
+        assertThat(itemsType.getSimpleName()).isEqualTo("Items");
+        assertThat(itemsType.isMemberClass()).isTrue();
+        assertThat(byName).containsKey("ItemsType");
+        assertThat(byName.get("Items")).isNotNull().allMatch(Class::isMemberClass);
+    }
+
+    /**
+     * Shell→shell exact merge still runs when preserve-wrapper-shells is on.
+     */
+    @Test
+    void preserveWrapperShellsAllowsShellToShellExactMerge() throws Exception {
+        var classes = testExecute(
+            List.of("-Xdedupe-class", "-preserve-wrapper-shells"),
+            ".*HolderTag.*|.*TagList.*"
+        );
+        var byName = bySimpleName(classes);
+        var holder = require(byName, "HolderTag");
+        assertThat(holder.getDeclaredField("tagList").getType().getSimpleName()).isEqualTo("TagListType");
+        assertThat(byName.getOrDefault("TagList", List.of())).isEmpty();
+        assertThat(byName).containsKey("TagListType");
+    }
+
+    /**
+     * Dedupe first with preserve-wrapper-shells keeps the pure shell so ElementWrapper can flatten.
+     */
+    @Test
+    void preserveWrapperShellsKeepsElementWrapperOpportunity() throws Exception {
+        var classes = testExecute(
+            List.of(
+                "-Xdedupe-class", "-merge-subset", "-preserve-wrapper-shells",
+                "-Xelement-wrapper"
+            ),
+            ".*HolderShell.*"
+        );
+        var byName = bySimpleName(classes);
+        var holder = require(byName, "HolderShell");
+        var items = holder.getDeclaredField("items");
+        assertThat(List.class.isAssignableFrom(items.getType())).isTrue();
+        assertThat(items.getAnnotation(XmlElementWrapper.class)).isNotNull();
+        assertThat(items.getAnnotation(XmlElement.class)).isNotNull();
+        assertThat(items.getAnnotation(XmlElement.class).name()).isEqualTo("item");
+        // Pure shell consumed by element-wrapper; non-shell ItemsType may remain unused.
+        assertThat(byName.getOrDefault("Items", List.of())).isEmpty();
     }
 }

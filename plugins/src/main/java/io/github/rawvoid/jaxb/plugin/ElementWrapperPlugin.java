@@ -24,6 +24,7 @@ import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XSElementDecl;
 import com.sun.xml.xsom.XSParticle;
 import io.github.rawvoid.jaxb.utils.AnnotationUtils;
+import io.github.rawvoid.jaxb.utils.ModelUtils;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlNsForm;
 import org.slf4j.Logger;
@@ -38,6 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import static io.github.rawvoid.jaxb.utils.ModelUtils.isPureCollectionShell;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
 
@@ -163,34 +165,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * A wrapper is a pure collection shell: one element-collection property, no base class,
-     * no attribute wildcard. Broader shapes must not be flattened — they are not equivalent
-     * to {@code @XmlElementWrapper}.
-     * <p>
-     * Having subclasses does <strong>not</strong> disqualify the type: the shell shape is
-     * about this class's own properties. Subclasses only affect whether we may
-     * <em>delete</em> the class after flattening (see {@link #isReferenced}).
-     * </p>
+     * A wrapper is a pure collection shell (see {@link ModelUtils#isPureCollectionShell}).
+     * Broader shapes must not be flattened — they are not equivalent to {@code @XmlElementWrapper}.
+     * Subclasses only affect whether we may <em>delete</em> the class after flattening
+     * (see {@link #isReferenced}).
      */
     private boolean isWrapperClass(CClassInfo classInfo) {
-        // Attribute wildcard is not represented as a CPropertyInfo entry but still contributes
-        // structure (see CClassInfo#hasAttributeWildcard / BeanGenerator attribute wildcard field).
-        if (classInfo.isAbstract()
-            || classInfo.hasAttributeWildcard()
-            || classInfo.getBaseClass() != null
-            || classInfo.getRefBaseClass() != null
-            || classInfo.getProperties().size() != 1) {
-            return false;
-        }
-
-        var property = classInfo.getProperties().getFirst();
-        if (!property.isCollection() || property.ref().isEmpty()) {
-            return false;
-        }
-
-        // Classic XSD wrappers are element collections; value lists map to @XmlList, not wrapper.
-        return property instanceof CElementPropertyInfo elementProperty
-            && !elementProperty.isValueList();
+        return isPureCollectionShell(classInfo);
     }
 
     private void flattenOwner(

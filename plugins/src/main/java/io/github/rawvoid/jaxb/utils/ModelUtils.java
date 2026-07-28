@@ -117,6 +117,33 @@ public final class ModelUtils {
     }
 
     /**
+     * Whether {@code classInfo} is a pure collection wrapper shell (exactly one element
+     * collection property, no base type, no attribute wildcard).
+     * <p>
+     * Same shape that {@code ElementWrapperPlugin} flattens into
+     * {@code List} + {@code @XmlElementWrapper}. Having subclasses does not disqualify the
+     * shell shape itself (it only affects whether the type may be deleted after flatten).
+     * </p>
+     */
+    public static boolean isPureCollectionShell(CClassInfo classInfo) {
+        if (classInfo == null
+            || classInfo.isAbstract()
+            || classInfo.hasAttributeWildcard()
+            || classInfo.getBaseClass() != null
+            || classInfo.getRefBaseClass() != null
+            || classInfo.getProperties().size() != 1) {
+            return false;
+        }
+        var property = classInfo.getProperties().getFirst();
+        if (!property.isCollection() || property.ref().isEmpty()) {
+            return false;
+        }
+        // Value lists map to @XmlList, not element wrappers.
+        return property instanceof CElementPropertyInfo elementProperty
+            && !elementProperty.isValueList();
+    }
+
+    /**
      * Groups all classes in the model by their owning package.
      *
      * @param model the JAXB model containing all beans

@@ -84,6 +84,12 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * re-parented without short-name collisions. Element-class cleanup is scoped to
  * {@code package + nameKey} pairs involved in merges.
  * </p>
+ * <p>
+ * With {@code -preserve-wrapper-shells}, pure collection shells
+ * ({@link ModelUtils#isPureCollectionShell(CClassInfo)}) are not merged into non-shell hosts.
+ * That keeps later {@link ElementWrapperPlugin} flatten opportunities when Dedupe runs first.
+ * Shell-to-shell exact merges remain allowed.
+ * </p>
  *
  * @author Rawvoid
  */
@@ -110,6 +116,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
         description = "Log planned merges without changing the model (default: false)")
     Boolean dryRun;
 
+    @Option(name = "preserve-wrapper-shells", defaultValue = "false",
+        description = "Do not merge pure collection-wrapper shells into non-shell hosts (keeps -Xelement-wrapper opportunities; default: false)")
+    Boolean preserveWrapperShells;
+
     // ── options ──────────────────────────────────────────────────────────────
 
     private boolean subsetEnabled() {
@@ -122,6 +132,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     private boolean dryRun() {
         return Boolean.TRUE.equals(dryRun);
+    }
+
+    private boolean preserveWrapperShells() {
+        return Boolean.TRUE.equals(preserveWrapperShells);
     }
 
     // ── naming / host preference ─────────────────────────────────────────────
@@ -987,6 +1001,18 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 host.fullName(),
                 victim.getElementName(),
                 host.getElementName()
+            );
+            return false;
+        }
+
+        // Keep pure shells available for -Xelement-wrapper when this flag is on: never replace
+        // a shell type with a non-shell host (typical -merge-subset path). Shell→shell is fine.
+        if (preserveWrapperShells()
+            && ModelUtils.isPureCollectionShell(victim)
+            && !ModelUtils.isPureCollectionShell(host)) {
+            log.debug(
+                "Skip dedupe {}: pure collection shell '{}' must not merge into non-shell '{}'",
+                reason, victim.fullName(), host.fullName()
             );
             return false;
         }

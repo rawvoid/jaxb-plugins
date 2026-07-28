@@ -304,7 +304,52 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      Pure collection shell vs non-shell superset (nameKey Items ≡ ItemsType).
+      With -merge-subset alone the anonymous Items shell merges into ItemsType and
+      -Xelement-wrapper can no longer flatten. -preserve-wrapper-shells blocks that merge.
+      Shell→shell exact (TagList → TagListType) must still be allowed under that flag.
+    -->
+    <xs:complexType name="ItemsType">
+        <xs:sequence>
+            <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="currency" type="xs:string"/>
+    </xs:complexType>
+
+    <xs:complexType name="HolderShell">
+        <xs:sequence>
+            <xs:element name="Items">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TagListType">
+        <xs:sequence>
+            <xs:element name="tag" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderTag">
+        <xs:sequence>
+            <xs:element name="TagList">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="tag" type="xs:string" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="holderA" type="tns:HolderA"/>
     <xs:element name="holderB" type="tns:HolderB"/>
     <xs:element name="holderC" type="tns:HolderC"/>
+    <xs:element name="holderShell" type="tns:HolderShell"/>
+    <xs:element name="holderTag" type="tns:HolderTag"/>
 </xs:schema>
