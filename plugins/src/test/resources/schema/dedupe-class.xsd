@@ -110,6 +110,89 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!--
+      Same property set, opposite sequence order → must NOT exact-merge (order-sensitive equality).
+    -->
+    <xs:complexType name="HolderOrderA">
+        <xs:sequence>
+            <xs:element name="Pair">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="first" type="xs:string"/>
+                        <xs:element name="second" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderOrderB">
+        <xs:sequence>
+            <xs:element name="Pair">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="second" type="xs:string"/>
+                        <xs:element name="first" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      required vs optional on the same field name/type → must NOT exact-merge (required in equality).
+    -->
+    <xs:complexType name="HolderReqA">
+        <xs:sequence>
+            <xs:element name="Slot">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderReqB">
+        <xs:sequence>
+            <xs:element name="Slot">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- xs:all vs xs:sequence with same particles → isOrdered differs, must NOT exact-merge. -->
+    <xs:complexType name="HolderAll">
+        <xs:sequence>
+            <xs:element name="Bag">
+                <xs:complexType>
+                    <xs:all>
+                        <xs:element name="x" type="xs:string"/>
+                        <xs:element name="y" type="xs:string"/>
+                    </xs:all>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderSeq">
+        <xs:sequence>
+            <xs:element name="Bag">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="x" type="xs:string"/>
+                        <xs:element name="y" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="holderA" type="tns:HolderA"/>
     <xs:element name="holderB" type="tns:HolderB"/>
     <xs:element name="holderC" type="tns:HolderC"/>

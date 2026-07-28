@@ -105,6 +105,9 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(DedupeClassPlugin.nameKey("AircraftCode")).isEqualTo("AircraftCode");
         assertThat(DedupeClassPlugin.nameKey("Type")).isEqualTo("Type");
         assertThat(DedupeClassPlugin.nameKey("ListType")).isEqualTo("List");
+        // Case-sensitive: only trailing "Type", not "...type"
+        assertThat(DedupeClassPlugin.nameKey("Prototype")).isEqualTo("Prototype");
+        assertThat(DedupeClassPlugin.nameKey("AnyType")).isEqualTo("Any");
     }
 
     @Test
@@ -253,6 +256,35 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(round.getClass()).isEqualTo(host);
         assertThat(invoke(round, "getValue")).isEqualTo("318");
         assertThat(invoke(round, "getContext")).isEqualTo("IATA");
+    }
+
+    @Test
+    void oppositePropertyOrderDoesNotExactMerge() throws Exception {
+        var classes = testExecute(List.of("-Xdedupe-class"), ".*Pair.*|.*HolderOrder.*", null);
+        var byName = bySimpleName(classes);
+
+        // HolderOrderA.Pair {first, second} vs HolderOrderB.Pair {second, first}
+        assertThat(byName.get("Pair")).hasSize(2);
+        assertThat(byName.get("Pair")).allMatch(Class::isMemberClass);
+    }
+
+    @Test
+    void requiredVsOptionalDoesNotExactMerge() throws Exception {
+        var classes = testExecute(List.of("-Xdedupe-class"), ".*Slot.*|.*HolderReq.*", null);
+        var byName = bySimpleName(classes);
+
+        assertThat(byName.get("Slot")).hasSize(2);
+        assertThat(byName.get("Slot")).allMatch(Class::isMemberClass);
+    }
+
+    @Test
+    void allVsSequenceDoesNotExactMerge() throws Exception {
+        var classes = testExecute(List.of("-Xdedupe-class"), ".*Bag.*|.*HolderAll.*|.*HolderSeq.*", null);
+        var byName = bySimpleName(classes);
+
+        // xs:all → isOrdered=false; xs:sequence → isOrdered=true
+        assertThat(byName.get("Bag")).hasSize(2);
+        assertThat(byName.get("Bag")).allMatch(Class::isMemberClass);
     }
 
     @Test
