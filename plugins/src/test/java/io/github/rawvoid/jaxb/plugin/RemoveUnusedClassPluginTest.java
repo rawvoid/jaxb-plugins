@@ -72,12 +72,12 @@ class RemoveUnusedClassPluginTest extends AbstractXJCMojoTestCase {
             PKG + "MainRequestType",
             PKG + "UsedChildType",
             PKG + "UsedEnum",
-            PKG + "BasePolymorphicType",
-            PKG + "DerivedPolymorphicType"
+            PKG + "BasePolymorphicType"
         );
 
-        // Unreachable types pruned
+        // Unreachable types (including unreferenced polymorphic subtypes when preserve-polymorphism=false) pruned
         assertThat(names).doesNotContain(
+            PKG + "DerivedPolymorphicType",
             PKG + "UnusedType",
             PKG + "UnusedEnum",
             PKG + "CyclicA",
@@ -100,16 +100,14 @@ class RemoveUnusedClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     @Test
-    void respectsPreservePolymorphismFalse() throws Exception {
+    void respectsPreservePolymorphismTrue() throws Exception {
         var args = List.of(
             optionCmd,
-            "-preserve-polymorphism=false"
+            "-preserve-polymorphism=true"
         );
         var classes = testExecute(args, ".*", null);
         var names = classes.stream().map(Class::getName).toList();
 
-        assertThat(names).contains(PKG + "BasePolymorphicType");
-        // Derived type is not explicitly referenced in fields, so when preserve-polymorphism=false, it gets pruned
-        assertThat(names).doesNotContain(PKG + "DerivedPolymorphicType");
+        assertThat(names).contains(PKG + "BasePolymorphicType", PKG + "DerivedPolymorphicType");
     }
 }

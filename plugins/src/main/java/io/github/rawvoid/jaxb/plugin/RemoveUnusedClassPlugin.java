@@ -44,8 +44,8 @@ public class RemoveUnusedClassPlugin extends AbstractPlugin {
     @Option(name = "keep-classes", description = "Repeatable regex patterns to forcibly keep matching classes or enums as root elements.")
     List<Pattern> keepClasses = new ArrayList<>();
 
-    @Option(name = "preserve-polymorphism", defaultValue = "true", description = "Whether to treat subclasses of a reachable base class as reachable (default: true)")
-    Boolean preservePolymorphism = true;
+    @Option(name = "preserve-polymorphism", defaultValue = "false", description = "Whether to treat subclasses of a reachable base class as reachable (default: false)")
+    Boolean preservePolymorphism = false;
 
     @Option(name = "verbose", defaultValue = "false", description = "Enable detailed logging of reachability and deleted classes (default: false)")
     Boolean verbose = false;
