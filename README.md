@@ -542,14 +542,15 @@ Merges structurally redundant generated beans to reduce class count (NDC-style a
 - **`-merge-subset`**: when every property of `B` exists on `A` with a compatible type, merge `B` into `A` (default off; surplus host fields remain).
 - **`-anonymous-only`** (default true): only delete anonymous beans; named global types may still be merge hosts.
 - **`-dry-run`**: log planned merges without changing the model.
-- **`-preserve-wrapper-shells`** (default false): do not merge pure collection-wrapper shells into non-shell hosts. Keeps later `-Xelement-wrapper` flatten opportunities when Dedupe runs first; shell→shell exact merges still allowed.
+- **`-preserve-wrapper-shells`** (default **auto**): do not merge pure collection-wrapper shells into non-shell hosts. Auto-on when `-Xelement-wrapper` is also active; force with `true`/`false`. Shell→shell exact merges still allowed.
 
 #### Quick Start
 
 ```bash
 -Xdedupe-class \
   -merge-subset \
-  -preserve-wrapper-shells
+  -Xelement-wrapper
+# preserve-wrapper-shells auto-enables when -Xelement-wrapper is active
 ```
 
 Suggested order with other model plugins:
@@ -557,12 +558,12 @@ Suggested order with other model plugins:
 ```bash
 -Xflatten-multi-element-prop \
 -Xpromote-nested-class \
--Xdedupe-class -merge-subset -preserve-wrapper-shells \
+-Xdedupe-class -merge-subset \
 -Xrename-class -strip-type-suffix \
 -Xelement-wrapper
 ```
 
-Put **`-Xelement-wrapper` last among model plugins** so flatten owners are not removed by dedupe/rename/promote after flatten records are captured. When Dedupe runs first, enable **`-preserve-wrapper-shells`** so subset merges cannot replace pure wrapper shells with fatter non-shell types.
+Put **`-Xelement-wrapper` last among model plugins** so flatten owners are not removed by dedupe/rename/promote after flatten records are captured. When both plugins are active, **`-preserve-wrapper-shells` turns on automatically** so subset merges cannot replace pure wrapper shells with fatter non-shell types (override with `-preserve-wrapper-shells=false` if needed).
 
 Nested copies merge into **package-level** hosts (named global types, or types already promoted). Prefer **promote before dedupe** so more hosts sit at package scope. Cross-outer nested-to-nested merges are skipped (avoids ObjectFactory / FieldOutline corruption).
 

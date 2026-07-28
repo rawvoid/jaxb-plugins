@@ -85,10 +85,11 @@ import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
  * {@code package + nameKey} pairs involved in merges.
  * </p>
  * <p>
- * With {@code -preserve-wrapper-shells}, pure collection shells
- * ({@link ModelUtils#isPureCollectionShell(CClassInfo)}) are not merged into non-shell hosts.
- * That keeps later {@link ElementWrapperPlugin} flatten opportunities when Dedupe runs first.
- * Shell-to-shell exact merges remain allowed.
+ * {@code -preserve-wrapper-shells} (tri-state): pure collection shells
+ * ({@link ModelUtils#isPureCollectionShell(CClassInfo)}) are not merged into non-shell hosts,
+ * so later {@link ElementWrapperPlugin} flatten opportunities remain when Dedupe runs first.
+ * Shell-to-shell exact merges remain allowed. Default is <strong>auto</strong>: on when
+ * {@code -Xelement-wrapper} is also active; force with {@code true}/{@code false}.
  * </p>
  *
  * @author Rawvoid
@@ -116,8 +117,12 @@ public class DedupeClassPlugin extends AbstractPlugin {
         description = "Log planned merges without changing the model (default: false)")
     Boolean dryRun;
 
-    @Option(name = "preserve-wrapper-shells", defaultValue = "false",
-        description = "Do not merge pure collection-wrapper shells into non-shell hosts (keeps -Xelement-wrapper opportunities; default: false)")
+    /**
+     * {@code null} = auto (on when {@link ElementWrapperPlugin} is active), {@code true}/{@code false} force.
+     */
+    @Option(name = "preserve-wrapper-shells",
+        description = "Do not merge pure collection-wrapper shells into non-shell hosts "
+            + "(default: auto — on when -Xelement-wrapper is also active; true/false to force)")
     Boolean preserveWrapperShells;
 
     // ── options ──────────────────────────────────────────────────────────────
@@ -134,8 +139,24 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return Boolean.TRUE.equals(dryRun);
     }
 
-    private boolean preserveWrapperShells() {
-        return Boolean.TRUE.equals(preserveWrapperShells);
+    /**
+     * Resolves tri-state {@link #preserveWrapperShells}: explicit value wins; otherwise on when
+     * {@link ElementWrapperPlugin} is in {@link Options#activePlugins} (via {@link Model#options}).
+     */
+    private boolean resolvePreserveWrapperShells(Model model) {
+        if (preserveWrapperShells != null) {
+            return preserveWrapperShells;
+        }
+        var options = model == null ? null : model.options;
+        if (options == null) {
+            return false;
+        }
+        for (var plugin : options.activePlugins) {
+            if (plugin instanceof ElementWrapperPlugin) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ── naming / host preference ─────────────────────────────────────────────
@@ -829,7 +850,11 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
-        var session = new Session(dryRun(), subsetEnabled(), anonymousOnly());
+        var preserveShells = resolvePreserveWrapperShells(model);
+        if (preserveShells && preserveWrapperShells == null) {
+            log.debug("Auto-enabled preserve-wrapper-shells (ElementWrapperPlugin is active)");
+        }
+        var session = new Session(dryRun(), subsetEnabled(), anonymousOnly(), preserveShells);
         var merged = mergeFixedPoint(model, session);
         if (!session.dry && merged > 0) {
             collapseRedundantElementClasses(model, session.mergedPackageNameKeys);
@@ -1007,7 +1032,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
         // Keep pure shells available for -Xelement-wrapper when this flag is on: never replace
         // a shell type with a non-shell host (typical -merge-subset path). Shell→shell is fine.
-        if (preserveWrapperShells()
+        if (session.preserveWrapperShells
             && ModelUtils.isPureCollectionShell(victim)
             && !ModelUtils.isPureCollectionShell(host)) {
             log.debug(
@@ -1308,16 +1333,18 @@ public class DedupeClassPlugin extends AbstractPlugin {
         final boolean dry;
         final boolean subset;
         final boolean anonymousOnly;
+        final boolean preserveWrapperShells;
         final Set<IdentityPair> countedMerges = new HashSet<>();
         /**
          * {@code package + '\0' + nameKey} of merge victims (scopes element-class cleanup).
          */
         final Set<String> mergedPackageNameKeys = new HashSet<>();
 
-        Session(boolean dry, boolean subset, boolean anonymousOnly) {
+        Session(boolean dry, boolean subset, boolean anonymousOnly, boolean preserveWrapperShells) {
             this.dry = dry;
             this.subset = subset;
             this.anonymousOnly = anonymousOnly;
+            this.preserveWrapperShells = preserveWrapperShells;
         }
     }
 

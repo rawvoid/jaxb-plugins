@@ -372,8 +372,8 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     /**
-     * Without {@code -preserve-wrapper-shells}, subset merge replaces pure shell {@code Items}
-     * with non-shell {@code ItemsType} — field type becomes the superset host.
+     * Without ElementWrapper and without an explicit preserve flag, subset merge replaces pure
+     * shell {@code Items} with non-shell {@code ItemsType} (auto = off).
      */
     @Test
     void subsetMergesPureShellIntoNonShellHostByDefault() throws Exception {
@@ -389,7 +389,7 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     /**
-     * With {@code -preserve-wrapper-shells}, pure shell is not merged into non-shell host.
+     * Explicit {@code -preserve-wrapper-shells} forces protection without ElementWrapper.
      */
     @Test
     void preserveWrapperShellsBlocksShellIntoNonShellSubsetMerge() throws Exception {
@@ -423,15 +423,13 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
     }
 
     /**
-     * Dedupe first with preserve-wrapper-shells keeps the pure shell so ElementWrapper can flatten.
+     * Auto: with {@code -Xelement-wrapper} active, preserve-wrapper-shells turns on without an
+     * explicit flag — shell survives Dedupe and ElementWrapper flattens it.
      */
     @Test
-    void preserveWrapperShellsKeepsElementWrapperOpportunity() throws Exception {
+    void autoPreserveWrapperShellsWhenElementWrapperActive() throws Exception {
         var classes = testExecute(
-            List.of(
-                "-Xdedupe-class", "-merge-subset", "-preserve-wrapper-shells",
-                "-Xelement-wrapper"
-            ),
+            List.of("-Xdedupe-class", "-merge-subset", "-Xelement-wrapper"),
             ".*HolderShell.*"
         );
         var byName = bySimpleName(classes);
@@ -441,7 +439,27 @@ public class DedupeClassPluginTest extends AbstractXJCMojoTestCase {
         assertThat(items.getAnnotation(XmlElementWrapper.class)).isNotNull();
         assertThat(items.getAnnotation(XmlElement.class)).isNotNull();
         assertThat(items.getAnnotation(XmlElement.class).name()).isEqualTo("item");
-        // Pure shell consumed by element-wrapper; non-shell ItemsType may remain unused.
+        assertThat(byName.getOrDefault("Items", List.of())).isEmpty();
+    }
+
+    /**
+     * Explicit {@code -preserve-wrapper-shells=false} disables protection even when ElementWrapper
+     * is active (shell is subset-merged away; flatten opportunity is lost).
+     */
+    @Test
+    void explicitFalseDisablesPreserveDespiteElementWrapper() throws Exception {
+        var classes = testExecute(
+            List.of(
+                "-Xdedupe-class", "-merge-subset", "-preserve-wrapper-shells=false",
+                "-Xelement-wrapper"
+            ),
+            ".*HolderShell.*|.*Items.*"
+        );
+        var byName = bySimpleName(classes);
+        var holder = require(byName, "HolderShell");
+        // Shell was merged into ItemsType before ElementWrapper ran → no flatten.
+        assertThat(holder.getDeclaredField("items").getType().getSimpleName()).isEqualTo("ItemsType");
+        assertThat(holder.getDeclaredField("items").getAnnotation(XmlElementWrapper.class)).isNull();
         assertThat(byName.getOrDefault("Items", List.of())).isEmpty();
     }
 }
