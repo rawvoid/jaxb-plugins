@@ -16,10 +16,30 @@
 
 package io.github.rawvoid.jaxb.plugin;
 
+import com.sun.codemodel.JType;
 import com.sun.tools.xjc.Options;
-import com.sun.tools.xjc.model.*;
+import com.sun.tools.xjc.generator.bean.field.FieldRenderer;
+import com.sun.tools.xjc.model.CAttributePropertyInfo;
+import com.sun.tools.xjc.model.CBuiltinLeafInfo;
+import com.sun.tools.xjc.model.CClassInfo;
+import com.sun.tools.xjc.model.CClassRef;
+import com.sun.tools.xjc.model.CDefaultValue;
+import com.sun.tools.xjc.model.CElement;
+import com.sun.tools.xjc.model.CElementInfo;
+import com.sun.tools.xjc.model.CElementPropertyInfo;
+import com.sun.tools.xjc.model.CEnumConstant;
+import com.sun.tools.xjc.model.CEnumLeafInfo;
+import com.sun.tools.xjc.model.CNonElement;
+import com.sun.tools.xjc.model.CPropertyInfo;
+import com.sun.tools.xjc.model.CReferencePropertyInfo;
+import com.sun.tools.xjc.model.CTypeRef;
+import com.sun.tools.xjc.model.CValuePropertyInfo;
+import com.sun.tools.xjc.model.Model;
+import com.sun.tools.xjc.model.TypeUse;
 import com.sun.tools.xjc.outline.Outline;
+import com.sun.xml.xsom.XmlString;
 import io.github.rawvoid.jaxb.utils.ModelUtils;
+import jakarta.activation.MimeType;
 import org.glassfish.jaxb.core.v2.model.core.WildcardMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,35 +47,42 @@ import org.xml.sax.ErrorHandler;
 
 import javax.xml.namespace.QName;
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CELEMENTINFO_CLASSNAME_FIELD;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
+import static io.github.rawvoid.jaxb.utils.ModelUtils.TYPE_FIELD;
+import static io.github.rawvoid.jaxb.utils.ModelUtils.TYPE_USE_CONSTRUCTOR;
 import static io.github.rawvoid.jaxb.utils.ReflectUtils.getField;
+import static io.github.rawvoid.jaxb.utils.ReflectUtils.getFieldValue;
+import static io.github.rawvoid.jaxb.utils.ReflectUtils.newInstance;
 import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
 
 /**
  * Merges structurally redundant generated beans in {@link #postProcessModel(Model, ErrorHandler)}.
  * <p>
  * Candidates share an owner package and {@linkplain #nameKey(String) name key}
- * ({@code AircraftCodeType} ≡ {@code AircraftCode}). Two passes:
+ * ({@code AircraftCodeType} ≡ {@code AircraftCode}). Passes alternate until a fixed point:
  * </p>
  * <ol>
- *   <li><strong>Exact</strong> — cycle-safe structural equality (property order, {@code required},
- *       {@code isOrdered}/{@code isAbstract}, external {@link CClassRef} identity, reference
- *       {@link WildcardMode}, element QNames, adapters, ID, schema types, defaults presence).</li>
- *   <li><strong>Related</strong> — empty extension of the host (always; IATA/NDC
- *       {@code class Foo extends FooType {}}), and optional property-subset merges
- *       ({@code -merge-subset}). Subset recursion uses {@code (subset, host)} pair cycle detection.</li>
+ *   <li><strong>Exact</strong> — cycle-safe structural equality. Nested bean/enum targets must share
+ *       package + name key (isomorphic but differently named types are not interchangeable).</li>
+ *   <li><strong>Related</strong> — empty extension of the host (always), and optional property-subset
+ *       merges ({@code -merge-subset}).</li>
  * </ol>
  * <p>
- * By default only anonymous beans ({@link CClassInfo#getTypeName()} {@code null}) are deleted;
- * named types may still be hosts. Package-level hosts may absorb any same-package victim; nested
- * hosts only absorb siblings under the same parent.
- * </p>
- * <p>
- * Element-class cleanup runs only after a successful merge and only for name keys involved in
- * those merges. Merging two element-classes with different root {@link QName}s is refused.
+ * By default only anonymous beans ({@link CClassInfo#getTypeName()} {@code null}) are deleted.
+ * Nested beans under a merge pair are aligned before the outer merge; nested enums are merged or
+ * re-parented without short-name collisions. Element-class cleanup is scoped to
+ * {@code package + nameKey} pairs involved in merges.
  * </p>
  *
  * @author Rawvoid
@@ -65,9 +92,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(DedupeClassPlugin.class);
 
-    /**
-     * Final in XJC; set when collapsing an element-class into a pure type host.
-     */
     private static final Field CCLASSINFO_ELEMENTNAME_FIELD = getField(CClassInfo.class, "elementName");
 
     private static final Comparator<CClassInfo> HOST_ORDER = Comparator
@@ -85,12 +109,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
     @Option(name = "dry-run", defaultValue = "false",
         description = "Log planned merges without changing the model (default: false)")
     Boolean dryRun;
-
-    /** Identity pairs already counted (dry-run or live) to avoid double-reporting exact+related. */
-    private final Set<IdentityPair> countedMerges = new HashSet<>();
-
-    /** Name keys of beans removed by a successful (non-dry) merge — scopes element-class cleanup. */
-    private final Set<String> mergedVictimNameKeys = new HashSet<>();
 
     // ── options ──────────────────────────────────────────────────────────────
 
@@ -131,11 +149,16 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return bean.getOwnerPackage().name();
     }
 
-    /**
-     * Package-local name-key group (cross-package merges are never considered).
-     */
     private static String groupKey(CClassInfo bean) {
         return packageName(bean) + '\0' + nameKey(bean.shortName);
+    }
+
+    /**
+     * Same merge identity as top-level candidates: package + nameKey.
+     */
+    private static boolean sameTypeIdentity(CClassInfo a, CClassInfo b) {
+        return nameKey(a.shortName).equals(nameKey(b.shortName))
+            && packageName(a).equals(packageName(b));
     }
 
     private static int hostScore(CClassInfo bean) {
@@ -153,15 +176,15 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return score;
     }
 
-    private boolean mayDelete(CClassInfo bean) {
-        return !anonymousOnly() || isAnonymous(bean);
+    private boolean mayDelete(boolean anonymousOnly, CClassInfo bean) {
+        return !anonymousOnly || isAnonymous(bean);
     }
 
-    // ── cycle-safe structural equality (exact) ───────────────────────────────
+    // ── structural equality ──────────────────────────────────────────────────
 
     /**
      * Exact structural equality for generated beans (order-sensitive properties).
-     * Cycles use undirected identity pairs and co-inductive true on re-entry.
+     * Nested {@link CClassInfo} targets must also share package + nameKey.
      */
     static boolean structurallyEqual(CClassInfo a, CClassInfo b) {
         if (a == b) {
@@ -182,7 +205,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
         var pair = IdentityPair.undirected(a, b);
         if (!visiting.add(pair)) {
-            return true; // co-inductive: same pair re-entered under a cycle
+            return true;
         }
         try {
             if (a.isAbstract() != b.isAbstract()) {
@@ -202,7 +225,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
             if (ap.size() != bp.size()) {
                 return false;
             }
-            // Exact: preserve declaration order (sequence particle order).
             for (var i = 0; i < ap.size(); i++) {
                 if (!equalProperty(ap.get(i), bp.get(i), visiting)) {
                     return false;
@@ -231,6 +253,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (ab == null || bb == null) {
             return false;
         }
+        // Generated bases are interchangeable only when they share package + nameKey.
+        if (!sameTypeIdentity(ab, bb)) {
+            return false;
+        }
         return equalClasses(ab, bb, visiting);
     }
 
@@ -238,19 +264,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (a == b) {
             return true;
         }
-        if (a.getClass() != b.getClass()) {
-            return false;
-        }
-        if (!Objects.equals(a.getName(false), b.getName(false))) {
-            return false;
-        }
-        if (a.isCollection() != b.isCollection()) {
-            return false;
-        }
-        if (!Objects.equals(adapterKey(a), adapterKey(b))) {
-            return false;
-        }
-        if (hasDefault(a) != hasDefault(b)) {
+        if (!commonPropertyEqual(a, b)) {
             return false;
         }
         return switch (a) {
@@ -260,27 +274,58 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     && aa.id() == ba.id()
                     && Objects.equals(aa.getSchemaType(), ba.getSchemaType())
                     && equalNonElement(aa.getTarget(), ba.getTarget(), visiting);
-            case CValuePropertyInfo av when b instanceof CValuePropertyInfo bv ->
-                av.id() == bv.id()
-                    && Objects.equals(av.getSchemaType(), bv.getSchemaType())
-                    && equalNonElement(av.getTarget(), bv.getTarget(), visiting);
-            case CElementPropertyInfo ae when b instanceof CElementPropertyInfo be ->
-                ae.isRequired() == be.isRequired()
-                    && ae.isValueList() == be.isValueList()
-                    && ae.id() == be.id()
-                    && Objects.equals(ae.getSchemaType(), be.getSchemaType())
-                    && equalElementTypes(ae, be, visiting);
-            case CReferencePropertyInfo ar when b instanceof CReferencePropertyInfo br ->
-                ar.isRequired() == br.isRequired()
-                    && ar.isMixed() == br.isMixed()
-                    && ar.id() == br.id()
-                    && Objects.equals(wildcardKey(ar), wildcardKey(br))
-                    && ar.isDummy() == br.isDummy()
-                    && ar.isContent() == br.isContent()
-                    && ar.isMixedExtendedCust() == br.isMixedExtendedCust()
-                    && equalReferenceElements(ar, br, visiting);
+            case CValuePropertyInfo av when b instanceof CValuePropertyInfo bv -> av.id() == bv.id()
+                && Objects.equals(av.getSchemaType(), bv.getSchemaType())
+                && equalNonElement(av.getTarget(), bv.getTarget(), visiting);
+            case CElementPropertyInfo ae when b instanceof CElementPropertyInfo be -> ae.isRequired() == be.isRequired()
+                && ae.isValueList() == be.isValueList()
+                && ae.id() == be.id()
+                && Objects.equals(ae.getSchemaType(), be.getSchemaType())
+                && equalElementTypes(ae, be, visiting);
+            case CReferencePropertyInfo ar when b instanceof CReferencePropertyInfo br -> ar.isRequired() == br.isRequired()
+                && ar.isMixed() == br.isMixed()
+                && ar.id() == br.id()
+                && Objects.equals(wildcardKey(ar), wildcardKey(br))
+                && ar.isDummy() == br.isDummy()
+                && ar.isContent() == br.isContent()
+                && ar.isMixedExtendedCust() == br.isMixedExtendedCust()
+                && equalReferenceElements(ar, br, visiting);
             default -> false;
         };
+    }
+
+    /**
+     * Shared property surface for exact equality and subset compatibility.
+     */
+    private static boolean commonPropertyEqual(CPropertyInfo a, CPropertyInfo b) {
+        if (a.getClass() != b.getClass()) {
+            return false;
+        }
+        if (!Objects.equals(a.getName(false), b.getName(false))) {
+            return false;
+        }
+        if (!Objects.equals(a.getName(true), b.getName(true))) {
+            return false;
+        }
+        if (a.isCollection() != b.isCollection()) {
+            return false;
+        }
+        if (!Objects.equals(adapterKey(a), adapterKey(b))) {
+            return false;
+        }
+        if (!Objects.equals(mimeKey(a), mimeKey(b))) {
+            return false;
+        }
+        if (a.inlineBinaryData != b.inlineBinaryData) {
+            return false;
+        }
+        if (!Objects.equals(baseTypeKey(a.baseType), baseTypeKey(b.baseType))) {
+            return false;
+        }
+        if (!equalRealization(a.realization, b.realization)) {
+            return false;
+        }
+        return equalDefaults(a.defaultValue, b.defaultValue);
     }
 
     private static boolean equalElementTypes(
@@ -293,24 +338,25 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (at.size() != bt.size()) {
             return false;
         }
-        // Preserve type-ref order (choice arm order as bound).
         for (var i = 0; i < at.size(); i++) {
-            var ta = at.get(i);
-            var tb = bt.get(i);
-            if (!Objects.equals(ta.getTagName(), tb.getTagName())) {
-                return false;
-            }
-            if (ta.isNillable() != tb.isNillable()) {
-                return false;
-            }
-            if (!Objects.equals(ta.getDefaultValue(), tb.getDefaultValue())) {
-                return false;
-            }
-            if (!equalNonElement(ta.getTarget(), tb.getTarget(), visiting)) {
+            if (!equalTypeRef(at.get(i), bt.get(i), visiting)) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean equalTypeRef(CTypeRef a, CTypeRef b, Set<IdentityPair> visiting) {
+        if (!Objects.equals(a.getTagName(), b.getTagName())) {
+            return false;
+        }
+        if (a.isNillable() != b.isNillable()) {
+            return false;
+        }
+        if (!Objects.equals(a.getDefaultValue(), b.getDefaultValue())) {
+            return false;
+        }
+        return equalNonElement(a.getTarget(), b.getTarget(), visiting);
     }
 
     private static boolean equalReferenceElements(
@@ -323,7 +369,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (ae.size() != be.size()) {
             return false;
         }
-        // Order-independent multiset match with structural equality.
         var used = new boolean[be.size()];
         for (var elA : ae) {
             var matched = false;
@@ -349,32 +394,53 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return true;
         }
         if (a instanceof CClassInfo ca && b instanceof CClassInfo cb) {
+            if (!sameTypeIdentity(ca, cb)) {
+                return false;
+            }
             return equalClasses(ca, cb, visiting);
         }
         if (a instanceof CElementInfo ea && b instanceof CElementInfo eb) {
-            if (!Objects.equals(ea.getElementName(), eb.getElementName())) {
-                return false;
-            }
-            if (ea.hasClass() != eb.hasClass()) {
-                return false;
-            }
-            if (ea.hasClass() && !Objects.equals(nameKey(ea.shortName()), nameKey(eb.shortName()))) {
-                return false;
-            }
-            var sa = ea.getScope();
-            var sb = eb.getScope();
-            if (sa != sb) {
-                if (sa instanceof CClassInfo ca && sb instanceof CClassInfo cb) {
-                    if (!equalClasses(ca, cb, visiting)) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            return equalNonElement(ea.getContentType(), eb.getContentType(), visiting);
+            return equalElementInfo(ea, eb, visiting);
         }
         return false;
+    }
+
+    private static boolean equalElementInfo(CElementInfo a, CElementInfo b, Set<IdentityPair> visiting) {
+        if (!Objects.equals(a.getElementName(), b.getElementName())) {
+            return false;
+        }
+        if (a.hasClass() != b.hasClass()) {
+            return false;
+        }
+        if (a.hasClass() && !Objects.equals(nameKey(a.shortName()), nameKey(b.shortName()))) {
+            return false;
+        }
+        var sa = a.getScope();
+        var sb = b.getScope();
+        if (sa != sb) {
+            if (sa instanceof CClassInfo ca && sb instanceof CClassInfo cb) {
+                if (!sameTypeIdentity(ca, cb) || !equalClasses(ca, cb, visiting)) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        if (!equalNonElement(a.getContentType(), b.getContentType(), visiting)) {
+            return false;
+        }
+        // Element-class property carries adapter / mime / defaults for the binding.
+        var pa = a.getProperty();
+        var pb = b.getProperty();
+        if (pa == null && pb == null) {
+            return true;
+        }
+        if (pa == null || pb == null) {
+            return false;
+        }
+        return commonPropertyEqual(pa, pb)
+            && pa.id() == pb.id()
+            && Objects.equals(pa.getSchemaType(), pb.getSchemaType());
     }
 
     private static boolean equalNonElement(CNonElement a, CNonElement b, Set<IdentityPair> visiting) {
@@ -385,39 +451,27 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return false;
         }
         if (a instanceof CClassInfo ca && b instanceof CClassInfo cb) {
+            // Do not treat isomorphic but differently named types as interchangeable.
+            if (!sameTypeIdentity(ca, cb)) {
+                return false;
+            }
             return equalClasses(ca, cb, visiting);
         }
         if (a instanceof CEnumLeafInfo ea && b instanceof CEnumLeafInfo eb) {
             return equalEnums(ea, eb);
         }
         if (a instanceof CBuiltinLeafInfo ba && b instanceof CBuiltinLeafInfo bb) {
-            return Objects.equals(ba.getTypeName(), bb.getTypeName())
-                && Objects.equals(typeNameOf(ba), typeNameOf(bb));
+            return Objects.equals(typeNameOf(ba), typeNameOf(bb));
         }
         if (a instanceof CClassRef ra && b instanceof CClassRef rb) {
             return Objects.equals(ra.fullName(), rb.fullName());
         }
-        // Distinct external / other non-elements must not collapse together.
-        if (a.getClass() != b.getClass()) {
-            return false;
-        }
-        return Objects.equals(nonElementKey(a, visiting), nonElementKey(b, visiting));
+        return a.getClass() == b.getClass() && Objects.equals(String.valueOf(a), String.valueOf(b));
     }
 
     private static String typeNameOf(CBuiltinLeafInfo leaf) {
         var qn = leaf.getTypeName();
         return qn == null ? leaf.toString() : qn.toString();
-    }
-
-    private static String nonElementKey(CNonElement info, Set<IdentityPair> visiting) {
-        return switch (info) {
-            case null -> "null";
-            case CClassInfo ci -> "bean:" + ci.fullName();
-            case CEnumLeafInfo e -> "enum:" + enumKey(e);
-            case CBuiltinLeafInfo b -> "leaf:" + typeNameOf(b);
-            case CClassRef r -> "ref:" + r.fullName();
-            default -> "other:" + info.getClass().getName() + ":" + info;
-        };
     }
 
     static boolean equalEnums(CEnumLeafInfo a, CEnumLeafInfo b) {
@@ -438,34 +492,15 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (ac.size() != bc.size()) {
             return false;
         }
-        // Preserve declaration order for API-stable enums.
         for (var i = 0; i < ac.size(); i++) {
-            var ca = ac.get(i);
-            var cb = bc.get(i);
-            if (!Objects.equals(ca.getName(), cb.getName())) {
-                return false;
-            }
-            if (!Objects.equals(ca.getLexicalValue(), cb.getLexicalValue())) {
+            CEnumConstant ca = ac.get(i);
+            CEnumConstant cb = bc.get(i);
+            if (!Objects.equals(ca.getName(), cb.getName())
+                || !Objects.equals(ca.getLexicalValue(), cb.getLexicalValue())) {
                 return false;
             }
         }
         return true;
-    }
-
-    private static String enumKey(CEnumLeafInfo e) {
-        var sb = new StringBuilder(nameKey(e.shortName));
-        if (e.getTypeName() != null) {
-            sb.append(e.getTypeName());
-        }
-        if (e.base instanceof CBuiltinLeafInfo b) {
-            sb.append('/').append(typeNameOf(b));
-        } else if (e.base != null) {
-            sb.append('/').append(e.base.getClass().getSimpleName());
-        }
-        for (var c : e.getConstants()) {
-            sb.append('|').append(c.getName()).append('=').append(c.getLexicalValue());
-        }
-        return sb.toString();
     }
 
     private static String adapterKey(CPropertyInfo prop) {
@@ -484,24 +519,67 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
     }
 
+    private static String mimeKey(CPropertyInfo prop) {
+        MimeType mime = prop.getExpectedMimeType();
+        return mime == null ? "" : mime.toString();
+    }
+
+    private static String baseTypeKey(JType type) {
+        return type == null ? "" : type.fullName();
+    }
+
+    private static boolean equalRealization(FieldRenderer a, FieldRenderer b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return a.getClass() == b.getClass();
+    }
+
     private static String wildcardKey(CReferencePropertyInfo ref) {
         WildcardMode mode = ref.getWildcard();
         return mode == null ? "-" : mode.name();
     }
 
     /**
-     * Default presence only: {@link CDefaultValue} has no public lexical getter before outline.
+     * Compare defaults by identity, then by reflected lexical {@link XmlString} when available.
+     * Different non-null defaults without extractable lexical are treated as unequal.
      */
-    private static boolean hasDefault(CPropertyInfo prop) {
-        return prop.defaultValue != null;
+    private static boolean equalDefaults(CDefaultValue a, CDefaultValue b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        var la = defaultLexical(a);
+        var lb = defaultLexical(b);
+        if (la == null || lb == null) {
+            // Cannot prove equality of opaque defaults.
+            return false;
+        }
+        return la.equals(lb);
     }
 
-    // ── merge eligibility (related / subset) ─────────────────────────────────
+    private static String defaultLexical(CDefaultValue value) {
+        for (var field : value.getClass().getDeclaredFields()) {
+            if (XmlString.class.isAssignableFrom(field.getType())) {
+                try {
+                    field.setAccessible(true);
+                    var xs = (XmlString) field.get(value);
+                    return xs == null ? null : xs.value;
+                } catch (ReflectiveOperationException e) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
 
-    /**
-     * IATA/NDC empty element-class: no local properties, base is the host.
-     * Safe without {@code -merge-subset} (no extra fields).
-     */
+    // ── subset ───────────────────────────────────────────────────────────────
+
     static boolean isEmptyExtensionOf(CClassInfo victim, CClassInfo host) {
         return victim != host
             && host != null
@@ -510,11 +588,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
             && (!victim.hasAttributeWildcard() || host.hasAttributeWildcard());
     }
 
-    /**
-     * Whether {@code subset} is structurally a subset of {@code host} (or equal).
-     * Requires matching name key and owner package. Cycles use directed
-     * {@code (subset, host)} pairs (co-inductive true only for the same pair).
-     */
     static boolean isStructuralSubset(CClassInfo subset, CClassInfo host) {
         if (subset == host) {
             return true;
@@ -522,10 +595,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (subset == null || host == null) {
             return false;
         }
-        if (!nameKey(subset.shortName).equals(nameKey(host.shortName))) {
-            return false;
-        }
-        if (!packageName(subset).equals(packageName(host))) {
+        if (!sameTypeIdentity(subset, host)) {
             return false;
         }
         return isStructuralSubset(subset, host, new HashSet<>());
@@ -541,11 +611,18 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
         var pair = new DirectedPair(subset, host);
         if (!visiting.add(pair)) {
-            return true; // same (subset, host) re-entered
+            return true;
         }
         try {
             if (structurallyEqual(subset, host)) {
                 return true;
+            }
+            // Align class-level flags with exact (API / propOrder stability).
+            if (subset.isAbstract() != host.isAbstract()) {
+                return false;
+            }
+            if (subset.isOrdered() != host.isOrdered()) {
+                return false;
             }
             if (!subsetBaseCompatible(subset, host, visiting)) {
                 return false;
@@ -574,14 +651,12 @@ public class DedupeClassPlugin extends AbstractPlugin {
         var hRef = host.getRefBaseClass();
         if (sRef != null || hRef != null) {
             if (sRef == null || hRef == null) {
-                // subset may extend host directly only when both are generated beans
                 return false;
             }
             return Objects.equals(sRef.fullName(), hRef.fullName());
         }
         var subsetBase = subset.getBaseClass();
         var hostBase = host.getBaseClass();
-        // Same base (incl. both null), or subset extends host directly.
         if (subsetBase == hostBase) {
             return true;
         }
@@ -589,6 +664,9 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return true;
         }
         if (subsetBase != null && hostBase != null) {
+            if (!sameTypeIdentity(subsetBase, hostBase)) {
+                return false;
+            }
             return isStructuralSubset(subsetBase, hostBase, visiting);
         }
         return false;
@@ -608,41 +686,33 @@ public class DedupeClassPlugin extends AbstractPlugin {
         CPropertyInfo host,
         Set<DirectedPair> visiting
     ) {
-        if (subset.getClass() != host.getClass()) {
+        // Shared surface must match exactly (names, mime, defaults, etc.).
+        if (!commonPropertyEqual(subset, host)) {
             return false;
         }
-        if (subset.isCollection() != host.isCollection()) {
-            return false;
-        }
-        if (!Objects.equals(adapterKey(subset), adapterKey(host))) {
-            return false;
-        }
-        // Required on host may be stronger; shared field must not differ for unbox/API stability.
         return switch (subset) {
             case CAttributePropertyInfo sa when host instanceof CAttributePropertyInfo ha ->
                 Objects.equals(sa.getXmlName(), ha.getXmlName())
                     && sa.isRequired() == ha.isRequired()
                     && sa.id() == ha.id()
                     && Objects.equals(sa.getSchemaType(), ha.getSchemaType())
-                    && hasDefault(sa) == hasDefault(ha)
                     && nonElementSubsetCompatible(sa.getTarget(), ha.getTarget(), visiting);
-            case CValuePropertyInfo sv when host instanceof CValuePropertyInfo hv ->
-                sv.id() == hv.id()
-                    && Objects.equals(sv.getSchemaType(), hv.getSchemaType())
-                    && hasDefault(sv) == hasDefault(hv)
-                    && nonElementSubsetCompatible(sv.getTarget(), hv.getTarget(), visiting);
-            case CElementPropertyInfo se when host instanceof CElementPropertyInfo he ->
-                se.isRequired() == he.isRequired()
-                    && se.isValueList() == he.isValueList()
-                    && se.id() == he.id()
-                    && Objects.equals(se.getSchemaType(), he.getSchemaType())
-                    && elementTypesSubset(se, he, visiting);
-            case CReferencePropertyInfo sr when host instanceof CReferencePropertyInfo hr ->
-                sr.isRequired() == hr.isRequired()
-                    && sr.isMixed() == hr.isMixed()
-                    && sr.id() == hr.id()
-                    && Objects.equals(wildcardKey(sr), wildcardKey(hr))
-                    && referenceSubset(sr, hr, visiting);
+            case CValuePropertyInfo sv when host instanceof CValuePropertyInfo hv -> sv.id() == hv.id()
+                && Objects.equals(sv.getSchemaType(), hv.getSchemaType())
+                && nonElementSubsetCompatible(sv.getTarget(), hv.getTarget(), visiting);
+            case CElementPropertyInfo se when host instanceof CElementPropertyInfo he -> se.isRequired() == he.isRequired()
+                && se.isValueList() == he.isValueList()
+                && se.id() == he.id()
+                && Objects.equals(se.getSchemaType(), he.getSchemaType())
+                && elementTypesSubset(se, he, visiting);
+            case CReferencePropertyInfo sr when host instanceof CReferencePropertyInfo hr -> sr.isRequired() == hr.isRequired()
+                && sr.isMixed() == hr.isMixed()
+                && sr.id() == hr.id()
+                && Objects.equals(wildcardKey(sr), wildcardKey(hr))
+                && sr.isDummy() == hr.isDummy()
+                && sr.isContent() == hr.isContent()
+                && sr.isMixedExtendedCust() == hr.isMixedExtendedCust()
+                && referenceSubset(sr, hr, visiting);
             default -> false;
         };
     }
@@ -655,17 +725,11 @@ public class DedupeClassPlugin extends AbstractPlugin {
         for (var st : subset.getTypes()) {
             var matched = false;
             for (var ht : host.getTypes()) {
-                if (!Objects.equals(st.getTagName(), ht.getTagName())) {
-                    continue;
-                }
-                if (st.isNillable() && !ht.isNillable()) {
-                    continue;
-                }
-                var sd = st.getDefaultValue();
-                if (sd != null && !sd.equals(ht.getDefaultValue())) {
-                    continue;
-                }
-                if (nonElementSubsetCompatible(st.getTarget(), ht.getTarget(), visiting)) {
+                // Defaults must match exactly (host default must not silently appear).
+                if (Objects.equals(st.getTagName(), ht.getTagName())
+                    && st.isNillable() == ht.isNillable()
+                    && Objects.equals(st.getDefaultValue(), ht.getDefaultValue())
+                    && nonElementSubsetCompatible(st.getTarget(), ht.getTarget(), visiting)) {
                     matched = true;
                     break;
                 }
@@ -695,8 +759,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     break;
                 }
                 if (se instanceof CElementInfo sei && he instanceof CElementInfo hei
-                    && Objects.equals(sei.getElementName(), hei.getElementName())
-                    && nonElementSubsetCompatible(sei.getContentType(), hei.getContentType(), visiting)) {
+                    && equalElementInfo(sei, hei, new HashSet<>())) {
                     matched = true;
                     break;
                 }
@@ -717,7 +780,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return true;
         }
         if (subset instanceof CClassInfo sc && host instanceof CClassInfo hc) {
-            if (!nameKey(sc.shortName).equals(nameKey(hc.shortName))) {
+            if (!sameTypeIdentity(sc, hc)) {
                 return false;
             }
             if (structurallyEqual(sc, hc)) {
@@ -734,33 +797,18 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return equalNonElement(subset, host, new HashSet<>());
     }
 
-    /**
-     * Non-exact relation that still allows merge: empty extension (always), or structural subset
-     * when {@code -merge-subset} is on.
-     */
-    private boolean isRelatedMerge(CClassInfo victim, CClassInfo host) {
-        return isEmptyExtensionOf(victim, host)
-            || (subsetEnabled() && isStructuralSubset(victim, host));
-    }
-
-    private static String relatedReason(CClassInfo victim, CClassInfo host) {
-        return isEmptyExtensionOf(victim, host) ? "empty-ext" : "subset";
-    }
-
     // ── orchestration ────────────────────────────────────────────────────────
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
-        countedMerges.clear();
-        mergedVictimNameKeys.clear();
-        var dry = dryRun();
-        var merged = mergeExact(model, dry) + mergeRelated(model, dry);
-        if (!dry && merged > 0) {
-            collapseRedundantElementClasses(model, mergedVictimNameKeys);
+        var session = new Session(dryRun(), subsetEnabled(), anonymousOnly());
+        var merged = mergeFixedPoint(model, session);
+        if (!session.dry && merged > 0) {
+            collapseRedundantElementClasses(model, session.mergedPackageNameKeys);
             warnObjectFactoryCollisions(model);
         }
         if (merged > 0) {
-            log.info("Deduped {} bean merge(s){}", merged, dry ? " (dry-run)" : "");
+            log.info("Deduped {} bean merge(s){}", merged, session.dry ? " (dry-run)" : "");
         }
     }
 
@@ -770,10 +818,28 @@ public class DedupeClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * Structurally equal beans within a package+nameKey group → one host.
-     * Clusters with cycle-safe {@link #structurallyEqual} (no string fingerprint map).
+     * Alternate exact and related until no further merges (related can unlock new exact pairs).
      */
-    private int mergeExact(Model model, boolean dry) {
+    private int mergeFixedPoint(Model model, Session session) {
+        var total = 0;
+        boolean progress;
+        do {
+            progress = false;
+            var exact = mergeExact(model, session);
+            if (exact > 0) {
+                total += exact;
+                progress = true;
+            }
+            var related = mergeRelatedSweep(model, session);
+            if (related > 0) {
+                total += related;
+                progress = true;
+            }
+        } while (progress && !session.dry);
+        return total;
+    }
+
+    private int mergeExact(Model model, Session session) {
         Map<String, List<CClassInfo>> byKey = new LinkedHashMap<>();
         for (var bean : List.copyOf(model.beans().values())) {
             byKey.computeIfAbsent(groupKey(bean), k -> new ArrayList<>()).add(bean);
@@ -784,7 +850,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
             if (members.size() < 2) {
                 continue;
             }
-            // Greedy clusters: each bean joins the first host it equals.
             var clusters = new ArrayList<List<CClassInfo>>();
             for (var bean : members) {
                 List<CClassInfo> joined = null;
@@ -806,18 +871,14 @@ public class DedupeClassPlugin extends AbstractPlugin {
                     continue;
                 }
                 cluster.sort(HOST_ORDER);
+                // Highest hostScore is first; only delete lower-priority victims into it.
                 var host = cluster.getFirst();
                 for (var i = 1; i < cluster.size(); i++) {
                     var victim = cluster.get(i);
-                    if (!mayDelete(victim)) {
-                        if (mayDelete(host) && hostScore(victim) > hostScore(host)
-                            && tryMerge(model, host, victim, "exact", dry)) {
-                            count++;
-                            host = victim;
-                        }
+                    if (!mayDelete(session.anonymousOnly, victim)) {
                         continue;
                     }
-                    if (tryMerge(model, victim, host, "exact", dry)) {
+                    if (tryMerge(model, session, victim, host, "exact", false)) {
                         count++;
                     }
                 }
@@ -827,72 +888,75 @@ public class DedupeClassPlugin extends AbstractPlugin {
     }
 
     /**
-     * Fixed-point pairwise merge for empty-ext (always) and subset (optional) within each
-     * package+nameKey group. Skips pairs already counted in the exact pass (dry-run safe).
+     * Single related sweep (empty-ext / subset); fixed-point is the outer loop.
      */
-    private int mergeRelated(Model model, boolean dry) {
+    private int mergeRelatedSweep(Model model, Session session) {
         var count = 0;
-        boolean changed;
-        do {
-            changed = false;
-            Map<String, List<CClassInfo>> byKey = new LinkedHashMap<>();
-            for (var bean : model.beans().values()) {
-                byKey.computeIfAbsent(groupKey(bean), k -> new ArrayList<>()).add(bean);
+        Map<String, List<CClassInfo>> byKey = new LinkedHashMap<>();
+        for (var bean : model.beans().values()) {
+            byKey.computeIfAbsent(groupKey(bean), k -> new ArrayList<>()).add(bean);
+        }
+        for (var members : byKey.values()) {
+            if (members.size() < 2) {
+                continue;
             }
-            for (var members : byKey.values()) {
-                if (members.size() < 2) {
+            members.sort(HOST_ORDER);
+            for (var host : List.copyOf(members)) {
+                if (!model.beans().containsValue(host)) {
                     continue;
                 }
-                members.sort(HOST_ORDER);
-                for (var host : List.copyOf(members)) {
-                    if (!model.beans().containsValue(host)) {
+                for (var victim : List.copyOf(members)) {
+                    if (victim == host || !model.beans().containsValue(victim)) {
                         continue;
                     }
-                    for (var victim : List.copyOf(members)) {
-                        if (victim == host || !model.beans().containsValue(victim)) {
-                            continue;
-                        }
-                        if (!mayDelete(victim) || !isRelatedMerge(victim, host)) {
-                            continue;
-                        }
-                        // Skip if this pair was already counted (e.g. exact dry-run + subset).
-                        if (countedMerges.contains(IdentityPair.directed(victim, host))) {
-                            continue;
-                        }
-                        if (tryMerge(model, victim, host, relatedReason(victim, host), dry)) {
-                            count++;
-                            changed = true;
-                        }
+                    if (!mayDelete(session.anonymousOnly, victim)) {
+                        continue;
+                    }
+                    String reason = null;
+                    if (isEmptyExtensionOf(victim, host)) {
+                        reason = "empty-ext";
+                    } else if (session.subset && isStructuralSubset(victim, host)) {
+                        reason = "subset";
+                    }
+                    if (reason == null) {
+                        continue;
+                    }
+                    if (session.countedMerges.contains(IdentityPair.directed(victim, host))) {
+                        continue;
+                    }
+                    if (tryMerge(model, session, victim, host, reason, false)) {
+                        count++;
                     }
                 }
             }
-        } while (changed && !dry);
+        }
         return count;
     }
 
     // ── merge execution ──────────────────────────────────────────────────────
 
     /**
-     * Merges {@code victim} into {@code host}. Returns {@code false} if skipped.
+     * @param allowCrossNestedParent when true, nested beans under different parents may merge
+     *                               (used by {@link #prepareNestedMerges} while aligning children
+     *                               of an outer victim/host pair).
      */
     private boolean tryMerge(
         Model model,
+        Session session,
         CClassInfo victim,
         CClassInfo host,
         String reason,
-        boolean dry
+        boolean allowCrossNestedParent
     ) {
         if (victim == host
             || !model.beans().containsValue(victim)
             || !model.beans().containsValue(host)
-            || !nameKey(victim.shortName).equals(nameKey(host.shortName))
-            || !packageName(victim).equals(packageName(host))
+            || !sameTypeIdentity(victim, host)
             || isNestingAncestor(victim, host)) {
             return false;
         }
 
-        // Nested host: only same parent (no lift). Package host may absorb any same-package victim.
-        if (!isPackageLevel(host) && host.parent() != victim.parent()) {
+        if (!isPackageLevel(host) && host.parent() != victim.parent() && !allowCrossNestedParent) {
             log.debug(
                 "Skip dedupe {}: cross-hierarchy nested '{}' vs '{}'",
                 reason, victim.fullName(), host.fullName()
@@ -900,7 +964,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return false;
         }
 
-        // One @XmlRootElement per bean: refuse distinct root QNames.
         if (victim.isElement() && host.isElement()
             && !Objects.equals(victim.getElementName(), host.getElementName())) {
             log.warn(
@@ -914,7 +977,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
             return false;
         }
 
-        if (!prepareNestedMerges(model, victim, host, dry)) {
+        if (!prepareNestedMerges(model, session, victim, host)) {
+            return false;
+        }
+        if (!prepareNestedEnums(model, session, victim, host)) {
             return false;
         }
 
@@ -923,25 +989,21 @@ public class DedupeClassPlugin extends AbstractPlugin {
             reason, victim.fullName(), host.fullName(), nameKey(victim.shortName)
         );
 
-        countedMerges.add(IdentityPair.directed(victim, host));
+        session.countedMerges.add(IdentityPair.directed(victim, host));
 
-        if (dry) {
+        if (session.dry) {
             return true;
         }
 
-        mergedVictimNameKeys.add(nameKey(victim.shortName));
+        session.mergedPackageNameKeys.add(packageName(victim) + '\0' + nameKey(victim.shortName));
         if (victim.isElement()) {
-            mergedVictimNameKeys.add(nameKey(localPart(victim.getElementName(), victim.shortName)));
+            session.mergedPackageNameKeys.add(
+                packageName(victim) + '\0' + nameKey(localPart(victim.getElementName(), victim.shortName))
+            );
         }
 
-        // Preserve global element-class root binding on a pure type host.
         if (victim.isElement() && !host.isElement()) {
             setFieldValue(CCLASSINFO_ELEMENTNAME_FIELD, host, victim.getElementName());
-        }
-        for (var enumInfo : model.enums().values()) {
-            if (enumInfo.parent == victim) {
-                setFieldValue(CENUMLEAFINFO_PARENT_FIELD, enumInfo, host);
-            }
         }
         ModelUtils.replaceClassReferences(model, victim, host);
         ModelUtils.removeClass(model, victim);
@@ -952,17 +1014,14 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return name == null ? fallback : name.getLocalPart();
     }
 
-    /**
-     * Align nested children under {@code victim} with those under {@code host} (merge or free name).
-     */
-    private boolean prepareNestedMerges(Model model, CClassInfo victim, CClassInfo host, boolean dry) {
+    private boolean prepareNestedMerges(Model model, Session session, CClassInfo victim, CClassInfo host) {
         for (var child : List.copyOf(directNestedBeans(model, victim))) {
             if (!model.beans().containsValue(child)) {
                 continue;
             }
             var matches = new ArrayList<CClassInfo>();
             for (var hc : directNestedBeans(model, host)) {
-                if (nameKey(child.shortName).equals(nameKey(hc.shortName))) {
+                if (sameTypeIdentity(child, hc)) {
                     matches.add(hc);
                 }
             }
@@ -974,7 +1033,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
                         return false;
                     }
                 }
-                // replaceClassReferences re-parents free-named children.
                 continue;
             }
 
@@ -985,7 +1043,7 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 reason = "exact-nested";
             } else if (isEmptyExtensionOf(child, target)) {
                 reason = "empty-ext-nested";
-            } else if (subsetEnabled() && isStructuralSubset(child, target)) {
+            } else if (session.subset && isStructuralSubset(child, target)) {
                 reason = "subset-nested";
             }
             if (reason == null) {
@@ -996,21 +1054,66 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 return false;
             }
 
-            // Prefer keeping a non-deletable (named) nested bean as host when both qualify.
             CClassInfo from;
             CClassInfo to;
-            if (!mayDelete(child) && mayDelete(target)) {
+            if (!mayDelete(session.anonymousOnly, child) && mayDelete(session.anonymousOnly, target)) {
                 from = target;
                 to = child;
             } else {
                 from = child;
                 to = target;
             }
-            if (!tryMerge(model, from, to, reason, dry)) {
+            // Cross-parent is intentional: children of victim/host outer pair.
+            if (!tryMerge(model, session, from, to, reason, true)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Merge equal nested enums into the host, or re-parent unique ones; refuse short-name clashes.
+     */
+    private boolean prepareNestedEnums(Model model, Session session, CClassInfo victim, CClassInfo host) {
+        for (var victimEnum : List.copyOf(directNestedEnums(model, victim))) {
+            CEnumLeafInfo match = null;
+            for (var hostEnum : directNestedEnums(model, host)) {
+                if (equalEnums(victimEnum, hostEnum)) {
+                    match = hostEnum;
+                    break;
+                }
+            }
+            if (match != null) {
+                log.info(
+                    "Dedupe exact-enum: '{}' -> '{}'",
+                    fullEnumName(victimEnum), fullEnumName(match)
+                );
+                session.countedMerges.add(IdentityPair.directed(victimEnum, match));
+                if (!session.dry) {
+                    replaceEnumReferences(model, victimEnum, match);
+                    model.enums().remove(victimEnum.getClazz());
+                }
+                continue;
+            }
+            for (var hostEnum : directNestedEnums(model, host)) {
+                if (nameKey(victimEnum.shortName).equals(nameKey(hostEnum.shortName))) {
+                    log.debug(
+                        "Skip dedupe: nested enum clash {} vs {} under {}",
+                        fullEnumName(victimEnum), fullEnumName(hostEnum), host.fullName()
+                    );
+                    return false;
+                }
+            }
+            if (!session.dry) {
+                setFieldValue(CENUMLEAFINFO_PARENT_FIELD, victimEnum, host);
+            }
+        }
+        return true;
+    }
+
+    private static String fullEnumName(CEnumLeafInfo e) {
+        var parent = e.parent.fullName();
+        return parent.isEmpty() ? e.shortName : parent + '.' + e.shortName;
     }
 
     private static List<CClassInfo> directNestedBeans(Model model, CClassInfo parent) {
@@ -1023,9 +1126,16 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return nested;
     }
 
-    /**
-     * True if {@code ancestor} appears in the nesting parent chain of {@code node}.
-     */
+    private static List<CEnumLeafInfo> directNestedEnums(Model model, CClassInfo parent) {
+        var nested = new ArrayList<CEnumLeafInfo>();
+        for (var enumInfo : model.enums().values()) {
+            if (enumInfo.parent == parent) {
+                nested.add(enumInfo);
+            }
+        }
+        return nested;
+    }
+
     private static boolean isNestingAncestor(CClassInfo ancestor, CClassInfo node) {
         var p = node.parent();
         while (p instanceof CClassInfo c) {
@@ -1037,15 +1147,74 @@ public class DedupeClassPlugin extends AbstractPlugin {
         return false;
     }
 
+    /**
+     * Retarget properties / element infos that reference {@code from} enum to {@code to}.
+     */
+    private static void replaceEnumReferences(Model model, CEnumLeafInfo from, CEnumLeafInfo to) {
+        if (from == to) {
+            return;
+        }
+        for (var bean : model.beans().values()) {
+            for (var prop : bean.getProperties()) {
+                replaceEnumInProperty(prop, from, to);
+            }
+        }
+        for (var elementInfo : model.getAllElements()) {
+            var prop = elementInfo.getProperty();
+            if (prop != null) {
+                replaceEnumInProperty(prop, from, to);
+            }
+        }
+    }
+
+    private static void replaceEnumInProperty(CPropertyInfo property, CEnumLeafInfo from, CEnumLeafInfo to) {
+        switch (property) {
+            case CElementPropertyInfo element -> {
+                var types = element.getTypes();
+                for (var i = 0; i < types.size(); i++) {
+                    var typeRef = types.get(i);
+                    if (typeRef.getTarget() == from) {
+                        types.set(i, new CTypeRef(
+                            to,
+                            typeRef.getTagName(),
+                            typeRef.getTypeName(),
+                            typeRef.isNillable(),
+                            typeRef.defaultValue
+                        ));
+                    }
+                }
+            }
+            case CAttributePropertyInfo attr -> replaceSingleTypeEnum(attr, from, to);
+            case CValuePropertyInfo value -> replaceSingleTypeEnum(value, from, to);
+            default -> {
+                // Reference properties do not carry enum leaf targets as CNonElement typically.
+            }
+        }
+    }
+
+    private static void replaceSingleTypeEnum(CPropertyInfo property, CEnumLeafInfo from, CEnumLeafInfo to) {
+        var typeUse = (TypeUse) getFieldValue(TYPE_FIELD, property);
+        if (typeUse == null || typeUse.getInfo() != from) {
+            return;
+        }
+        var newTypeUse = newInstance(
+            TYPE_USE_CONSTRUCTOR,
+            to,
+            typeUse.isCollection(),
+            typeUse.idUse(),
+            typeUse.getExpectedMimeType(),
+            typeUse.getAdapterUse()
+        );
+        setFieldValue(TYPE_FIELD, property, newTypeUse);
+    }
+
     // ── cleanup ──────────────────────────────────────────────────────────────
 
     /**
-     * Drop element class names when content is already a bean with the same name key
-     * <em>and</em> that name key participated in a merge (avoids ObjectFactory clashes without
-     * rewriting unrelated element-class bindings).
+     * Clear element class names only for package+nameKey pairs that participated in a merge.
      */
-    private static void collapseRedundantElementClasses(Model model, Set<String> mergedNameKeys) {
-        if (mergedNameKeys.isEmpty()) {
+    private static void collapseRedundantElementClasses(Model model, Set<String> mergedPackageNameKeys) {
+        if (mergedPackageNameKeys.isEmpty()) {
             return;
         }
         var cleared = 0;
@@ -1062,7 +1231,10 @@ public class DedupeClassPlugin extends AbstractPlugin {
             if (!elementKey.equals(contentKey)) {
                 continue;
             }
-            if (!mergedNameKeys.contains(elementKey) && !mergedNameKeys.contains(contentKey)) {
+            var pkg = contentClass.getOwnerPackage().name();
+            var scoped = pkg + '\0' + elementKey;
+            if (!mergedPackageNameKeys.contains(scoped)
+                && !mergedPackageNameKeys.contains(pkg + '\0' + contentKey)) {
                 continue;
             }
             setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
@@ -1082,11 +1254,25 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
     }
 
-    // ── identity pair keys ───────────────────────────────────────────────────
+    // ── session / identity ───────────────────────────────────────────────────
 
-    /**
-     * Identity-based pair for cycle detection and dry-run de-duplication.
-     */
+    private static final class Session {
+        final boolean dry;
+        final boolean subset;
+        final boolean anonymousOnly;
+        final Set<IdentityPair> countedMerges = new HashSet<>();
+        /**
+         * {@code package + '\0' + nameKey} of merge victims (scopes element-class cleanup).
+         */
+        final Set<String> mergedPackageNameKeys = new HashSet<>();
+
+        Session(boolean dry, boolean subset, boolean anonymousOnly) {
+            this.dry = dry;
+            this.subset = subset;
+            this.anonymousOnly = anonymousOnly;
+        }
+    }
+
     private static final class IdentityPair {
         private final Object a;
         private final Object b;
@@ -1100,14 +1286,11 @@ public class DedupeClassPlugin extends AbstractPlugin {
             if (directed) {
                 this.hash = 31 * System.identityHashCode(a) + System.identityHashCode(b);
             } else {
-                var ha = System.identityHashCode(a);
-                var hb = System.identityHashCode(b);
-                this.hash = ha + hb;
+                this.hash = System.identityHashCode(a) + System.identityHashCode(b);
             }
         }
 
         static IdentityPair undirected(Object a, Object b) {
-            // Normalize order so (a,b) and (b,a) share one slot.
             if (System.identityHashCode(a) <= System.identityHashCode(b)) {
                 return new IdentityPair(a, b, false);
             }
@@ -1138,9 +1321,6 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
     }
 
-    /**
-     * Directed {@code (subset, host)} pair for subset cycle detection.
-     */
     private static final class DirectedPair {
         private final CClassInfo subset;
         private final CClassInfo host;
