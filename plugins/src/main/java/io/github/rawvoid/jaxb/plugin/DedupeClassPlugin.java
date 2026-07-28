@@ -236,28 +236,26 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Exact base compatibility: external {@link CClassRef} by FQCN, else structural equality
+     * of generated bases (same package + nameKey).
+     */
     private static boolean equalBase(CClassInfo a, CClassInfo b, Set<IdentityPair> visiting) {
-        var aRef = a.getRefBaseClass();
-        var bRef = b.getRefBaseClass();
-        if (aRef != null || bRef != null) {
-            if (aRef == null || bRef == null) {
-                return false;
+        return switch (compareRefBases(a, b)) {
+            case UNEQUAL -> false;
+            case EQUAL -> true;
+            case BOTH_GENERATED -> {
+                var ab = a.getBaseClass();
+                var bb = b.getBaseClass();
+                if (ab == bb) {
+                    yield true;
+                }
+                if (ab == null || bb == null || !sameTypeIdentity(ab, bb)) {
+                    yield false;
+                }
+                yield equalClasses(ab, bb, visiting);
             }
-            return Objects.equals(aRef.fullName(), bRef.fullName());
-        }
-        var ab = a.getBaseClass();
-        var bb = b.getBaseClass();
-        if (ab == null && bb == null) {
-            return true;
-        }
-        if (ab == null || bb == null) {
-            return false;
-        }
-        // Generated bases are interchangeable only when they share package + nameKey.
-        if (!sameTypeIdentity(ab, bb)) {
-            return false;
-        }
-        return equalClasses(ab, bb, visiting);
+        };
     }
 
     private static boolean equalProperty(CPropertyInfo a, CPropertyInfo b, Set<IdentityPair> visiting) {
@@ -450,23 +448,16 @@ public class DedupeClassPlugin extends AbstractPlugin {
         if (a == null || b == null) {
             return false;
         }
-        if (a instanceof CClassInfo ca && b instanceof CClassInfo cb) {
-            // Do not treat isomorphic but differently named types as interchangeable.
-            if (!sameTypeIdentity(ca, cb)) {
-                return false;
-            }
-            return equalClasses(ca, cb, visiting);
-        }
-        if (a instanceof CEnumLeafInfo ea && b instanceof CEnumLeafInfo eb) {
-            return equalEnums(ea, eb);
-        }
-        if (a instanceof CBuiltinLeafInfo ba && b instanceof CBuiltinLeafInfo bb) {
-            return Objects.equals(typeNameOf(ba), typeNameOf(bb));
-        }
-        if (a instanceof CClassRef ra && b instanceof CClassRef rb) {
-            return Objects.equals(ra.fullName(), rb.fullName());
-        }
-        return a.getClass() == b.getClass() && Objects.equals(String.valueOf(a), String.valueOf(b));
+        return switch (a) {
+            // Do not treat isomorphic but differently named beans as interchangeable.
+            case CClassInfo ca when b instanceof CClassInfo cb ->
+                sameTypeIdentity(ca, cb) && equalClasses(ca, cb, visiting);
+            case CEnumLeafInfo ea when b instanceof CEnumLeafInfo eb -> equalEnums(ea, eb);
+            case CBuiltinLeafInfo ba when b instanceof CBuiltinLeafInfo bb ->
+                Objects.equals(typeNameOf(ba), typeNameOf(bb));
+            case CClassRef ra when b instanceof CClassRef rb -> Objects.equals(ra.fullName(), rb.fullName());
+            default -> a.getClass() == b.getClass() && Objects.equals(String.valueOf(a), String.valueOf(b));
+        };
     }
 
     private static String typeNameOf(CBuiltinLeafInfo leaf) {
@@ -642,34 +633,54 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
     }
 
+    /**
+     * Subset base compatibility: same external ref, same generated base, subset extends host,
+     * or recursive structural subset of bases.
+     */
     private static boolean subsetBaseCompatible(
         CClassInfo subset,
         CClassInfo host,
         Set<DirectedPair> visiting
     ) {
-        var sRef = subset.getRefBaseClass();
-        var hRef = host.getRefBaseClass();
-        if (sRef != null || hRef != null) {
-            if (sRef == null || hRef == null) {
-                return false;
+        return switch (compareRefBases(subset, host)) {
+            case UNEQUAL -> false;
+            case EQUAL -> true;
+            case BOTH_GENERATED -> {
+                var subsetBase = subset.getBaseClass();
+                var hostBase = host.getBaseClass();
+                if (subsetBase == hostBase || subsetBase == host) {
+                    yield true;
+                }
+                if (subsetBase == null || hostBase == null || !sameTypeIdentity(subsetBase, hostBase)) {
+                    yield false;
+                }
+                yield isStructuralSubset(subsetBase, hostBase, visiting);
             }
-            return Objects.equals(sRef.fullName(), hRef.fullName());
+        };
+    }
+
+    private enum RefBaseRelation {
+        /** Neither side uses {@link CClassRef}; compare generated bases next. */
+        BOTH_GENERATED,
+        /** Both use the same external class. */
+        EQUAL,
+        /** External refs missing on one side or FQCNs differ. */
+        UNEQUAL
+    }
+
+    /** Shared {@link CClassRef} base check used by exact and subset base compatibility. */
+    private static RefBaseRelation compareRefBases(CClassInfo a, CClassInfo b) {
+        var aRef = a.getRefBaseClass();
+        var bRef = b.getRefBaseClass();
+        if (aRef == null && bRef == null) {
+            return RefBaseRelation.BOTH_GENERATED;
         }
-        var subsetBase = subset.getBaseClass();
-        var hostBase = host.getBaseClass();
-        if (subsetBase == hostBase) {
-            return true;
+        if (aRef == null || bRef == null) {
+            return RefBaseRelation.UNEQUAL;
         }
-        if (subsetBase == host) {
-            return true;
-        }
-        if (subsetBase != null && hostBase != null) {
-            if (!sameTypeIdentity(subsetBase, hostBase)) {
-                return false;
-            }
-            return isStructuralSubset(subsetBase, hostBase, visiting);
-        }
-        return false;
+        return Objects.equals(aRef.fullName(), bRef.fullName())
+            ? RefBaseRelation.EQUAL
+            : RefBaseRelation.UNEQUAL;
     }
 
     private static CPropertyInfo findProperty(CClassInfo bean, String name) {
@@ -1054,21 +1065,29 @@ public class DedupeClassPlugin extends AbstractPlugin {
                 return false;
             }
 
-            CClassInfo from;
-            CClassInfo to;
-            if (!mayDelete(session.anonymousOnly, child) && mayDelete(session.anonymousOnly, target)) {
-                from = target;
-                to = child;
-            } else {
-                from = child;
-                to = target;
-            }
+            // Prefer keeping non-deletable (named when -anonymous-only) or higher hostScore.
+            // Not dead: default anonymous-only=true still applies when a nested bean is named
+            // (typeName != null); with -anonymous-only=false both are deletable and HOST_ORDER wins.
+            var to = preferredNestedHost(child, target, session.anonymousOnly);
+            var from = to == child ? target : child;
             // Cross-parent is intentional: children of victim/host outer pair.
             if (!tryMerge(model, session, from, to, reason, true)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Choose which of two nested beans to keep when aligning children of an outer merge pair.
+     */
+    private static CClassInfo preferredNestedHost(CClassInfo a, CClassInfo b, boolean anonymousOnly) {
+        var aDeletable = !anonymousOnly || isAnonymous(a);
+        var bDeletable = !anonymousOnly || isAnonymous(b);
+        if (aDeletable != bDeletable) {
+            return aDeletable ? b : a; // keep the non-deletable one
+        }
+        return hostScore(a) >= hostScore(b) ? a : b;
     }
 
     /**
