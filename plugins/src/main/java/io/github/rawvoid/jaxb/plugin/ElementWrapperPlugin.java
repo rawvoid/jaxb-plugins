@@ -24,12 +24,14 @@ import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XSElementDecl;
 import com.sun.xml.xsom.XSParticle;
 import io.github.rawvoid.jaxb.utils.AnnotationUtils;
+import io.github.rawvoid.jaxb.utils.ModelUtils;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlNsForm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
 
 import javax.xml.namespace.QName;
 import java.util.ArrayList;
@@ -37,6 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import static io.github.rawvoid.jaxb.utils.ModelUtils.isPureCollectionShell;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
 import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
 
@@ -48,6 +51,14 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  * emits collection fields and item {@code @XmlElement} annotations. {@link #run} only adds
  * {@link XmlElementWrapper}, which XJC never generates ({@code CElementPropertyInfo#getXmlName()}
  * always returns null).
+ * </p>
+ * <p>
+ * <strong>Plugin order:</strong> run this plugin's model phase <em>after</em> every other plugin
+ * that mutates the C* model (for example {@link DedupeClassPlugin}, promote, rename, flatten-multi).
+ * Flatten records keep the owner {@link CClassInfo} identity; if a later model plugin deletes that
+ * owner, {@link #run} fails the build instead of guessing a merge host or calling
+ * {@link Outline#getClazz(CClassInfo)} on a dead bean (that API lazily resurrects outlines and
+ * desynchronizes {@code model.beans()} from generated classes).
  * </p>
  * <p>
  * Scope: a non-collection property whose type is a wrapper class (exactly one
@@ -123,6 +134,21 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
         for (var flattened : flattenedFields) {
+            // Never use Outline#getClazz to test liveness: it lazily creates ClassOutline for
+            // beans already removed from the model and desynchronizes beans vs classes.
+            if (!outline.getModel().beans().containsValue(flattened.owner())) {
+                // Do not also log.error: ErrorReceiver already prints the SAXParseException once.
+                var message = """
+                    Element-wrapper flatten owner '%s' (property '%s') was removed by a later \
+                    model-phase plugin. Put -Xelement-wrapper after all model-mutating plugins \
+                    (e.g. -Xdedupe-class, -Xpromote-nested-class, -Xrename-class) so \
+                    @XmlElementWrapper is not lost and deleted types are not resurrected.\
+                    """.formatted(flattened.owner().fullName(), flattened.propertyName());
+                var exception = new SAXParseException(message, flattened.owner().getLocator());
+                errorHandler.error(exception);
+                // XJC ignores run()'s boolean; abort so the build cannot succeed without wrappers.
+                throw exception;
+            }
             annotateXmlElementWrapper(outline, flattened);
         }
         return true;
@@ -139,34 +165,13 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     /**
-     * A wrapper is a pure collection shell: one element-collection property, no base class,
-     * no attribute wildcard. Broader shapes must not be flattened — they are not equivalent
-     * to {@code @XmlElementWrapper}.
-     * <p>
-     * Having subclasses does <strong>not</strong> disqualify the type: the shell shape is
-     * about this class's own properties. Subclasses only affect whether we may
-     * <em>delete</em> the class after flattening (see {@link #isReferenced}).
-     * </p>
+     * A wrapper is a pure collection shell (see {@link ModelUtils#isPureCollectionShell}).
+     * Broader shapes must not be flattened — they are not equivalent to {@code @XmlElementWrapper}.
+     * Subclasses only affect whether we may <em>delete</em> the class after flattening
+     * (see {@link #isReferenced}).
      */
     private boolean isWrapperClass(CClassInfo classInfo) {
-        // Attribute wildcard is not represented as a CPropertyInfo entry but still contributes
-        // structure (see CClassInfo#hasAttributeWildcard / BeanGenerator attribute wildcard field).
-        if (classInfo.isAbstract()
-            || classInfo.hasAttributeWildcard()
-            || classInfo.getBaseClass() != null
-            || classInfo.getRefBaseClass() != null
-            || classInfo.getProperties().size() != 1) {
-            return false;
-        }
-
-        var property = classInfo.getProperties().getFirst();
-        if (!property.isCollection() || property.ref().isEmpty()) {
-            return false;
-        }
-
-        // Classic XSD wrappers are element collections; value lists map to @XmlList, not wrapper.
-        return property instanceof CElementPropertyInfo elementProperty
-            && !elementProperty.isValueList();
+        return isPureCollectionShell(classInfo);
     }
 
     private void flattenOwner(
@@ -457,6 +462,7 @@ public class ElementWrapperPlugin extends AbstractPlugin {
     }
 
     private void annotateXmlElementWrapper(Outline outline, FlattenedField flattened) {
+        // Owner already verified live in model.beans() (see run()).
         var classOutline = outline.getClazz(flattened.owner());
         var field = classOutline.implClass.fields().get(flattened.propertyName());
         if (field == null) {

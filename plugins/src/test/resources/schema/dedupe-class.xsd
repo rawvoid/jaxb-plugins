@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Rawvoid(https://github.com/rawvoid)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/dedupe"
+           xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
+           targetNamespace="https://www.github.com/rawvoid/xjc-plugins/dedupe"
+           jaxb:version="3.0"
+           elementFormDefault="qualified">
+
+    <!-- Named package-level hosts (nameKey Group / AircraftCode) -->
+    <xs:complexType name="GroupType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AircraftCodeType">
+        <xs:simpleContent>
+            <xs:extension base="xs:string">
+                <xs:attribute name="Context" type="xs:string"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+
+    <!--
+      IATA/NDC empty element-class: global element whose anonymous type only extends the named *Type.
+      XJC emits `class AircraftCode extends AircraftCodeType {}` + @XmlRootElement.
+    -->
+    <xs:element name="AircraftCode">
+        <xs:complexType>
+            <xs:complexContent>
+                <xs:extension base="tns:AircraftCodeType"/>
+            </xs:complexContent>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- Holder A: anonymous Group (exact match for GroupType) + local AircraftCode subset -->
+    <xs:complexType name="HolderA">
+        <xs:sequence>
+            <xs:element name="AircraftCode" minOccurs="0">
+                <xs:complexType>
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string"/>
+                    </xs:simpleContent>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="Group">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Holder B: another anonymous Group (exact → GroupType); Party isomorphic but different nameKey -->
+    <xs:complexType name="HolderB">
+        <xs:sequence>
+            <xs:element name="Group">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="Party">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="Details">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="note" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderC">
+        <xs:sequence>
+            <xs:element name="Details">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="amount" type="xs:decimal"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="namedCode" type="tns:AircraftCodeType"/>
+            <xs:element name="namedGroup" type="tns:GroupType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Same property set, opposite sequence order → must NOT exact-merge (order-sensitive equality).
+    -->
+    <xs:complexType name="HolderOrderA">
+        <xs:sequence>
+            <xs:element name="Pair">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="first" type="xs:string"/>
+                        <xs:element name="second" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderOrderB">
+        <xs:sequence>
+            <xs:element name="Pair">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="second" type="xs:string"/>
+                        <xs:element name="first" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      required vs optional on the same field name/type → must NOT exact-merge (required in equality).
+    -->
+    <xs:complexType name="HolderReqA">
+        <xs:sequence>
+            <xs:element name="Slot">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderReqB">
+        <xs:sequence>
+            <xs:element name="Slot">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="code" type="xs:string" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- xs:all vs xs:sequence with same particles → isOrdered differs, must NOT exact-merge. -->
+    <xs:complexType name="HolderAll">
+        <xs:sequence>
+            <xs:element name="Bag">
+                <xs:complexType>
+                    <xs:all>
+                        <xs:element name="x" type="xs:string"/>
+                        <xs:element name="y" type="xs:string"/>
+                    </xs:all>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderSeq">
+        <xs:sequence>
+            <xs:element name="Bag">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="x" type="xs:string"/>
+                        <xs:element name="y" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Isomorphic named targets with different nameKeys (CrewType vs TeamType).
+      HolderIso*.Bundle both have property `member` — must NOT exact-merge Bundles
+      (would rewrite CrewType fields into TeamType).
+    -->
+    <xs:complexType name="CrewType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TeamType">
+        <xs:sequence>
+            <xs:element name="code" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderIsoA">
+        <xs:sequence>
+            <xs:element name="Bundle">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="member" type="tns:CrewType"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderIsoB">
+        <xs:sequence>
+            <xs:element name="Bundle">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="member" type="tns:TeamType"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Package-level PackType host + anonymous Packs (with typesafe nested Status enums).
+      Anonymous Packs merge into PackType; nested Status enums collapse via prepareNestedEnums.
+    -->
+    <xs:complexType name="PackType">
+        <xs:sequence>
+            <xs:element name="status">
+                <xs:simpleType>
+                    <xs:annotation>
+                        <xs:appinfo>
+                            <jaxb:typesafeEnumClass name="Status"/>
+                        </xs:appinfo>
+                    </xs:annotation>
+                    <xs:restriction base="xs:string">
+                        <xs:enumeration value="OPEN"/>
+                        <xs:enumeration value="CLOSED"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderEnumA">
+        <xs:sequence>
+            <xs:element name="Pack">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="status">
+                            <xs:simpleType>
+                                <xs:annotation>
+                                    <xs:appinfo>
+                                        <jaxb:typesafeEnumClass name="Status"/>
+                                    </xs:appinfo>
+                                </xs:annotation>
+                                <xs:restriction base="xs:string">
+                                    <xs:enumeration value="OPEN"/>
+                                    <xs:enumeration value="CLOSED"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderEnumB">
+        <xs:sequence>
+            <xs:element name="Pack">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="status">
+                            <xs:simpleType>
+                                <xs:annotation>
+                                    <xs:appinfo>
+                                        <jaxb:typesafeEnumClass name="Status"/>
+                                    </xs:appinfo>
+                                </xs:annotation>
+                                <xs:restriction base="xs:string">
+                                    <xs:enumeration value="OPEN"/>
+                                    <xs:enumeration value="CLOSED"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--
+      Pure collection shell vs non-shell superset (nameKey Items ≡ ItemsType).
+      With -merge-subset alone the anonymous Items shell merges into ItemsType and
+      -Xelement-wrapper can no longer flatten. -preserve-wrapper-shells blocks that merge.
+      Shell→shell exact (TagList → TagListType) must still be allowed under that flag.
+    -->
+    <xs:complexType name="ItemsType">
+        <xs:sequence>
+            <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="currency" type="xs:string"/>
+    </xs:complexType>
+
+    <xs:complexType name="HolderShell">
+        <xs:sequence>
+            <xs:element name="Items">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TagListType">
+        <xs:sequence>
+            <xs:element name="tag" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="HolderTag">
+        <xs:sequence>
+            <xs:element name="TagList">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="tag" type="xs:string" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="holderA" type="tns:HolderA"/>
+    <xs:element name="holderB" type="tns:HolderB"/>
+    <xs:element name="holderC" type="tns:HolderC"/>
+    <xs:element name="holderShell" type="tns:HolderShell"/>
+    <xs:element name="holderTag" type="tns:HolderTag"/>
+</xs:schema>

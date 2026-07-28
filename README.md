@@ -269,6 +269,10 @@ Flattens XML collection wrapper elements by moving `@XmlElementWrapper` and `@Xm
 - Removes redundant wrapper DTO classes.
 - Simplifies object graphs and cleans up API signatures.
 
+#### Plugin order
+
+Run **`-Xelement-wrapper` after every other model-mutating plugin** (`-Xdedupe-class`, `-Xpromote-nested-class`, `-Xrename-class`, `-Xflatten-multi-element-prop`, …). Flatten records keep the owner class identity; if a later model plugin deletes that owner, generation fails with a clear error instead of emitting incomplete `@XmlElementWrapper` annotations.
+
 #### Quick Start
 
 ```bash
@@ -524,6 +528,46 @@ Custom renames and forced names still use mappings (run before the optional stri
 Example: named `IATAFooType` → after optional prefix mapping / strip → `Foo`; element-derived `ActionType` stays `ActionType` unless you map it explicitly.
 
 When used with `-Xpromote-nested-class`, running **rename before promote** lets global named types claim short names first; promote-first can leave dual names such as `Fare` + `FareType`.
+
+---
+
+### Dedupe Class Plugin (`-Xdedupe-class`)
+
+Merges structurally redundant generated beans to reduce class count (NDC-style anonymous type copies).
+
+#### Key Features
+
+- Groups candidates by **name key**: short name with a trailing `Type` removed (`AircraftCodeType` ≡ `AircraftCode`). Different name keys never merge.
+- **Exact** merge: identical property structure (names, collection, attribute/element/value, recursive type shape).
+- **`-merge-subset`**: when every property of `B` exists on `A` with a compatible type, merge `B` into `A` (default off; surplus host fields remain).
+- **`-anonymous-only`** (default true): only delete anonymous beans; named global types may still be merge hosts.
+- **`-dry-run`**: log planned merges without changing the model.
+- **`-preserve-wrapper-shells`** (default **auto**): do not merge pure collection-wrapper shells into non-shell hosts. Auto-on when `-Xelement-wrapper` is also active; force with `true`/`false`. Shell→shell exact merges still allowed.
+
+#### Quick Start
+
+```bash
+-Xdedupe-class \
+  -merge-subset \
+  -Xelement-wrapper
+# preserve-wrapper-shells auto-enables when -Xelement-wrapper is active
+```
+
+Suggested order with other model plugins:
+
+```bash
+-Xflatten-multi-element-prop \
+-Xpromote-nested-class \
+-Xdedupe-class -merge-subset \
+-Xrename-class -strip-type-suffix \
+-Xelement-wrapper
+```
+
+Put **`-Xelement-wrapper` last among model plugins** so flatten owners are not removed by dedupe/rename/promote after flatten records are captured. When both plugins are active, **`-preserve-wrapper-shells` turns on automatically** so subset merges cannot replace pure wrapper shells with fatter non-shell types (override with `-preserve-wrapper-shells=false` if needed).
+
+Nested copies merge into **package-level** hosts (named global types, or types already promoted). Prefer **promote before dedupe** so more hosts sit at package scope. Cross-outer nested-to-nested merges are skipped (avoids ObjectFactory / FieldOutline corruption).
+
+Subset merge can make extra fields visible on former subset sites when marshalling — review with `-dry-run` first on large schemas.
 
 ---
 
