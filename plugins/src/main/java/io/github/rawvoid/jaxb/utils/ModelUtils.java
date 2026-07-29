@@ -268,6 +268,23 @@ public final class ModelUtils {
     }
 
     /**
+     * Removes a {@link CEnumLeafInfo} from {@link Model#enums()}.
+     *
+     * @param model    the JAXB model containing the enum
+     * @param enumInfo the enum to be removed
+     * @return {@code true} if the enum was present and removed
+     */
+    public static boolean removeEnum(Model model, CEnumLeafInfo enumInfo) {
+        if (model == null || enumInfo == null) {
+            return false;
+        }
+        if (enumInfo.getClazz() != null) {
+            model.enums().remove(enumInfo.getClazz());
+        }
+        return model.enums().values().removeIf(e -> e == enumInfo);
+    }
+
+    /**
      * Replaces all references to one class with references to another class throughout the model.
      * Updates base class references, property types, and element references.
      * <p>
