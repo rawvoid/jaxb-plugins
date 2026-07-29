@@ -20,6 +20,7 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.model.CElementPropertyInfo.CollectionMode;
 import com.sun.tools.xjc.outline.Outline;
+import com.sun.tools.xjc.reader.xmlschema.bindinfo.BindInfo;
 import com.sun.xml.xsom.XSElementDecl;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.glassfish.jaxb.core.v2.model.core.ID;
@@ -27,7 +28,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 
+import javax.xml.namespace.QName;
 import java.util.*;
+
 
 /**
  * Flattens multi-element properties into individual single-element properties.
@@ -175,7 +178,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 if (elementProp.getAdapter() != null) {
                     newProp.setAdapter(elementProp.getAdapter());
                 }
-                newProp.javadoc = original.javadoc;
+                newProp.javadoc = resolveJavadoc(typeRef.getTagName(), null, bean, original.javadoc);
                 newProp.inlineBinaryData = original.inlineBinaryData;
                 newProp.realization = original.realization;
                 newProp.baseType = original.baseType;
@@ -191,12 +194,12 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 var privateName = allocateName(xmlName, occupied);
                 var publicName = NAMES.toPropertyName(privateName);
 
-                var newProp = convertToElementProperty(element, privateName, publicName, refProp);
+                var newProp = convertToElementProperty(element, privateName, publicName, refProp, bean);
                 if (newProp != null) {
                     replacements.add(newProp);
                 } else {
                     // Fallback: keep as single-element CReferencePropertyInfo.
-                    var fallback = createSingleRefProperty(element, privateName, publicName, refProp);
+                    var fallback = createSingleRefProperty(element, privateName, publicName, refProp, bean);
                     replacements.add(fallback);
                 }
             }
@@ -213,7 +216,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
      */
     private CElementPropertyInfo convertToElementProperty(
         CElement element, String privateName, String publicName,
-        CReferencePropertyInfo original
+        CReferencePropertyInfo original, CClassInfo bean
     ) {
         if (element instanceof CElementInfo elementInfo) {
             var innerProp = elementInfo.getProperty();
@@ -248,7 +251,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
             if (innerProp.getAdapter() != null) {
                 newProp.setAdapter(innerProp.getAdapter());
             }
-            newProp.javadoc = original.javadoc;
+            newProp.javadoc = resolveJavadoc(element.getElementName(), element, bean, original.javadoc);
             newProp.inlineBinaryData = original.inlineBinaryData;
             newProp.realization = original.realization;
             newProp.baseType = original.baseType;
@@ -276,7 +279,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
                 isNillable(element, null),
                 null
             ));
-            newProp.javadoc = original.javadoc;
+            newProp.javadoc = resolveJavadoc(element.getElementName(), element, bean, original.javadoc);
             newProp.inlineBinaryData = original.inlineBinaryData;
             newProp.realization = original.realization;
             newProp.baseType = original.baseType;
@@ -292,7 +295,7 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
      */
     private CReferencePropertyInfo createSingleRefProperty(
         CElement element, String privateName, String publicName,
-        CReferencePropertyInfo original
+        CReferencePropertyInfo original, CClassInfo bean
     ) {
         var newProp = new CReferencePropertyInfo(
             publicName,
@@ -309,12 +312,43 @@ public class FlattenMultiElementPropPlugin extends AbstractPlugin {
         newProp.setName(false, privateName);
         newProp.setName(true, publicName);
         newProp.getElements().add(element);
-        newProp.javadoc = original.javadoc;
+        newProp.javadoc = resolveJavadoc(element.getElementName(), element, bean, original.javadoc);
         newProp.inlineBinaryData = original.inlineBinaryData;
         newProp.realization = original.realization;
         newProp.baseType = original.baseType;
         return newProp;
     }
+
+    private static String resolveJavadoc(QName elementName, CElement element, CClassInfo bean, String fallbackJavadoc) {
+        if (element instanceof CElementInfo elementInfo) {
+            var innerProp = elementInfo.getProperty();
+            if (innerProp != null && innerProp.javadoc != null && !innerProp.javadoc.isBlank()) {
+                return innerProp.javadoc;
+            }
+        }
+        if (element instanceof CClassInfo classInfo && classInfo.javadoc != null && !classInfo.javadoc.isBlank()) {
+            return classInfo.javadoc;
+        }
+
+        XSElementDecl elementDecl = null;
+        if (element != null && element.getSchemaComponent() instanceof XSElementDecl decl) {
+            elementDecl = decl;
+        } else if (elementName != null && bean != null && bean.model != null && bean.model.schemaComponent != null) {
+            elementDecl = bean.model.schemaComponent.getElementDecl(elementName.getNamespaceURI(), elementName.getLocalPart());
+        }
+
+        if (elementDecl != null && elementDecl.getAnnotation() != null) {
+            if (elementDecl.getAnnotation().getAnnotation() instanceof BindInfo bi) {
+                var doc = bi.getDocumentation();
+                if (doc != null && !doc.isBlank()) {
+                    return doc;
+                }
+            }
+        }
+
+        return fallbackJavadoc;
+    }
+
 
     /**
      * Replaces the property at {@code index} with all {@code replacements},

@@ -116,10 +116,30 @@
         </xs:choice>
     </xs:complexType>
 
+    <xs:complexType name="DocChoice">
+        <xs:annotation>
+            <xs:documentation>Choice container documentation.</xs:documentation>
+        </xs:annotation>
+        <xs:choice maxOccurs="unbounded">
+            <xs:element name="DocFieldA" type="xs:string">
+                <xs:annotation>
+                    <xs:documentation>DocFieldA documentation.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DocFieldB" type="xs:string">
+                <xs:annotation>
+                    <xs:documentation>DocFieldB documentation.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:choice>
+    </xs:complexType>
+
     <xs:element name="flight" type="tns:Flight"/>
     <xs:element name="dual" type="tns:DualChoice"/>
     <xs:element name="plain" type="tns:PlainList"/>
     <xs:element name="choiceWithClass" type="tns:ChoiceWithClass"/>
     <xs:element name="conflictDerived" type="tns:ConflictDerived"/>
     <xs:element name="mixedClassRefs" type="tns:MixedClassRefs"/>
+    <xs:element name="docChoice" type="tns:DocChoice"/>
 </xs:schema>
+

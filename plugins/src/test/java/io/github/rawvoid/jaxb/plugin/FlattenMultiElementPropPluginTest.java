@@ -40,6 +40,8 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
     private static final String CHOICE_WITH_CLASS = PKG + "\\.ChoiceWithClass";
     private static final String CONFLICT = PKG + "\\.ConflictDerived";
     private static final String MIXED_CLASS_REFS = PKG + "\\.MixedClassRefs";
+    private static final String DOC_CHOICE = PKG + "\\.DocChoice";
+
 
     private static final String OPTION = "-Xflatten-multi-element-prop";
 
@@ -159,4 +161,15 @@ class FlattenMultiElementPropPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).doesNotContain("@XmlElementRefs");
         });
     }
+
+    @Test
+    void flattensChoicePreservingElementDocumentation() throws Exception {
+        testExecute(List.of(OPTION), DOC_CHOICE, (source, clazz) -> {
+            var names = fieldNames(clazz);
+            assertThat(names).containsExactlyInAnyOrder("docFieldA", "docFieldB");
+            assertThat(source).contains("DocFieldA documentation.");
+            assertThat(source).contains("DocFieldB documentation.");
+        });
+    }
 }
+
