@@ -33,7 +33,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * XJC integration tests for {@link ElementWrapperPlugin}.
@@ -241,14 +240,28 @@ public class ElementWrapperPluginTest extends AbstractXJCMojoTestCase {
     }
 
     /**
-     * Element-wrapper before dedupe deletes a flatten owner → run must fail (no rebind guess).
-     * Mojo wraps the XJC error; the detailed message is on the error receiver / logs.
+     * Element-wrapper before dedupe: nested {@code TagCarrier} is flattened then merged away.
+     * Stale flatten records for the deleted owner are skipped; the merge host keeps its own
+     * record and still receives {@code @XmlElementWrapper}.
      */
     @Test
-    void failsWhenDedupeRunsAfterAndRemovesFlattenOwner() {
-        assertThatThrownBy(() ->
-            testExecute(List.of("-Xelement-wrapper", "-Xdedupe-class"), ".*", null)
-        ).isInstanceOf(Exception.class);
+    void beforeDedupeSkipsStaleOwnerAndKeepsHostWrapper() throws Exception {
+        var classes = testExecute(
+            List.of("-Xelement-wrapper", "-Xdedupe-class"),
+            ".*TagCarrier.*|" + ROOT,
+            null
+        );
+        var byName = classes.stream().collect(Collectors.groupingBy(Class::getSimpleName));
+
+        assertThat(byName.getOrDefault("TagCarrier", List.of())).isEmpty();
+        assertThat(byName).containsKey("TagCarrierType");
+        var host = byName.get("TagCarrierType").getFirst();
+        assertThat(host.isMemberClass()).isFalse();
+        assertListField(host, "tags", String.class, "tag");
+
+        var root = byName.get("Root").getFirst();
+        assertThat(root.getDeclaredField("tagCarrier").getType()).isEqualTo(host);
+        assertThat(root.getDeclaredField("namedTagCarrier").getType()).isEqualTo(host);
     }
 
     @Test

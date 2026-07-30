@@ -271,7 +271,7 @@ Flattens XML collection wrapper elements by moving `@XmlElementWrapper` and `@Xm
 
 #### Plugin order
 
-Run **`-Xelement-wrapper` after every other model-mutating plugin** (`-Xdedupe-class`, `-Xpromote-nested-class`, `-Xrename-class`, `-Xflatten-multi-element-prop`, …). Flatten records keep the owner class identity; if a later model plugin deletes that owner, generation fails with a clear error instead of emitting incomplete `@XmlElementWrapper` annotations.
+Prefer **`-Xelement-wrapper` after other model-mutating plugins** (`-Xdedupe-class`, `-Xpromote-nested-class`, `-Xrename-class`, `-Xflatten-multi-element-prop`, …) so flatten records only reference final owners. If a later plugin merges an owner away (typical dedupe), the stale flatten record is skipped; isomorphic merge hosts already have their own records from the same model pass, so `@XmlElementWrapper` is still applied.
 
 #### Quick Start
 
@@ -563,7 +563,7 @@ Suggested order with other model plugins:
 -Xelement-wrapper
 ```
 
-Put **`-Xelement-wrapper` last among model plugins** so flatten owners are not removed by dedupe/rename/promote after flatten records are captured. When both plugins are active, **`-preserve-wrapper-shells` turns on automatically** so subset merges cannot replace pure wrapper shells with fatter non-shell types (override with `-preserve-wrapper-shells=false` if needed).
+Prefer **`-Xelement-wrapper` last among model plugins** so flatten records land on final owners (stale records from a later merge are skipped harmlessly). When both plugins are active, **`-preserve-wrapper-shells` turns on automatically** so subset merges cannot replace pure wrapper shells with fatter non-shell types (override with `-preserve-wrapper-shells=false` if needed).
 
 Nested copies merge into **package-level** hosts (named global types, or types already promoted). Prefer **promote before dedupe** so more hosts sit at package scope. Cross-outer nested-to-nested merges are skipped (avoids ObjectFactory / FieldOutline corruption).
 

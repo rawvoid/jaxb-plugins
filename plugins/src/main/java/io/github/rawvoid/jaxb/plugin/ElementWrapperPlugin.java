@@ -31,7 +31,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
-import org.xml.sax.SAXParseException;
 
 import javax.xml.namespace.QName;
 import java.util.ArrayList;
@@ -53,12 +52,14 @@ import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
  * always returns null).
  * </p>
  * <p>
- * <strong>Plugin order:</strong> run this plugin's model phase <em>after</em> every other plugin
- * that mutates the C* model (for example {@link DedupeClassPlugin}, promote, rename, flatten-multi).
- * Flatten records keep the owner {@link CClassInfo} identity; if a later model plugin deletes that
- * owner, {@link #run} fails the build instead of guessing a merge host or calling
- * {@link Outline#getClazz(CClassInfo)} on a dead bean (that API lazily resurrects outlines and
- * desynchronizes {@code model.beans()} from generated classes).
+ * <strong>Plugin order:</strong> prefer running this plugin's model phase <em>after</em> other
+ * plugins that mutate the C* model (for example {@link DedupeClassPlugin}, promote, rename,
+ * flatten-multi) so flatten records only reference final owners. Flatten records keep the owner
+ * {@link CClassInfo} identity; if a later model plugin merges that owner away (typical dedupe),
+ * {@link #run} skips the stale record. Isomorphic merge hosts were already flattened in the same
+ * model pass and keep their own records, so {@code @XmlElementWrapper} is still applied. Never use
+ * {@link Outline#getClazz(CClassInfo)} to test liveness — it lazily resurrects outlines for beans
+ * already removed from {@code model.beans()}.
  * </p>
  * <p>
  * Scope: a non-collection property whose type is a wrapper class (exactly one
@@ -137,17 +138,15 @@ public class ElementWrapperPlugin extends AbstractPlugin {
             // Never use Outline#getClazz to test liveness: it lazily creates ClassOutline for
             // beans already removed from the model and desynchronizes beans vs classes.
             if (!outline.getModel().beans().containsValue(flattened.owner())) {
-                // Do not also log.error: ErrorReceiver already prints the SAXParseException once.
-                var message = """
-                    Element-wrapper flatten owner '%s' (property '%s') was removed by a later \
-                    model-phase plugin. Put -Xelement-wrapper after all model-mutating plugins \
-                    (e.g. -Xdedupe-class, -Xpromote-nested-class, -Xrename-class) so \
-                    @XmlElementWrapper is not lost and deleted types are not resurrected.\
-                    """.formatted(flattened.owner().fullName(), flattened.propertyName());
-                var exception = new SAXParseException(message, flattened.owner().getLocator());
-                errorHandler.error(exception);
-                // XJC ignores run()'s boolean; abort so the build cannot succeed without wrappers.
-                throw exception;
+                // Stale after a later merge (e.g. dedupe): the class is not generated. Isomorphic
+                // hosts already have their own FlattenedField from this plugin's model pass.
+                log.info(
+                    "Skipping @XmlElementWrapper for removed flatten owner '{}' property '{}' "
+                        + "(prefer -Xelement-wrapper after other model-mutating plugins)",
+                    flattened.owner().fullName(),
+                    flattened.propertyName()
+                );
+                continue;
             }
             annotateXmlElementWrapper(outline, flattened);
         }
