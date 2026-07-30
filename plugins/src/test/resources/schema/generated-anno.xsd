@@ -16,13 +16,28 @@
   -->
 
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:jaxb="https://jakarta.ee/xml/ns/jaxb"
            xmlns:tns="https://www.github.com/rawvoid/xjc-plugins/generated-anno"
+           jaxb:version="3.0"
            targetNamespace="https://www.github.com/rawvoid/xjc-plugins/generated-anno"
            elementFormDefault="qualified">
+
+    <!-- javaType forces XJC to emit Adapter1 for xs:int properties. -->
+    <xs:annotation>
+        <xs:appinfo>
+            <jaxb:globalBindings>
+                <jaxb:javaType name="java.lang.Integer" xmlType="xs:int"
+                               parseMethod="java.lang.Integer.parseInt"
+                               printMethod="toString"/>
+            </jaxb:globalBindings>
+        </xs:appinfo>
+    </xs:annotation>
 
     <xs:complexType name="Root">
         <xs:sequence>
             <xs:element name="value" type="xs:string"/>
+            <xs:element name="code" type="xs:int"/>
+            <xs:element name="when" type="xs:date"/>
             <xs:element name="nested" type="tns:Nested"/>
             <xs:element name="status" type="tns:Status"/>
         </xs:sequence>
