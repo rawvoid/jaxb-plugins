@@ -51,6 +51,10 @@ import java.util.regex.Pattern;
  * -Xnamespace -package-mapping=http://example.com->com.example:ex
  * -Xnamespace -package-mapping -ns=http://example.com -package=com.example -prefix=ex
  *
+ * // Map schemas without targetNamespace (empty XML namespace)
+ * -Xnamespace -package-mapping=->com.example
+ * -Xnamespace -package-mapping -ns= -package=com.example
+ *
  * // Map package and declare multiple xmlns entries for that package
  * -Xnamespace -package-mapping -ns=http://a.com -package=com.a -prefix=a \
  *   -xmlns=http://b.com->b -xmlns -ns=http://c.com -prefix=c
@@ -120,7 +124,7 @@ public class NamespacePlugin extends AbstractPlugin {
         var body = new StringBuilder();
         var index = 0;
         for (var packageMapping : packageMappings) {
-            var ns = packageMapping.namespace == null ? "" : packageMapping.namespace;
+            var ns = normalizeNamespace(packageMapping.namespace);
             var pkg = packageMapping.packageName == null ? "" : packageMapping.packageName;
             if (ns.isEmpty()) {
                 // Empty targetNamespace: SCD empty prefix resolves via default xmlns.
@@ -186,19 +190,27 @@ public class NamespacePlugin extends AbstractPlugin {
         if (xmlSchema == null) {
             return;
         }
-        var packageNamespace = AnnotationUtils.readStringMember(xmlSchema, "namespace");
-        if (!Objects.equals(packageNamespace, packageMapping.namespace)) {
+        var mappedNamespace = normalizeNamespace(packageMapping.namespace);
+        var packageNamespace = normalizeNamespace(AnnotationUtils.readStringMember(xmlSchema, "namespace"));
+        if (!Objects.equals(packageNamespace, mappedNamespace)) {
             return;
         }
         var xmlns = ensureXmlnsArray(xmlSchema);
         if (hasPrefix) {
-            upsertXmlnsEntry(xmlns, packageMapping.namespace, packageMapping.prefix);
+            upsertXmlnsEntry(xmlns, mappedNamespace, packageMapping.prefix);
         }
         if (hasXmlNsList) {
             for (var xmlNsConfig : packageMapping.xmlNsConfigs) {
-                upsertXmlnsEntry(xmlns, xmlNsConfig.namespace, xmlNsConfig.prefix);
+                upsertXmlnsEntry(xmlns, normalizeNamespace(xmlNsConfig.namespace), xmlNsConfig.prefix);
             }
         }
+    }
+
+    /**
+     * Treats {@code null} as the empty XML namespace (schemas without {@code targetNamespace}).
+     */
+    private static String normalizeNamespace(String namespace) {
+        return namespace == null ? "" : namespace;
     }
 
     private void processNsPrefix(PackageOutline packageOutline) {
@@ -257,15 +269,24 @@ public class NamespacePlugin extends AbstractPlugin {
     /**
      * Namespace to Java package mapping, with optional XML prefixes for the mapped package.
      * <p>
-     * Compact: {@code -package-mapping=http://a.com->com.example.a} or
-     * {@code -package-mapping=http://a.com->com.example.a:prefix} (more specific template first).
-     * Structured form may nest {@code -xmlns} entries for additional prefixes on the same package.
+     * Compact (more specific template first):
+     * {@code -package-mapping=http://a.com->com.example.a},
+     * {@code -package-mapping=http://a.com->com.example.a:prefix},
+     * or empty target namespace {@code -package-mapping=->com.example.a}
+     * / {@code -package-mapping=->com.example.a:prefix}.
+     * Structured form uses {@code -ns=} for the empty namespace and may nest
+     * {@code -xmlns} entries for additional prefixes on the same package.
      * </p>
      */
-    @Compact(formats = {"{ns}->{package}:{prefix}", "{ns}->{package}"})
+    @Compact(formats = {
+        "{ns}->{package}:{prefix}",
+        "{ns}->{package}",
+        "->{package}:{prefix}",
+        "->{package}"
+    })
     public static class PackageMappingConfig {
 
-        @Option(name = "ns", required = true, description = "XML target namespace URI")
+        @Option(name = "ns", description = "XML target namespace URI; omit or empty for schemas without targetNamespace")
         String namespace;
 
         @Option(name = "package", required = true, description = "Target Java package name for this namespace")
