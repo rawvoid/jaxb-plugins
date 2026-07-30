@@ -34,11 +34,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
 
     private static final String PACKAGE_NAME = "com.github.rawvoid.xjc_plugins.generated_anno";
+    private static final String ADAPTER_PACKAGE = PACKAGE_NAME + ".adapter";
+    /** XJC places global {@code jaxb:javaType} adapters under the XML Schema namespace package. */
+    private static final String XJC_ADAPTER_PACKAGE = "org.w3._2001.xmlschema";
     private static final String ROOT_CLASS = PACKAGE_NAME + ".Root";
     private static final String NESTED_CLASS = PACKAGE_NAME + ".Nested";
     private static final String STATUS_CLASS = PACKAGE_NAME + ".Status";
+    private static final String XJC_ADAPTER_CLASS = XJC_ADAPTER_PACKAGE + ".Adapter1";
+    private static final String XJC_ADAPTER_CLASS_REGEX =
+        XJC_ADAPTER_PACKAGE.replace(".", "\\.") + "\\.Adapter1";
+    /** Schema beans, ObjectFactory, and XJC Adapter1 (no java-time). */
+    private static final String SCHEMA_CLASSES =
+        "(" + PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)|" + XJC_ADAPTER_CLASS_REGEX + ")";
 
     private final String optionCmd = optionCommand(GeneratedAnnoPlugin.class);
+    private final String javaTimeCmd = optionCommand(JavaTimePlugin.class);
 
     private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
         var option = pluginClass.getAnnotation(Option.class);
@@ -72,12 +82,17 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).doesNotContain("@Generated");
             assertThat(source).doesNotContain("jakarta.annotation.Generated");
         });
+
+        testExecute(List.of(), XJC_ADAPTER_CLASS_REGEX, (source, clazz) -> {
+            assertThat(source).doesNotContain("@Generated");
+            assertThat(source).doesNotContain("jakarta.annotation.Generated");
+        });
     }
 
     @Test
     void defaultPluginOptions() throws Exception {
         var expectedValue = "JAXB RI v" + Options.getBuildID();
-        testExecute(List.of(optionCmd), PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
+        testExecute(List.of(optionCmd), SCHEMA_CLASSES, (source, clazz) -> {
             // Verify all generated classes contain the annotation with only the value attribute
             assertThat(source).contains("Generated(\"" + expectedValue + "\")");
             assertThat(source).doesNotContain("comments =");
@@ -85,7 +100,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
         });
 
         // Verify package-info.java also contains the annotation with only the value attribute
-        var packageInfoSource = getPackageInfoSource();
+        var packageInfoSource = getPackageInfoSource(PACKAGE_NAME);
         assertThat(packageInfoSource).contains("Generated(\"" + expectedValue + "\")");
         assertThat(packageInfoSource).doesNotContain("comments =");
         assertThat(packageInfoSource).doesNotContain("date =");
@@ -98,14 +113,14 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             "-value=CustomGenerator",
             "-comments=CustomComments"
         );
-        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
+        testExecute(args, SCHEMA_CLASSES, (source, clazz) -> {
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"CustomGenerator\"");
             assertThat(source).contains("comments = \"CustomComments\"");
             assertThat(source).doesNotContain("date =");
         });
 
-        var packageInfoSource = getPackageInfoSource();
+        var packageInfoSource = getPackageInfoSource(PACKAGE_NAME);
         assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
         assertThat(packageInfoSource).contains("value = \"CustomGenerator\"");
         assertThat(packageInfoSource).contains("comments = \"CustomComments\"");
@@ -119,7 +134,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             "-date=true"
         );
         var expectedValue = "JAXB RI v" + Options.getBuildID();
-        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
+        testExecute(args, SCHEMA_CLASSES, (source, clazz) -> {
             assertThat(source).contains("Generated(");
             // Verify value and date attributes only, with date placed right after value
             var datePattern = "value = \"" + java.util.regex.Pattern.quote(expectedValue) + "\",\\s*date = \"\\d{4}-\\d{2}-\\d{2}\"";
@@ -127,7 +142,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).doesNotContain("comments =");
         });
 
-        var packageInfoSource = getPackageInfoSource();
+        var packageInfoSource = getPackageInfoSource(PACKAGE_NAME);
         assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
         var datePattern = "value = \"" + java.util.regex.Pattern.quote(expectedValue) + "\",\\s*date = \"\\d{4}-\\d{2}-\\d{2}\"";
         assertThat(packageInfoSource).containsPattern(datePattern);
@@ -141,22 +156,62 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
             "-value=",
             "-comments="
         );
-        testExecute(args, PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)", (source, clazz) -> {
+        testExecute(args, SCHEMA_CLASSES, (source, clazz) -> {
             assertThat(source).contains("Generated(");
             assertThat(source).contains("value = \"\"");
             assertThat(source).contains("comments = \"\"");
             assertThat(source).doesNotContain("date =");
         });
 
-        var packageInfoSource = getPackageInfoSource();
+        var packageInfoSource = getPackageInfoSource(PACKAGE_NAME);
         assertThat(packageInfoSource).contains("@jakarta.annotation.Generated(");
         assertThat(packageInfoSource).contains("value = \"\"");
         assertThat(packageInfoSource).contains("comments = \"\"");
         assertThat(packageInfoSource).doesNotContain("date =");
     }
 
-    private String getPackageInfoSource() throws IOException {
-        var path = generatedDirectory.resolve(PACKAGE_NAME.replace('.', '/') + "/package-info.java");
+    /**
+     * XJC {@code Adapter1} from global {@code jaxb:javaType} is generated under the
+     * XML Schema package (outside outline package contexts) and must receive {@code @Generated}.
+     */
+    @Test
+    void annotatesXjcGeneratedAdapter() throws Exception {
+        var args = List.of(optionCmd, "-value=CustomGenerator");
+        testExecute(args, XJC_ADAPTER_CLASS_REGEX, (source, clazz) -> {
+            assertThat(clazz.getName()).isEqualTo(XJC_ADAPTER_CLASS);
+            // Single-member form: @Generated("CustomGenerator")
+            assertThat(source).contains("Generated(\"CustomGenerator\")");
+            assertThat(source).contains("extends XmlAdapter");
+        });
+
+        var xjcAdapterPackageInfo = getPackageInfoSource(XJC_ADAPTER_PACKAGE);
+        assertThat(xjcAdapterPackageInfo).contains("Generated(\"CustomGenerator\")");
+    }
+
+    /**
+     * Adapters emitted by {@link JavaTimePlugin} into a sibling {@code *.adapter}
+     * package are outside outline package contexts; they must still be annotated
+     * when {@code -Xgenerated-anno} runs after {@code -Xjava-time}.
+     */
+    @Test
+    void annotatesJavaTimeAdaptersInSeparatePackage() throws Exception {
+        var args = List.of(
+            javaTimeCmd,
+            optionCmd,
+            "-value=CustomGenerator"
+        );
+        testExecute(args, ADAPTER_PACKAGE.replace(".", "\\.") + "\\..*XmlAdapter.*", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo(ADAPTER_PACKAGE);
+            assertThat(source).contains("Generated(\"CustomGenerator\")");
+            assertThat(source).contains("extends XmlAdapter");
+        });
+
+        var adapterPackageInfo = getPackageInfoSource(ADAPTER_PACKAGE);
+        assertThat(adapterPackageInfo).contains("Generated(\"CustomGenerator\")");
+    }
+
+    private String getPackageInfoSource(String packageName) throws IOException {
+        var path = generatedDirectory.resolve(packageName.replace('.', '/') + "/package-info.java");
         return Files.readString(path);
     }
 }

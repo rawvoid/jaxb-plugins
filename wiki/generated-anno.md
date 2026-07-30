@@ -22,7 +22,8 @@ Annotates all generated packages and classes with `@jakarta.annotation.Generated
 ## Behavior
 
 - Skips a target that already has `@jakarta.annotation.Generated`.
-- Walks packages via outline package contexts, then BFS over nested classes under each package.
+- Walks **all** packages in the CodeModel (not only outline package contexts), then BFS over nested classes under each package that defines classes.
+- Covers schema beans, `ObjectFactory`, XJC `AdapterN` from `jaxb:javaType`, and adapters placed in other packages (for example `*.adapter` from `-Xjava-time`).
 - Default generator name is `"JAXB RI v" + Options.getBuildID()`.
 
 ## Usage
@@ -30,12 +31,16 @@ Annotates all generated packages and classes with `@jakarta.annotation.Generated
 ```text
 -Xgenerated-anno
 -Xgenerated-anno -value=my-codegen -comments="from schema" -date=true
+
+# With plugins that create adapters in run(), put generated-anno last:
+-Xjava-time -Xgenerated-anno
 ```
 
 ## Limitations / notes
 
 - Uses the Jakarta annotation FQCN `jakarta.annotation.Generated` (not `javax.annotation.Generated`).
 - Date is calendar date only (`LocalDate`), not a full timestamp.
+- Plugin order matters for adapters created by other plugins during `run`: enable `-Xgenerated-anno` after those plugins so the adapters already exist.
 
 ## Source
 
