@@ -395,4 +395,86 @@ class NamespacePluginTest extends AbstractXJCMojoTestCase {
             .orElseThrow();
         assertThat(prefixFor(item, NS)).isEqualTo("n1");
     }
+
+    @Test
+    void mapsEmptyNamespaceToPackageStructured() throws Exception {
+        schemaIncludes = List.of("namespace-empty.xsd");
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping",
+            "-ns=",
+            "-package=pkg.empty"
+        );
+        testExecute(args, "pkg\\.empty\\.NoNsItem", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg.empty");
+        });
+    }
+
+    @Test
+    void mapsEmptyNamespaceToPackageOmittingNs() throws Exception {
+        // -ns is optional; omit it entirely for schemas without targetNamespace.
+        schemaIncludes = List.of("namespace-empty.xsd");
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping",
+            "-package=pkg.empty"
+        );
+        testExecute(args, "pkg\\.empty\\.NoNsItem", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg.empty");
+        });
+    }
+
+    @Test
+    void mapsEmptyNamespaceToPackageCompact() throws Exception {
+        schemaIncludes = List.of("namespace-empty.xsd");
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping=->pkg.empty"
+        );
+        testExecute(args, "pkg\\.empty\\.NoNsItem", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg.empty");
+        });
+    }
+
+    @Test
+    void mapsEmptyNamespaceToPackageCompactWithTrailingPrefix() throws Exception {
+        // Compact empty-ns + prefix form must still map the package; XJC often omits
+        // @XmlSchema for the empty namespace, so prefix application may no-op there.
+        schemaIncludes = List.of("namespace-empty.xsd");
+        var args = List.of(
+            "-Xnamespace",
+            "-package-mapping=->pkg.empty:n0"
+        );
+        testExecute(args, "pkg\\.empty\\.NoNsItem", (source, clazz) -> {
+            assertThat(clazz.getPackageName()).isEqualTo("pkg.empty");
+        });
+    }
+
+    @Test
+    void generateBindingsSupportsEmptyNamespace() {
+        var plugin = new NamespacePlugin();
+        var packageMapping = new NamespacePlugin.PackageMappingConfig();
+        packageMapping.namespace = "";
+        packageMapping.packageName = "pkg.empty";
+        plugin.packageMappings = List.of(packageMapping);
+
+        var bindings = plugin.generateBindings();
+        assertThat(bindings).contains("scd=\"x-schema::\"");
+        assertThat(bindings).contains("xmlns=\"\"");
+        assertThat(bindings).contains("name=\"pkg.empty\"");
+        assertThat(bindings).contains("if-exists=\"true\"");
+    }
+
+    @Test
+    void generateBindingsSupportsNullNamespaceAsEmpty() {
+        var plugin = new NamespacePlugin();
+        var packageMapping = new NamespacePlugin.PackageMappingConfig();
+        packageMapping.namespace = null;
+        packageMapping.packageName = "pkg.empty";
+        plugin.packageMappings = List.of(packageMapping);
+
+        var bindings = plugin.generateBindings();
+        assertThat(bindings).contains("scd=\"x-schema::\"");
+        assertThat(bindings).contains("name=\"pkg.empty\"");
+    }
 }

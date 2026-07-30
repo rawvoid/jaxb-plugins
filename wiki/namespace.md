@@ -24,11 +24,11 @@ Customizes Java package names and XML namespace prefixes for XML namespaces.
 
 ### Package mapping (`PackageMappingConfig`)
 
-Compact: `{ns}->{package}` or `{ns}->{package}:{prefix}`.
+Compact: `{ns}->{package}`, `{ns}->{package}:{prefix}`, or empty-namespace forms `->{package}` / `->{package}:{prefix}`.
 
 | Nested option | Required | Description |
 |---------------|----------|-------------|
-| `-ns` | yes | XML target namespace URI |
+| `-ns` | no | XML target namespace URI; omit or empty (`-ns=`) for schemas without `targetNamespace` |
 | `-package` | yes | Target Java package name |
 | `-prefix` | no | Prefix on `@XmlSchema` for this package’s own namespace (`null` = unset; empty string allowed via compact `ns->pkg:`) |
 | `-xmlns` | no (repeatable) | Extra `XmlNs` entries on the mapped package |
@@ -54,7 +54,7 @@ Compact: `{ns}->{prefix}`.
 ### Package mapping bindings
 
 - Generates a JAXB 3.0 external bindings document using SCD selectors `x-schema::prefix` so each mapping attaches `schemaBindings` once per target namespace.
-- Empty target namespace uses `scd="x-schema::"` with default `xmlns=""`.
+- Empty target namespace (schemas without `targetNamespace`) uses compact `->com.example` / structured `-ns=` and injects `scd="x-schema::"` with default `xmlns=""`.
 - Enables `Options.EXTENSION` when bindings are injected (`SCD_NOT_ENABLED` otherwise).
 
 ### Prefix application
@@ -69,6 +69,10 @@ Compact: `{ns}->{prefix}`.
 // Map namespace to package (optional prefix for that package's own namespace)
 -Xnamespace -package-mapping=http://example.com->com.example:ex
 -Xnamespace -package-mapping -ns=http://example.com -package=com.example -prefix=ex
+
+// Map schemas without targetNamespace (empty XML namespace)
+-Xnamespace -package-mapping=->com.example
+-Xnamespace -package-mapping -ns= -package=com.example
 
 // Map package and declare multiple xmlns entries for that package
 -Xnamespace -package-mapping -ns=http://a.com -package=com.a -prefix=a \
