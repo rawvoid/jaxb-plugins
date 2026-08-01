@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5.6.0
         with:
           java-version: '21'
           distribution: 'zulu'
@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5.6.0
         with:
           distribution: 'zulu'
           java-version: '21'
