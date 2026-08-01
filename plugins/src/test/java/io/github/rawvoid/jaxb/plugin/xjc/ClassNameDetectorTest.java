@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.plugin;
+package io.github.rawvoid.jaxb.plugin.xjc;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;

@@ -21,7 +21,9 @@ import com.sun.codemodel.JClass;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.utils.AnnotationUtils;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
+import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import org.xml.sax.ErrorHandler;
 
 import java.time.LocalDate;

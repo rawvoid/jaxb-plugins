@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.common;
+package io.github.rawvoid.jaxb.scratch;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.regex.Pattern;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class RegexTest {
 
     @Test
+    @Disabled("scratch: Type-suffix regex strip")
     void testReplacePattern() {
         var pattern = Pattern.compile("(?i)(.+)Type$");
         var name = "PersonType";

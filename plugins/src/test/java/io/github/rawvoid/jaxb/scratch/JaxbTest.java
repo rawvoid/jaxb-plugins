@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.common;
+package io.github.rawvoid.jaxb.scratch;
 
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
@@ -32,7 +32,7 @@ import java.util.List;
 class JaxbTest {
 
     @Test
-    @Disabled("Just to observe the behavior of XmlElementWrapper")
+    @Disabled("scratch: observe XmlElementWrapper marshalling")
     void testXmlElementWrapper() throws JAXBException {
         var jaxbContext = JAXBContext.newInstance(Root.class);
         var marshaller = jaxbContext.createMarshaller();

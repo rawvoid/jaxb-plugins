@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.xjc;
 
 import com.sun.codemodel.JPackage;
 import com.sun.tools.xjc.model.*;
@@ -28,7 +28,7 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.*;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.*;
 
 /**
  * Utility class for working with JAXB model elements.
@@ -514,15 +514,12 @@ public final class ModelUtils {
             // Handle CElementPropertyInfo: element declarations with type references
             case CElementPropertyInfo elementProperty -> replaceElementPropertyReference(elementProperty, from, to);
             // Handle CReferencePropertyInfo: IDREF/ID type references to elements
-            case CReferencePropertyInfo referenceProperty ->
-                replaceReferencePropertyReference(referenceProperty, from, to);
+            case CReferencePropertyInfo referenceProperty -> replaceReferencePropertyReference(referenceProperty, from, to);
             // Handle CSingleTypePropertyInfo subclasses (CValuePropertyInfo, CAttributePropertyInfo)
             // CSingleTypePropertyInfo is package-private, so we check by concrete types
             case CValuePropertyInfo valueProperty -> replaceSingleTypePropertyReference(valueProperty, from, to);
-            case CAttributePropertyInfo attributeProperty ->
-                replaceSingleTypePropertyReference(attributeProperty, from, to);
-            default ->
-                throw new IllegalStateException("Unsupported property type: " + property.getClass().getSimpleName());
+            case CAttributePropertyInfo attributeProperty -> replaceSingleTypePropertyReference(attributeProperty, from, to);
+            default -> throw new IllegalStateException("Unsupported property type: " + property.getClass().getSimpleName());
         }
     }
 

@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.xjc;
 
 import com.sun.codemodel.*;
-import io.github.rawvoid.jaxb.plugin.ClassNameDetector;
-import io.github.rawvoid.jaxb.plugin.TextParser;
+import io.github.rawvoid.jaxb.plugin.option.TextParser;
 import org.jvnet.jaxb.annox.model.XAnnotation;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 
@@ -325,8 +324,7 @@ public final class AnnotationUtils {
             return false;
         }
         return annotation.getAnnotationMembers().values().stream().anyMatch(value -> switch (value) {
-            case JAnnotationClassValue classValue ->
-                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
+            case JAnnotationClassValue classValue -> ClassNameDetector.detect(classValue.type().fullName(), classFullName);
             case JAnnotationArrayMember arrayMember -> isRefInAnnotationArrayMember(arrayMember, classFullName);
             case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
             default -> false;
@@ -338,8 +336,7 @@ public final class AnnotationUtils {
             return false;
         }
         return arrayMember.annotations2().stream().anyMatch(value -> switch (value) {
-            case JAnnotationClassValue classValue ->
-                ClassNameDetector.detect(classValue.type().fullName(), classFullName);
+            case JAnnotationClassValue classValue -> ClassNameDetector.detect(classValue.type().fullName(), classFullName);
             case JAnnotationArrayMember subArrayMember -> isRefInAnnotationArrayMember(subArrayMember, classFullName);
             case JAnnotationUse annotationUse -> isRefInAnnotation(annotationUse, classFullName);
             default -> false;

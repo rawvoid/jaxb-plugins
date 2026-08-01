@@ -22,16 +22,18 @@ import com.sun.tools.xjc.model.CClassInfoParent;
 import com.sun.tools.xjc.model.CEnumLeafInfo;
 import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.utils.ModelUtils;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
+import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
 
 import java.util.*;
 
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CCLASSINFO_PARENT_FIELD;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.CCLASSINFO_PARENT_FIELD;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
 
 /**
  * Lifts nested beans and enums toward package scope one parent level at a time.

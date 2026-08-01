@@ -18,6 +18,9 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Compact;
+import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;

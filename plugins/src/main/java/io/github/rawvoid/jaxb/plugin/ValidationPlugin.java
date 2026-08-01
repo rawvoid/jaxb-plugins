@@ -32,7 +32,9 @@ import com.sun.xml.xsom.XSElementDecl;
 import com.sun.xml.xsom.XSFacet;
 import com.sun.xml.xsom.XSParticle;
 import com.sun.xml.xsom.XSSimpleType;
-import io.github.rawvoid.jaxb.utils.AnnotationUtils;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
+import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 

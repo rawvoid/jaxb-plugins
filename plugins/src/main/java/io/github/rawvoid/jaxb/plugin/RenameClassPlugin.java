@@ -20,7 +20,10 @@ import com.sun.codemodel.JJavaName;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.utils.ModelUtils;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Compact;
+import io.github.rawvoid.jaxb.plugin.option.Option;
+import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
@@ -33,8 +36,8 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-import static io.github.rawvoid.jaxb.utils.ModelUtils.*;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.*;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
 
 /**
  * Renames generated class-like types in {@link #postProcessModel(Model, ErrorHandler)}.

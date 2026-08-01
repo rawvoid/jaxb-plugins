@@ -18,6 +18,8 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +37,9 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
 
     private static final String PACKAGE_NAME = "com.github.rawvoid.xjc_plugins.generated_anno";
     private static final String ADAPTER_PACKAGE = PACKAGE_NAME + ".adapter";
-    /** XJC places global {@code jaxb:javaType} adapters under the XML Schema namespace package. */
+    /**
+     * XJC places global {@code jaxb:javaType} adapters under the XML Schema namespace package.
+     */
     private static final String XJC_ADAPTER_PACKAGE = "org.w3._2001.xmlschema";
     private static final String ROOT_CLASS = PACKAGE_NAME + ".Root";
     private static final String NESTED_CLASS = PACKAGE_NAME + ".Nested";
@@ -43,7 +47,9 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     private static final String XJC_ADAPTER_CLASS = XJC_ADAPTER_PACKAGE + ".Adapter1";
     private static final String XJC_ADAPTER_CLASS_REGEX =
         XJC_ADAPTER_PACKAGE.replace(".", "\\.") + "\\.Adapter1";
-    /** Schema beans, ObjectFactory, and XJC Adapter1 (no java-time). */
+    /**
+     * Schema beans, ObjectFactory, and XJC Adapter1 (no java-time).
+     */
     private static final String SCHEMA_CLASSES =
         "(" + PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)|" + XJC_ADAPTER_CLASS_REGEX + ")";
 

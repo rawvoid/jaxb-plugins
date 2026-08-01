@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.plugin;
+package io.github.rawvoid.jaxb.plugin.option;
 
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;

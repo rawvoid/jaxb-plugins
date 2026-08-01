@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.xjc;
 
 import com.sun.codemodel.JAnnotationClassValue;
 import com.sun.codemodel.JCodeModel;
@@ -132,9 +132,9 @@ class AnnotationUtilsTest {
     @Test
     void applyXAnnotationAppendsRepeatableAnnotations() {
         var first = AnnotationUtils.parseXAnnotation(
-            "@io.github.rawvoid.jaxb.utils.RepeatableMarker(value = \"one\")");
+            "@io.github.rawvoid.jaxb.plugin.xjc.RepeatableMarker(value = \"one\")");
         var second = AnnotationUtils.parseXAnnotation(
-            "@io.github.rawvoid.jaxb.utils.RepeatableMarker(value = \"two\")");
+            "@io.github.rawvoid.jaxb.plugin.xjc.RepeatableMarker(value = \"two\")");
 
         AnnotationUtils.applyXAnnotation(type, first);
         AnnotationUtils.applyXAnnotation(type, second);
