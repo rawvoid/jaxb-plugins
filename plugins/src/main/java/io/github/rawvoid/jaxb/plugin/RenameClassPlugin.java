@@ -27,9 +27,6 @@ import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ErrorHandler;
-import org.xml.sax.Locator;
-import org.xml.sax.SAXException;
-import org.xml.sax.SAXParseException;
 
 import javax.xml.namespace.QName;
 import java.util.*;
@@ -144,7 +141,6 @@ public class RenameClassPlugin extends AbstractPlugin {
                 bean.fullName(),
                 bean.parent(),
                 bean.getOwnerPackage().name(),
-                bean.getLocator(),
                 name -> setFieldValue(CCLASSINFO_SHORTNAME_FIELD, bean, name),
                 bean,
                 localPart(bean.getTypeName())
@@ -157,7 +153,6 @@ public class RenameClassPlugin extends AbstractPlugin {
                 enumInfo.fullName(),
                 enumInfo.parent,
                 enumInfo.parent.getOwnerPackage().name(),
-                enumInfo.getLocator(),
                 name -> setFieldValue(CENUMLEAFINFO_SHORTNAME_FIELD, enumInfo, name),
                 null,
                 localPart(enumInfo.getTypeName())
@@ -173,7 +168,6 @@ public class RenameClassPlugin extends AbstractPlugin {
                 element.fullName(),
                 element.parent,
                 element.getOwnerPackage().name(),
-                element.getLocator(),
                 name -> setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, element, name),
                 null,
                 null
@@ -247,9 +241,9 @@ public class RenameClassPlugin extends AbstractPlugin {
             names.put(candidate, mapName(candidate));
         }
 
-        blockDuplicateSimpleNames(model, candidates, names, errorHandler);
-        blockParentChildClashes(candidates, names, errorHandler);
-        blockObjectFactoryClashes(model, candidates, names, errorHandler);
+        blockDuplicateSimpleNames(model, candidates, names);
+        blockParentChildClashes(candidates, names);
+        blockObjectFactoryClashes(model, candidates, names);
 
         var renamed = 0;
         for (var candidate : candidates) {
@@ -276,8 +270,7 @@ public class RenameClassPlugin extends AbstractPlugin {
     private void blockDuplicateSimpleNames(
         Model model,
         List<Candidate> candidates,
-        Map<Candidate, String> names,
-        ErrorHandler errorHandler
+        Map<Candidate, String> names
     ) {
         // Slot: (parent, case-insensitive desired name). size > 1 → conflict group.
         Map<Slot, List<Candidate>> bySlot = new LinkedHashMap<>();
@@ -292,17 +285,21 @@ public class RenameClassPlugin extends AbstractPlugin {
             if (group.size() <= 1 || !anyPending(group, names)) {
                 continue;
             }
+            // Prefer a desired name that was actually produced by a rename (original case).
+            var desired = group.stream()
+                .filter(c -> isPending(c, names))
+                .map(names::get)
+                .findFirst()
+                .orElseGet(() -> names.get(group.getFirst()));
+            var involved = group.stream().map(c -> c.fullName).toList();
             for (var candidate : group) {
                 names.put(candidate, candidate.shortName);
             }
-            warn(
-                errorHandler,
-                group.getFirst().locator,
-                "Class name conflict after rename under '"
-                    + parentLabel(group.getFirst().parent)
-                    + "': '"
-                    + entry.getKey().name()
-                    + "'; keeping original names"
+            log.warn(
+                "Class name conflict after rename under '{}': desired '{}' for {}; keeping original names",
+                parentLabel(group.getFirst().parent),
+                desired,
+                involved
             );
         }
     }
@@ -316,15 +313,14 @@ public class RenameClassPlugin extends AbstractPlugin {
      */
     private void blockParentChildClashes(
         List<Candidate> candidates,
-        Map<Candidate, String> names,
-        ErrorHandler errorHandler
+        Map<Candidate, String> names
     ) {
         var beans = beansByClass(candidates);
         boolean changed;
         do {
             changed = false;
             for (var child : candidates) {
-                if (revertAncestorNameClash(child, beans, names, errorHandler)) {
+                if (revertAncestorNameClash(child, beans, names)) {
                     changed = true;
                 }
             }
@@ -340,8 +336,7 @@ public class RenameClassPlugin extends AbstractPlugin {
     private boolean revertAncestorNameClash(
         Candidate child,
         Map<CClassInfo, Candidate> beans,
-        Map<Candidate, String> names,
-        ErrorHandler errorHandler
+        Map<Candidate, String> names
     ) {
         var childName = normalize(names.get(child));
         CClassInfoParent current = child.parent;
@@ -354,15 +349,11 @@ public class RenameClassPlugin extends AbstractPlugin {
                     return false;
                 }
                 names.put(undo, undo.shortName);
-                warn(
-                    errorHandler,
-                    undo.locator,
-                    "Ancestor-nested name conflict after rename ('"
-                        + ancestor.fullName
-                        + "' / '"
-                        + child.fullName
-                        + "'); keeping original name for "
-                        + undo.fullName
+                log.warn(
+                    "Ancestor-nested name conflict after rename ('{}' / '{}'); keeping original name for {}",
+                    ancestor.fullName,
+                    child.fullName,
+                    undo.fullName
                 );
                 return true;
             }
@@ -386,8 +377,7 @@ public class RenameClassPlugin extends AbstractPlugin {
     private void blockObjectFactoryClashes(
         Model model,
         List<Candidate> candidates,
-        Map<Candidate, String> names,
-        ErrorHandler errorHandler
+        Map<Candidate, String> names
     ) {
         var beans = beansByClass(candidates);
         if (beans.isEmpty()) {
@@ -418,13 +408,10 @@ public class RenameClassPlugin extends AbstractPlugin {
                     names.put(candidate, candidate.shortName);
                     setFieldValue(CCLASSINFO_SHORTNAME_FIELD, candidate.bean, candidate.shortName);
                 }
-                warn(
-                    errorHandler,
-                    toRevert.getFirst().locator,
-                    "ObjectFactory name conflict '"
-                        + squeezed
-                        + "'; keeping original name(s) for "
-                        + toRevert.stream().map(c -> c.fullName).toList()
+                log.warn(
+                    "ObjectFactory name conflict '{}'; keeping original name(s) for {}",
+                    squeezed,
+                    toRevert.stream().map(c -> c.fullName).toList()
                 );
                 changed = true;
             }
@@ -496,18 +483,6 @@ public class RenameClassPlugin extends AbstractPlugin {
             && mapping.from.matcher(shortName).matches();
     }
 
-    private void warn(ErrorHandler errorHandler, Locator locator, String message) {
-        log.warn(message);
-        if (errorHandler == null) {
-            return;
-        }
-        try {
-            errorHandler.warning(new SAXParseException(message, locator));
-        } catch (SAXException ignored) {
-            // XJC ErrorReceiver does not rely on SAXException; keep build successful.
-        }
-    }
-
     /**
      * One class-name mapping: optional package filter, required short-name pattern, target name.
      * <p>
@@ -552,7 +527,6 @@ public class RenameClassPlugin extends AbstractPlugin {
         String fullName,
         CClassInfoParent parent,
         String packageName,
-        Locator locator,
         Consumer<String> apply,
         CClassInfo bean,
         String schemaTypeLocalName
