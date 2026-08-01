@@ -25,13 +25,15 @@ Actionable workflow for adding or changing plugins under `plugins/`. Prefer exis
 |-------|----------------|
 | SPI plugins | `plugins/src/main/java/io/github/rawvoid/jaxb/plugin/` (`*Plugin`) |
 | Option framework | `…/plugin/option/` — `AbstractPlugin`, `@Option`, `@Compact`, `TextParser` |
-| XJC host helpers | `…/plugin/xjc/` — `ModelUtils`, `OutlineUtils`, `AnnotationUtils`, `ReflectUtils`, … |
+| XJC host helpers | `…/plugin/xjc/` — `ModelUtils`, `OutlineUtils`, `AnnotationUtils`, `ReflectUtils`, `ClassNameDetector`, … |
 | Lombok bridge | `…/plugin/lombok/` — `LombokShadow`, `LombokAccessors`, `LombokSingulars` |
 | SPI | `plugins/src/main/resources/META-INF/services/com.sun.tools.xjc.Plugin` |
 | Plugin tests | `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/` |
 | Helper tests | mirror main: `…/plugin/xjc/`, `…/plugin/lombok/` |
+| Scratch experiments | `…/jaxb/scratch/` — `@Disabled` manual probes only; **not** regression tests |
 | Schemas | `plugins/src/test/resources/schema/` |
 | Test base | `plugins/src/test/java/io/github/rawvoid/jaxb/AbstractXJCMojoTestCase.java` |
+| User docs | `wiki/` (index: `wiki/README.md`); root `README.md` is a short overview |
 
 Dependency direction: `*Plugin` → `plugin.option` / `plugin.xjc` / `plugin.lombok`. Helpers must not depend on concrete plugins.
 
@@ -65,8 +67,13 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 ### Minimal plugin (template)
 
 ```java
+import com.sun.tools.xjc.Options;
+import com.sun.tools.xjc.outline.Outline;
 import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
+import org.xml.sax.ErrorHandler;
+
+import java.util.regex.Pattern;
 
 @Option(name = "Xmy-feature", description = "Short user-facing description")
 public class MyFeaturePlugin extends AbstractPlugin {
@@ -111,6 +118,7 @@ Package `io.github.rawvoid.jaxb.plugin.xjc` (and `plugin.lombok` for Lombok nami
 | `ModelUtils` | Model graph, property parents, remove class from model |
 | `OutlineUtils` | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext` |
 | `AnnotationUtils` | Query/add/remove CodeModel annotations, apply annox `XAnnotation`, type refs in annotation members |
+| `ClassNameDetector` | Detect FQCN as a standalone token in type/source text (incl. non-ASCII identifiers) |
 | `ReflectUtils` | Localized reflection helpers |
 | `LombokAccessors` / `LombokSingulars` | Match Lombok default accessor / `@Singular` naming (`plugin.lombok`) |
 
@@ -133,7 +141,7 @@ Without this line, XJC never loads the plugin.
 
 ## Step 4 — Tests
 
-1. Class: `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/<Name>PluginTest`
+1. Integration test class: `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/<Name>PluginTest`
 2. Extend `AbstractXJCMojoTestCase`
 3. **One dedicated schema per test class** (required):
 
@@ -150,7 +158,8 @@ Without this line, XJC never loads the plugin.
 - baseline without plugin when behavior differs
 - happy path with the real option string shape
 
-8. Run focused suite:
+8. Unit tests for helpers: put under `…/plugin/xjc/` or `…/plugin/lombok/` (mirror main). **Do not** put regression tests in `…/jaxb/scratch/` (that package is for `@Disabled` manual experiments only).
+9. Run focused suite:
 
 ```bash
 mvn -pl plugins test -Dtest=<Name>PluginTest
@@ -169,24 +178,33 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 - [ ] English Javadoc for non-obvious limits
 - [ ] Local conventional commit when the unit of work is coherent (`feat(plugin): …`, `fix: …`)
 - [ ] **Do not** `git push` / open PRs unless the user asks
-- [ ] README user docs only if the user requests them
+- [ ] User-facing docs (`wiki/<plugin-id>.md` + `wiki/README.md` index) only if the user requests them; keep root `README.md` in sync when it lists plugins
 
 ## Existing plugins (quick map)
 
-| Class                      | Option                   | Role                                                                   |
-|----------------------------|--------------------------|------------------------------------------------------------------------|
-| `RemoveGetterPlugin`       | `-Xremove-getter`        | Minimal `run` method removal                                           |
-| `RemoveSetterPlugin`       | `-Xremove-setter`        | Minimal `run` method removal                                           |
-| `AnnotatePlugin`           | `-Xannotate`             | Nested configs + custom `TextParser`                                   |
-| `JavaTimePlugin`           | `-Xjava-time`            | Modern `java.time` mapping + adapters on fields                        |
-| `ConvertNamePlugin`        | `-Xconvert-name`         | `postParseArgument` + `NameConverter`                                  |
-| `ElementWrapperPlugin`     | `-Xelement-wrapper`      | Dual-phase: model flatten + wrapper annotation                         |
-| `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel`                      |
-| `RenameClassPlugin`        | `-Xrename-class`         | Class short-name mapping (`-mapping`)                                  |
-| `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes                     |
-| `JacksonPlugin`            | `-Xjackson`              | Class-level Jackson defaults (`@JsonInclude`, ignoreUnknown) + `-anno` |
-| `ValidationPlugin`         | `-Xvalidation`           | Bean Validation constraints (@NotNull, @Size, @Valid, etc.)            |
-| `InheritancePlugin`        | `-Xinheritance`          | Interface (`implements`) and superclass (`extends`) injection          |
+Canonical lists: SPI file above and **[wiki/README.md](../../../wiki/README.md)** (user-facing index + inter-plugin notes). Keep this table aligned when adding a plugin.
+
+| Class | Option | Role |
+|-------|--------|------|
+| `RemoveGetterPlugin` | `-Xremove-getter` | Remove generated getters |
+| `RemoveSetterPlugin` | `-Xremove-setter` | Remove generated setters |
+| `LombokPlugin` | `-Xlombok` | Lombok annotations; optional accessor removal / builders |
+| `ConvertNamePlugin` | `-Xconvert-name` | Custom `NameConverter` in `postParseArgument` |
+| `RenameClassPlugin` | `-Xrename-class` | Rename class/enum/element types in the model |
+| `RenameMultiElementPropPlugin` | `-Xrename-multi-element-prop` | Rename multi-element properties (`items`, `items2`, …) |
+| `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Lift nested beans/enums toward package scope |
+| `ElementWrapperPlugin` | `-Xelement-wrapper` | Flatten pure collection shells + `@XmlElementWrapper` |
+| `FlattenMultiElementPropPlugin` | `-Xflatten-multi-element-prop` | Split multi-element properties into single fields |
+| `DedupeClassPlugin` | `-Xdedupe-class` | Merge structurally redundant beans |
+| `RemoveUnusedClassPlugin` | `-Xremove-unused-class` | Remove unreferenced classes and enums |
+| `AnnotatePlugin` | `-Xannotate` | Add/remove custom annotations (nested configs + `TextParser`) |
+| `GeneratedAnnoPlugin` | `-Xgenerated-anno` | Add `@jakarta.annotation.Generated` |
+| `JacksonPlugin` | `-Xjackson` | Class-level Jackson defaults + `-anno` |
+| `ValidationPlugin` | `-Xvalidation` | Bean Validation constraints from XSD |
+| `JavaTimePlugin` | `-Xjava-time` | Map XSD date/time to `java.time` + adapters |
+| `NamespacePlugin` | `-Xnamespace` | Namespace → package mappings and `@XmlSchema` prefixes |
+| `InheritancePlugin` | `-Xinheritance` | Inject `implements` / `extends` / `Serializable` |
+| `CommonInterfacePlugin` | `-Xcommon-interface` | Generate shared interfaces from common properties |
 
 Framework types (`plugin.option`): `AbstractPlugin`, `Option`, `Compact`, `TextParser`.
 
@@ -195,7 +213,7 @@ Framework types (`plugin.option`): `AbstractPlugin`, `Option`, `Compact`, `TextP
 1. Clarify the desired generated behavior and CLI shape with the user if ambiguous.
 2. Pick lifecycle hook (s) using the table above.
 3. Implement plugin + SPI.
-4. Add/adjust tests and schema fixtures.
+4. Add/adjust tests and schema fixtures (not under `scratch`).
 5. Run the smallest relevant Maven test.
 6. Local commit when the change is a coherent unit.
 7. Summarize for the user: option name, files touched, how to enable the plugin, test command.
