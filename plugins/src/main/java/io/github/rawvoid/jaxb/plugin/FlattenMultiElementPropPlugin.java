@@ -22,6 +22,8 @@ import com.sun.tools.xjc.model.CElementPropertyInfo.CollectionMode;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.tools.xjc.reader.xmlschema.bindinfo.BindInfo;
 import com.sun.xml.xsom.XSElementDecl;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.glassfish.jaxb.core.v2.model.core.ID;
 import org.slf4j.Logger;

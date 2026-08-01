@@ -18,7 +18,9 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.utils.OutlineUtils;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
+import io.github.rawvoid.jaxb.plugin.xjc.OutlineUtils;
 import org.xml.sax.ErrorHandler;
 
 /**

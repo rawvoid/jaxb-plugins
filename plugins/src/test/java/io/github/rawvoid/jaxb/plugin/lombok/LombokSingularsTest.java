@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.lombok;
 
 import org.junit.jupiter.api.Test;
 

@@ -2,10 +2,10 @@
 name: develop-plugin
 description: >
   Guide for developing JAXB/XJC plugins in this repository: AbstractPlugin, @Option,
-  SPI registration, model/outline hooks, utils, and AbstractXJCMojoTestCase tests.
-  Use when adding a new plugin, extending an existing one, wiring -X… options,
-  or the user runs /develop-plugin. Triggers: new plugin, XJC plugin, AbstractPlugin,
-  @Option, SPI Plugin, postProcessModel, jaxb plugin.
+  SPI registration, model/outline hooks, plugin.xjc / plugin.lombok helpers, and
+  AbstractXJCMojoTestCase tests. Use when adding a new plugin, extending an existing
+  one, wiring -X… options, or the user runs /develop-plugin. Triggers: new plugin,
+  XJC plugin, AbstractPlugin, @Option, SPI Plugin, postProcessModel, jaxb plugin.
 ---
 
 # Develop JAXB / XJC Plugin
@@ -21,14 +21,19 @@ Actionable workflow for adding or changing plugins under `plugins/`. Prefer exis
 
 ## Layout (where things live)
 
-| Piece          | Path                                                                        |
-|----------------|-----------------------------------------------------------------------------|
-| Plugin sources | `plugins/src/main/java/io/github/rawvoid/jaxb/plugin/`                      |
-| Utils          | `plugins/src/main/java/io/github/rawvoid/jaxb/utils/`                       |
-| SPI            | `plugins/src/main/resources/META-INF/services/com.sun.tools.xjc.Plugin`     |
-| Tests          | `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/`                      |
-| Schemas        | `plugins/src/test/resources/schema/`                                        |
-| Test base      | `plugins/src/test/java/io/github/rawvoid/jaxb/AbstractXJCMojoTestCase.java` |
+| Piece | Path / package |
+|-------|----------------|
+| SPI plugins | `plugins/src/main/java/io/github/rawvoid/jaxb/plugin/` (`*Plugin`) |
+| Option framework | `…/plugin/option/` — `AbstractPlugin`, `@Option`, `@Compact`, `TextParser` |
+| XJC host helpers | `…/plugin/xjc/` — `ModelUtils`, `OutlineUtils`, `AnnotationUtils`, `ReflectUtils`, … |
+| Lombok bridge | `…/plugin/lombok/` — `LombokShadow`, `LombokAccessors`, `LombokSingulars` |
+| SPI | `plugins/src/main/resources/META-INF/services/com.sun.tools.xjc.Plugin` |
+| Plugin tests | `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/` |
+| Helper tests | mirror main: `…/plugin/xjc/`, `…/plugin/lombok/` |
+| Schemas | `plugins/src/test/resources/schema/` |
+| Test base | `plugins/src/test/java/io/github/rawvoid/jaxb/AbstractXJCMojoTestCase.java` |
+
+Dependency direction: `*Plugin` → `plugin.option` / `plugin.xjc` / `plugin.lombok`. Helpers must not depend on concrete plugins.
 
 ## Step 1 — Choose the extension point
 
@@ -46,7 +51,7 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 
 ## Step 2 — Scaffold the plugin
 
-1. Package: `io.github.rawvoid.jaxb.plugin`
+1. Package: `io.github.rawvoid.jaxb.plugin` (imports: `plugin.option.AbstractPlugin`, `plugin.option.Option`)
 2. Class name: `*Plugin extends AbstractPlugin`
 3. Class-level `@Option(name = "X…", description = "…")`
 
@@ -60,6 +65,8 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 ### Minimal plugin (template)
 
 ```java
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
 
 @Option(name = "Xmy-feature", description = "Short user-facing description")
 public class MyFeaturePlugin extends AbstractPlugin {
@@ -95,17 +102,19 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 - After parse + defaults + required checks: override `postParseArgument(Options, int)` for side effects or multi-field validation.
 - Nested / repeatable configs: `NamespacePlugin` (`List<PackageMappingConfig>` / `List<NsPrefixConfig>`), `JavaTimePlugin` (`List<TypeMappingConfig>`), `AnnotatePlugin` (add/remove groups).
 
-### Utils (reuse before reinventing)
+### Shared helpers (reuse before reinventing)
 
-| Utility                                  | Use when                                                               |
-|------------------------------------------|------------------------------------------------------------------------|
-| `ModelUtils`                             | Model graph, property parents, remove class from model                 |
-| `OutlineUtils`                           | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext` |
-| `AnnotationUtils`                        | Query/add/remove CodeModel annotations, apply annox `XAnnotation`, type refs in annotation members |
-| `ReflectUtils`                           | Localized reflection helpers                                           |
-| `FieldAccessor` / `DefaultFieldAccessor` | Field access patterns on generated types                               |
+Package `io.github.rawvoid.jaxb.plugin.xjc` (and `plugin.lombok` for Lombok naming):
 
-Prefer public XJC / CodeModel APIs. If package-private fields force reflection, keep it localized (static `Field` constants like `PromoteNestedClassPlugin` or utils).
+| Type | Use when |
+|------|----------|
+| `ModelUtils` | Model graph, property parents, remove class from model |
+| `OutlineUtils` | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext` |
+| `AnnotationUtils` | Query/add/remove CodeModel annotations, apply annox `XAnnotation`, type refs in annotation members |
+| `ReflectUtils` | Localized reflection helpers |
+| `LombokAccessors` / `LombokSingulars` | Match Lombok default accessor / `@Singular` naming (`plugin.lombok`) |
+
+Prefer public XJC / CodeModel APIs. If package-private fields force reflection, keep it localized (static `Field` constants like `PromoteNestedClassPlugin` or `plugin.xjc`).
 
 ### Design rules for generated output
 
@@ -147,7 +156,7 @@ Without this line, XJC never loads the plugin.
 mvn -pl plugins test -Dtest=<Name>PluginTest
 ```
 
-Widen to `mvn -pl plugins test` if the change can affect shared model/utils.
+Widen to `mvn -pl plugins test` if the change can affect shared `plugin.xjc` helpers.
 
 Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTest`.
 
@@ -164,22 +173,22 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 
 ## Existing plugins (quick map)
 
-| Class                      | Option                   | Role                                              |
-|----------------------------|--------------------------|---------------------------------------------------|
-| `RemoveGetterPlugin`       | `-Xremove-getter`        | Minimal `run` method removal                      |
-| `RemoveSetterPlugin`       | `-Xremove-setter`        | Minimal `run` method removal                      |
-| `AnnotatePlugin`           | `-Xannotate`             | Nested configs + custom `TextParser`              |
-| `JavaTimePlugin`           | `-Xjava-time`            | Modern `java.time` mapping + adapters on fields   |
-| `ConvertNamePlugin`        | `-Xconvert-name`         | `postParseArgument` + `NameConverter`             |
-| `ElementWrapperPlugin`     | `-Xelement-wrapper`      | Dual-phase: model flatten + wrapper annotation    |
-| `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel` |
-| `RenameClassPlugin`        | `-Xrename-class`         | Class short-name mapping (`-mapping`)             |
-| `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes |
+| Class                      | Option                   | Role                                                                   |
+|----------------------------|--------------------------|------------------------------------------------------------------------|
+| `RemoveGetterPlugin`       | `-Xremove-getter`        | Minimal `run` method removal                                           |
+| `RemoveSetterPlugin`       | `-Xremove-setter`        | Minimal `run` method removal                                           |
+| `AnnotatePlugin`           | `-Xannotate`             | Nested configs + custom `TextParser`                                   |
+| `JavaTimePlugin`           | `-Xjava-time`            | Modern `java.time` mapping + adapters on fields                        |
+| `ConvertNamePlugin`        | `-Xconvert-name`         | `postParseArgument` + `NameConverter`                                  |
+| `ElementWrapperPlugin`     | `-Xelement-wrapper`      | Dual-phase: model flatten + wrapper annotation                         |
+| `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Promote nested beans/enums via `postProcessModel`                      |
+| `RenameClassPlugin`        | `-Xrename-class`         | Class short-name mapping (`-mapping`)                                  |
+| `NamespacePlugin`          | `-Xnamespace`            | Namespace→package bindings + `@XmlSchema` prefixes                     |
 | `JacksonPlugin`            | `-Xjackson`              | Class-level Jackson defaults (`@JsonInclude`, ignoreUnknown) + `-anno` |
-| `ValidationPlugin`         | `-Xvalidation`           | Bean Validation constraints (@NotNull, @Size, @Valid, etc.) |
-| `InheritancePlugin`        | `-Xinheritance`          | Interface (`implements`) and superclass (`extends`) injection |
+| `ValidationPlugin`         | `-Xvalidation`           | Bean Validation constraints (@NotNull, @Size, @Valid, etc.)            |
+| `InheritancePlugin`        | `-Xinheritance`          | Interface (`implements`) and superclass (`extends`) injection          |
 
-Framework types: `AbstractPlugin`, `Option`, `TextParser`.
+Framework types (`plugin.option`): `AbstractPlugin`, `Option`, `Compact`, `TextParser`.
 
 ## Workflow for the agent
 

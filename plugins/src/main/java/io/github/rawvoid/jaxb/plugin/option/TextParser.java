@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.plugin;
+package io.github.rawvoid.jaxb.plugin.option;
 
 /**
  * A generic interface for parsing text input into objects of a specified type.

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.common;
+package io.github.rawvoid.jaxb.scratch;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.jvnet.jaxb.annox.parser.XAnnotationParser;
 
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class XAnnotationTest {
 
     @Test
+    @Disabled("scratch: annox parse of @Generated")
     void testXAnnotationParser() throws Exception {
         var source = """
             @javax.annotation.processing.Generated(value = "Xjc", date = "2025-01-01T00:00:00Z")

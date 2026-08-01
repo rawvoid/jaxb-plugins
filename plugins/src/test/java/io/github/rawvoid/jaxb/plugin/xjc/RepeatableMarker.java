@@ -14,14 +14,25 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.xjc;
+
+
+import java.lang.annotation.Repeatable;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
- * @author Rawvoid
+ * Test-only {@link Repeatable} annotation used to verify
+ * {@link AnnotationUtils#applyXAnnotation} append semantics.
  */
-public interface FieldAccessor<T, V> {
+@Retention(RetentionPolicy.RUNTIME)
+@Repeatable(RepeatableMarker.List.class)
+public @interface RepeatableMarker {
 
-    void setValue(T instance, V value);
+    String value();
 
-    V getValue(T instance);
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface List {
+        RepeatableMarker[] value();
+    }
 }

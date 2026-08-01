@@ -38,7 +38,9 @@ import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.model.TypeUse;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XmlString;
-import io.github.rawvoid.jaxb.utils.ModelUtils;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
+import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import jakarta.activation.MimeType;
 import org.glassfish.jaxb.core.v2.model.core.WildcardMode;
 import org.slf4j.Logger;
@@ -57,14 +59,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CELEMENTINFO_CLASSNAME_FIELD;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.TYPE_FIELD;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.TYPE_USE_CONSTRUCTOR;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.getField;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.getFieldValue;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.newInstance;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.setFieldValue;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.CELEMENTINFO_CLASSNAME_FIELD;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.CENUMLEAFINFO_PARENT_FIELD;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.TYPE_FIELD;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.TYPE_USE_CONSTRUCTOR;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.getField;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.getFieldValue;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.newInstance;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
 
 /**
  * Merges structurally redundant generated beans in {@link #postProcessModel(Model, ErrorHandler)}.
@@ -488,11 +490,9 @@ public class DedupeClassPlugin extends AbstractPlugin {
         }
         return switch (a) {
             // Do not treat isomorphic but differently named beans as interchangeable.
-            case CClassInfo ca when b instanceof CClassInfo cb ->
-                sameTypeIdentity(ca, cb) && equalClasses(ca, cb, visiting);
+            case CClassInfo ca when b instanceof CClassInfo cb -> sameTypeIdentity(ca, cb) && equalClasses(ca, cb, visiting);
             case CEnumLeafInfo ea when b instanceof CEnumLeafInfo eb -> equalEnums(ea, eb);
-            case CBuiltinLeafInfo ba when b instanceof CBuiltinLeafInfo bb ->
-                Objects.equals(typeNameOf(ba), typeNameOf(bb));
+            case CBuiltinLeafInfo ba when b instanceof CBuiltinLeafInfo bb -> Objects.equals(typeNameOf(ba), typeNameOf(bb));
             case CClassRef ra when b instanceof CClassRef rb -> Objects.equals(ra.fullName(), rb.fullName());
             default -> a.getClass() == b.getClass() && Objects.equals(String.valueOf(a), String.valueOf(b));
         };
@@ -698,15 +698,23 @@ public class DedupeClassPlugin extends AbstractPlugin {
     }
 
     private enum RefBaseRelation {
-        /** Neither side uses {@link CClassRef}; compare generated bases next. */
+        /**
+         * Neither side uses {@link CClassRef}; compare generated bases next.
+         */
         BOTH_GENERATED,
-        /** Both use the same external class. */
+        /**
+         * Both use the same external class.
+         */
         EQUAL,
-        /** External refs missing on one side or FQCNs differ. */
+        /**
+         * External refs missing on one side or FQCNs differ.
+         */
         UNEQUAL
     }
 
-    /** Shared {@link CClassRef} base check used by exact and subset base compatibility. */
+    /**
+     * Shared {@link CClassRef} base check used by exact and subset base compatibility.
+     */
     private static RefBaseRelation compareRefBases(CClassInfo a, CClassInfo b) {
         var aRef = a.getRefBaseClass();
         var bRef = b.getRefBaseClass();

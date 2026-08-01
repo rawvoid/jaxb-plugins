@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.xjc;
 
 import com.sun.codemodel.*;
 import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.ClassNameDetector;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 
@@ -85,10 +84,10 @@ public final class OutlineUtils {
      * even if {@code removeGetters} is true.
      * </p>
      *
-     * @param classOutline           target class outline
-     * @param removeGetters          remove property getters when true
-     * @param removeSetters          remove property setters when true
-     * @param keepCollectionGetters  when true with {@code removeGetters}, retain collection property getters
+     * @param classOutline          target class outline
+     * @param removeGetters         remove property getters when true
+     * @param removeSetters         remove property setters when true
+     * @param keepCollectionGetters when true with {@code removeGetters}, retain collection property getters
      */
     public static void removePropertyAccessors(
         ClassOutline classOutline,

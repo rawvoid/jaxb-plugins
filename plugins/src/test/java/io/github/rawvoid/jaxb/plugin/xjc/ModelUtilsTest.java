@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.xjc;
 
 import com.sun.codemodel.JCodeModel;
 import com.sun.tools.xjc.Options;
@@ -26,9 +26,9 @@ import org.junit.jupiter.api.Test;
 
 import javax.xml.namespace.QName;
 
-import static io.github.rawvoid.jaxb.utils.ModelUtils.CELEMENTINFO_PARENT_FIELD;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.replaceClassReferences;
-import static io.github.rawvoid.jaxb.utils.ReflectUtils.getFieldValue;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.CELEMENTINFO_PARENT_FIELD;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.replaceClassReferences;
+import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.getFieldValue;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModelUtilsTest {

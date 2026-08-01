@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.plugin;
+package io.github.rawvoid.jaxb.plugin.option;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;

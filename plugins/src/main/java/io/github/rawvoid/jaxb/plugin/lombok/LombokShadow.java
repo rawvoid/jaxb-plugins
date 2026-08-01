@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.github.rawvoid.jaxb.utils;
+package io.github.rawvoid.jaxb.plugin.lombok;
 
 /**
  * Shared access to Lombok's SCL shadow {@link ClassLoader}.

@@ -23,8 +23,10 @@ import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XSElementDecl;
 import com.sun.xml.xsom.XSParticle;
-import io.github.rawvoid.jaxb.utils.AnnotationUtils;
-import io.github.rawvoid.jaxb.utils.ModelUtils;
+import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.Option;
+import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
+import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlNsForm;
 import org.slf4j.Logger;
@@ -38,9 +40,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import static io.github.rawvoid.jaxb.utils.ModelUtils.isPureCollectionShell;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.removeClass;
-import static io.github.rawvoid.jaxb.utils.ModelUtils.removeElementInfo;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.isPureCollectionShell;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.removeClass;
+import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.removeElementInfo;
 
 /**
  * Flattens single-collection wrapper types into {@code List} properties with
