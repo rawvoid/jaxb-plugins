@@ -50,6 +50,10 @@ import java.util.*;
  * <p>
  * Field renames do not affect {@code ObjectFactory} (which keys on class squeezed names).
  * </p>
+ * <p>
+ * Logging: each renamed property is {@code DEBUG}; the rename count is {@code INFO}.
+ * Invalid {@code -name} values are a single {@code WARN} before falling back to {@code items}.
+ * </p>
  *
  * @author Rawvoid
  */
@@ -102,7 +106,7 @@ public class RenameMultiElementPropPlugin extends OptionPlugin {
             renamed += handleClass(bean);
         }
         if (renamed > 0) {
-            log.info("Renamed {} multi-element property name(s) using base '{}'", renamed, name);
+            log.info("Renamed {} multi-element property name(s)", renamed);
         }
     }
 
@@ -132,7 +136,8 @@ public class RenameMultiElementPropPlugin extends OptionPlugin {
 
         var count = 0;
         for (var prop : targets) {
-            occupied.remove(normalize(prop.getName(false)));
+            var originalName = prop.getName(false);
+            occupied.remove(normalize(originalName));
             var seed = allocateName(occupied);
             var privateName = NAMES.toVariableName(seed);
             var publicName = NAMES.toPropertyName(seed);
@@ -140,6 +145,12 @@ public class RenameMultiElementPropPlugin extends OptionPlugin {
             prop.setName(false, privateName);
             prop.setName(true, publicName);
             count++;
+            log.debug(
+                "Renamed {}.{} → {}",
+                bean.fullName(),
+                originalName,
+                privateName
+            );
         }
         return count;
     }
