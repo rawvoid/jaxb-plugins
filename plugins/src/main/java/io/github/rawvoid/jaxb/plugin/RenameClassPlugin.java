@@ -183,7 +183,7 @@ public class RenameClassPlugin extends OptionPlugin {
         var desired = names.get(candidate);
         return candidate.shortName.equals(desired)
             ? candidate.shortName
-            : candidate.shortName + "→" + desired;
+            : "%s→%s".formatted(candidate.shortName, desired);
     }
 
     private static String joinArrows(Collection<Candidate> group, Map<Candidate, String> names) {
@@ -318,12 +318,10 @@ public class RenameClassPlugin extends OptionPlugin {
             if (group.size() <= 1 || !anyPending(group, names)) {
                 continue;
             }
-            conflicts.add(
-                "simple-name under '"
-                    + parentLabel(group.getFirst().parent)
-                    + "': "
-                    + joinArrows(group, names)
-            );
+            conflicts.add("simple-name under '%s': %s".formatted(
+                parentLabel(group.getFirst().parent),
+                joinArrows(group, names)
+            ));
             for (var candidate : group) {
                 names.put(candidate, candidate.shortName);
             }
@@ -379,25 +377,15 @@ public class RenameClassPlugin extends OptionPlugin {
                 var undoDesired = names.get(undo);
                 if (undo == ancestor) {
                     conflicts.add(
-                        "ancestor-nested: "
-                            + ancestor.shortName
-                            + "→"
-                            + undoDesired
-                            + " conflicts with nested "
-                            + child.fullName
-                            + "; kept "
-                            + ancestor.shortName
+                        "ancestor-nested: %s→%s conflicts with nested %s; kept %s".formatted(
+                            ancestor.shortName, undoDesired, child.fullName, ancestor.shortName
+                        )
                     );
                 } else {
                     conflicts.add(
-                        "ancestor-nested: nested "
-                            + child.fullName
-                            + "→"
-                            + undoDesired
-                            + " conflicts with ancestor "
-                            + ancestor.fullName
-                            + "; kept "
-                            + child.shortName
+                        "ancestor-nested: nested %s→%s conflicts with ancestor %s; kept %s".formatted(
+                            child.fullName, undoDesired, ancestor.fullName, child.shortName
+                        )
                     );
                 }
                 names.put(undo, undo.shortName);
@@ -451,12 +439,9 @@ public class RenameClassPlugin extends OptionPlugin {
                 }
                 // Capture squeezed name and arrows before reverts change short names on the model.
                 var squeezed = group.getFirst().getSqueezedName();
-                conflicts.add(
-                    "object-factory: squeezed '"
-                        + squeezed
-                        + "'; "
-                        + joinArrows(toRevert, names)
-                );
+                conflicts.add("object-factory: squeezed '%s'; %s".formatted(
+                    squeezed, joinArrows(toRevert, names)
+                ));
                 for (var candidate : toRevert) {
                     names.put(candidate, candidate.shortName);
                     setFieldValue(CCLASSINFO_SHORTNAME_FIELD, candidate.bean, candidate.shortName);
