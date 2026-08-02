@@ -89,6 +89,11 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
  * is also why a lift can collide with another type whose squeezed name already
  * equals the shortened form — those lifts are undone.
  * </p>
+ * <p>
+ * Logging: each successful one-level lift is {@code DEBUG}; the hop count is
+ * {@code INFO}. ObjectFactory collision rollbacks stay {@code DEBUG}. Name-slot
+ * contention is silent (types simply stop).
+ * </p>
  *
  * @author Rawvoid
  */
@@ -129,6 +134,11 @@ public class PromoteNestedClassPlugin extends OptionPlugin {
         return name.toLowerCase(Locale.ROOT);
     }
 
+    private static String parentLabel(CClassInfoParent parent) {
+        var label = parent.fullName();
+        return label == null || label.isEmpty() ? "(default package)" : label;
+    }
+
     /**
      * Nesting is defined on the model; changing parents here is enough for
      * BeanGenerator to emit the right containers. {@link #run} is a no-op.
@@ -145,7 +155,7 @@ public class PromoteNestedClassPlugin extends OptionPlugin {
         }
         if (hops > 0) {
             // Counts one-level moves, not distinct types (a deep type may hop several times).
-            log.info("Promoted {} nested type placement(s) (beans and enums)", hops);
+            log.info("Promoted {} nested type placement(s)", hops);
         }
     }
 
@@ -213,17 +223,33 @@ public class PromoteNestedClassPlugin extends OptionPlugin {
         for (var move : shortNameOk) {
             if (move.bean != null) {
                 var previous = move.bean.parent();
+                // fullName still reflects the old parent until re-parent succeeds.
+                var typeName = move.bean.fullName();
                 setFieldValue(CCLASSINFO_PARENT_FIELD, move.bean, move.target);
                 if (ModelUtils.hasObjectFactorySqueezedCollision(model)) {
                     setFieldValue(CCLASSINFO_PARENT_FIELD, move.bean, previous);
                     log.debug(
-                        "Skip promoting {} — ObjectFactory squeezed name collision",
-                        move.bean.fullName()
+                        "Skip promote {}: ObjectFactory name collision",
+                        typeName
                     );
                     continue;
                 }
+                log.debug(
+                    "Promoted {} ({} → {})",
+                    typeName,
+                    parentLabel(previous),
+                    parentLabel(move.target)
+                );
             } else {
+                var previous = move.enumInfo.parent;
+                var typeName = move.enumInfo.fullName();
                 setFieldValue(CENUMLEAFINFO_PARENT_FIELD, move.enumInfo, move.target);
+                log.debug(
+                    "Promoted {} ({} → {})",
+                    typeName,
+                    parentLabel(previous),
+                    parentLabel(move.target)
+                );
             }
             moved++;
         }
