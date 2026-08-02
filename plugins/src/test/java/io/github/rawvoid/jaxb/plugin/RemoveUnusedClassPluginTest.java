@@ -65,7 +65,7 @@ class RemoveUnusedClassPluginTest extends AbstractXJCMojoTestCase {
 
     @Test
     void removesUnusedClassesAndEnums() throws Exception {
-        var args = List.of(optionCmd, "-verbose");
+        var args = List.of(optionCmd);
         var classes = testExecute(args, ".*", null);
         var names = classes.stream().map(Class::getName).toList();
 

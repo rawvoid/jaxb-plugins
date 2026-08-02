@@ -18,7 +18,6 @@ Removes unreferenced JAXB classes and enums from the model during `postProcessMo
 | `-Xremove-unused-class` | flag | — | Enable the plugin |
 | `-keep-classes` | regex (repeatable) | — | Forcibly keep matching classes or enums as roots (`find` on full name or short name) |
 | `-preserve-polymorphism` | boolean | `false` | Treat subclasses of a reachable base class as reachable |
-| `-verbose` | boolean | `false` | Detailed logging of reachability and deleted types |
 
 ## Behavior
 
@@ -52,8 +51,10 @@ Only `CClassInfo`, `CEnumLeafInfo`, and `CElementInfo` targets are tracked as re
 ```text
 -Xremove-unused-class
 -Xremove-unused-class -keep-classes=com\.example\.KeepMe
--Xremove-unused-class -preserve-polymorphism=true -verbose=true
+-Xremove-unused-class -preserve-polymorphism=true
 ```
+
+Logging: removed count is `INFO`; the class/enum name list is `DEBUG` (enable the logger for details).
 
 ## Limitations / notes
 
