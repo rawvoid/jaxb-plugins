@@ -72,7 +72,8 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
  * </p>
  * <p>
  * <strong>Conflict policy.</strong> Conflicting types keep their original names; non-conflicting
- * renames still apply. Conflicts are reported as warnings (build does not fail). Checks cover:
+ * renames still apply. Conflicts are reported as a single non-fatal warning with one detail
+ * line per clash ({@code old→new}). Checks cover:
  * </p>
  * <ul>
  *   <li>Same simple name under one parent (beans / enums / element classes)</li>
@@ -84,6 +85,10 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
  *       names; those renames are rolled back when they collide. Detection uses XJC's own
  *       {@code getSqueezedName()} after writing provisional short names onto the model</li>
  * </ul>
+ * <p>
+ * Logging: each applied rename is {@code DEBUG}; the total count is {@code INFO}. Conflicts
+ * are one {@code WARN} (summary + detail lines). Invalid mapping/strip results are {@code WARN}.
+ * </p>
  * <p>
  * When both this plugin and {@link PromoteNestedClassPlugin} are active, running rename
  * <em>before</em> promote lets named global types claim short names first; promote-first is
@@ -136,7 +141,6 @@ public class RenameClassPlugin extends OptionPlugin {
         var result = new ArrayList<Candidate>();
         for (var bean : model.beans().values()) {
             result.add(new Candidate(
-                "bean",
                 bean.shortName,
                 bean.fullName(),
                 bean.parent(),
@@ -148,7 +152,6 @@ public class RenameClassPlugin extends OptionPlugin {
         }
         for (var enumInfo : model.enums().values()) {
             result.add(new Candidate(
-                "enum",
                 enumInfo.shortName,
                 enumInfo.fullName(),
                 enumInfo.parent,
@@ -163,7 +166,6 @@ public class RenameClassPlugin extends OptionPlugin {
                 continue;
             }
             result.add(new Candidate(
-                "element",
                 element.shortName(),
                 element.fullName(),
                 element.parent,
@@ -174,6 +176,33 @@ public class RenameClassPlugin extends OptionPlugin {
             ));
         }
         return result;
+    }
+
+    /** {@code Original→Desired} for a provisional rename (or unchanged name). */
+    private static String arrow(Candidate candidate, Map<Candidate, String> names) {
+        var desired = names.get(candidate);
+        return candidate.shortName.equals(desired)
+            ? candidate.shortName
+            : "%s→%s".formatted(candidate.shortName, desired);
+    }
+
+    private static String joinArrows(Collection<Candidate> group, Map<Candidate, String> names) {
+        var parts = new ArrayList<String>(group.size());
+        for (var candidate : group) {
+            parts.add(arrow(candidate, names));
+        }
+        return String.join(", ", parts);
+    }
+
+    private static void reportConflicts(List<String> conflicts) {
+        if (conflicts.isEmpty()) {
+            return;
+        }
+        log.warn(
+            "Blocked {} rename conflict(s); kept original name(s):\n    {}",
+            conflicts.size(),
+            String.join("\n    ", conflicts)
+        );
     }
 
     private static String localPart(QName typeName) {
@@ -241,9 +270,11 @@ public class RenameClassPlugin extends OptionPlugin {
             names.put(candidate, mapName(candidate));
         }
 
-        blockDuplicateSimpleNames(model, candidates, names);
-        blockParentChildClashes(candidates, names);
-        blockObjectFactoryClashes(model, candidates, names);
+        var conflicts = new ArrayList<String>();
+        blockDuplicateSimpleNames(model, candidates, names, conflicts);
+        blockParentChildClashes(candidates, names, conflicts);
+        blockObjectFactoryClashes(model, candidates, names, conflicts);
+        reportConflicts(conflicts);
 
         var renamed = 0;
         for (var candidate : candidates) {
@@ -251,6 +282,7 @@ public class RenameClassPlugin extends OptionPlugin {
             if (!next.equals(candidate.shortName)) {
                 candidate.apply.accept(next);
                 renamed++;
+                log.debug("Renamed {} → {}", candidate.shortName, next);
             }
         }
         if (renamed > 0) {
@@ -270,7 +302,8 @@ public class RenameClassPlugin extends OptionPlugin {
     private void blockDuplicateSimpleNames(
         Model model,
         List<Candidate> candidates,
-        Map<Candidate, String> names
+        Map<Candidate, String> names,
+        List<String> conflicts
     ) {
         // Slot: (parent, case-insensitive desired name). size > 1 → conflict group.
         Map<Slot, List<Candidate>> bySlot = new LinkedHashMap<>();
@@ -285,22 +318,13 @@ public class RenameClassPlugin extends OptionPlugin {
             if (group.size() <= 1 || !anyPending(group, names)) {
                 continue;
             }
-            // Prefer a desired name that was actually produced by a rename (original case).
-            var desired = group.stream()
-                .filter(c -> isPending(c, names))
-                .map(names::get)
-                .findFirst()
-                .orElseGet(() -> names.get(group.getFirst()));
-            var involved = group.stream().map(c -> c.fullName).toList();
+            conflicts.add("simple-name under '%s': %s".formatted(
+                parentLabel(group.getFirst().parent),
+                joinArrows(group, names)
+            ));
             for (var candidate : group) {
                 names.put(candidate, candidate.shortName);
             }
-            log.warn(
-                "Class name conflict after rename under '{}': desired '{}' for {}; keeping original names",
-                parentLabel(group.getFirst().parent),
-                desired,
-                involved
-            );
         }
     }
 
@@ -313,14 +337,15 @@ public class RenameClassPlugin extends OptionPlugin {
      */
     private void blockParentChildClashes(
         List<Candidate> candidates,
-        Map<Candidate, String> names
+        Map<Candidate, String> names,
+        List<String> conflicts
     ) {
         var beans = beansByClass(candidates);
         boolean changed;
         do {
             changed = false;
             for (var child : candidates) {
-                if (revertAncestorNameClash(child, beans, names)) {
+                if (revertAncestorNameClash(child, beans, names, conflicts)) {
                     changed = true;
                 }
             }
@@ -329,14 +354,15 @@ public class RenameClassPlugin extends OptionPlugin {
 
     /**
      * When {@code child} and any enclosing bean would share a simple name after rename,
-     * reverts one of them (prefer the ancestor) and reports a warning.
+     * reverts one of them (prefer the ancestor) and records a conflict detail.
      *
      * @return {@code true} if a rename was reverted
      */
     private boolean revertAncestorNameClash(
         Candidate child,
         Map<CClassInfo, Candidate> beans,
-        Map<Candidate, String> names
+        Map<Candidate, String> names,
+        List<String> conflicts
     ) {
         var childName = normalize(names.get(child));
         CClassInfoParent current = child.parent;
@@ -348,13 +374,21 @@ public class RenameClassPlugin extends OptionPlugin {
                 if (undo == null) {
                     return false;
                 }
+                var undoDesired = names.get(undo);
+                if (undo == ancestor) {
+                    conflicts.add(
+                        "ancestor-nested: %s→%s conflicts with nested %s; kept %s".formatted(
+                            ancestor.shortName, undoDesired, child.fullName, ancestor.shortName
+                        )
+                    );
+                } else {
+                    conflicts.add(
+                        "ancestor-nested: nested %s→%s conflicts with ancestor %s; kept %s".formatted(
+                            child.fullName, undoDesired, ancestor.fullName, child.shortName
+                        )
+                    );
+                }
                 names.put(undo, undo.shortName);
-                log.warn(
-                    "Ancestor-nested name conflict after rename ('{}' / '{}'); keeping original name for {}",
-                    ancestor.fullName,
-                    child.fullName,
-                    undo.fullName
-                );
                 return true;
             }
             current = parentBean.parent();
@@ -377,7 +411,8 @@ public class RenameClassPlugin extends OptionPlugin {
     private void blockObjectFactoryClashes(
         Model model,
         List<Candidate> candidates,
-        Map<Candidate, String> names
+        Map<Candidate, String> names,
+        List<String> conflicts
     ) {
         var beans = beansByClass(candidates);
         if (beans.isEmpty()) {
@@ -402,17 +437,15 @@ public class RenameClassPlugin extends OptionPlugin {
                     // Clash already present with original names — XJC will report it; nothing we can undo.
                     continue;
                 }
-                // Capture squeezed name before reverts change short names on the model.
+                // Capture squeezed name and arrows before reverts change short names on the model.
                 var squeezed = group.getFirst().getSqueezedName();
+                conflicts.add("object-factory: squeezed '%s'; %s".formatted(
+                    squeezed, joinArrows(toRevert, names)
+                ));
                 for (var candidate : toRevert) {
                     names.put(candidate, candidate.shortName);
                     setFieldValue(CCLASSINFO_SHORTNAME_FIELD, candidate.bean, candidate.shortName);
                 }
-                log.warn(
-                    "ObjectFactory name conflict '{}'; keeping original name(s) for {}",
-                    squeezed,
-                    toRevert.stream().map(c -> c.fullName).toList()
-                );
                 changed = true;
             }
         } while (changed);
@@ -435,8 +468,10 @@ public class RenameClassPlugin extends OptionPlugin {
                 }
                 if (!JJavaName.isJavaIdentifier(next)) {
                     log.warn(
-                        "Invalid Java class name after mapping: '{}' (from {}); skipping rule",
+                        "Invalid Java class name '{}' after mapping /{}/->{} on {}; skipping rule",
                         next,
+                        mapping.from.pattern(),
+                        mapping.to,
                         candidate.fullName
                     );
                     continue;
@@ -449,7 +484,7 @@ public class RenameClassPlugin extends OptionPlugin {
             if (stripped != null && !stripped.equals(current)) {
                 if (!JJavaName.isJavaIdentifier(stripped)) {
                     log.warn(
-                        "Invalid Java class name after Type suffix strip: '{}' (from {}); skipping strip",
+                        "Invalid Java class name '{}' after Type suffix strip on {}; skipping strip",
                         stripped,
                         candidate.fullName
                     );
@@ -522,7 +557,6 @@ public class RenameClassPlugin extends OptionPlugin {
      * named; {@code null} for anonymous beans and element classes.
      */
     private record Candidate(
-        String kind,
         String shortName,
         String fullName,
         CClassInfoParent parent,
