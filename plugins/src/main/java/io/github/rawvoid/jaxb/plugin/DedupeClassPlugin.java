@@ -1333,8 +1333,10 @@ public class DedupeClassPlugin extends OptionPlugin {
                 && !mergedPackageNameKeys.contains(pkg + '\0' + contentKey)) {
                 continue;
             }
-            setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
+            // Capture before clearing className: fullName() falls back to type.fullName()
+            // (JAXBElement<…>) once className is null.
             cleared.add(elementInfo.fullName());
+            setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
         }
         if (!cleared.isEmpty()) {
             log.info("Cleared {} redundant element class name(s) after dedupe", cleared.size());
