@@ -93,6 +93,12 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
  * Shell-to-shell exact merges remain allowed. Default is <strong>auto</strong>: on when
  * {@code -Xelement-wrapper} is also active; force with {@code true}/{@code false}.
  * </p>
+ * <p>
+ * Logging: each accepted merge is {@code DEBUG}; merge and element-class-clear counts are
+ * {@code INFO}. Routine skips stay {@code DEBUG}; element-class root mismatches and
+ * ObjectFactory collisions after dedupe are {@code WARN} (ObjectFactory: one multi-line
+ * summary).
+ * </p>
  *
  * @author Rawvoid
  */
@@ -869,7 +875,11 @@ public class DedupeClassPlugin extends OptionPlugin {
             warnObjectFactoryCollisions(model);
         }
         if (merged > 0) {
-            log.info("Deduped {} bean merge(s){}", merged, session.dry ? " (dry-run)" : "");
+            if (session.dry) {
+                log.info("Deduped {} bean merge(s) (dry-run)", merged);
+            } else {
+                log.info("Deduped {} bean merge(s)", merged);
+            }
         }
     }
 
@@ -1019,7 +1029,7 @@ public class DedupeClassPlugin extends OptionPlugin {
 
         if (!isPackageLevel(host) && host.parent() != victim.parent() && !allowCrossNestedParent) {
             log.debug(
-                "Skip dedupe {}: cross-hierarchy nested '{}' vs '{}'",
+                "Skip dedupe {}: cross-hierarchy nested {} vs {}",
                 reason, victim.fullName(), host.fullName()
             );
             return false;
@@ -1028,11 +1038,11 @@ public class DedupeClassPlugin extends OptionPlugin {
         if (victim.isElement() && host.isElement()
             && !Objects.equals(victim.getElementName(), host.getElementName())) {
             log.warn(
-                "Skip dedupe {}: both '{}' and '{}' are element-classes with different roots ({} vs {})",
+                "Skip dedupe {}: both element-classes with different roots: {} ({}) vs {} ({})",
                 reason,
                 victim.fullName(),
-                host.fullName(),
                 victim.getElementName(),
+                host.fullName(),
                 host.getElementName()
             );
             return false;
@@ -1044,7 +1054,7 @@ public class DedupeClassPlugin extends OptionPlugin {
             && ModelUtils.isPureCollectionShell(victim)
             && !ModelUtils.isPureCollectionShell(host)) {
             log.debug(
-                "Skip dedupe {}: pure collection shell '{}' must not merge into non-shell '{}'",
+                "Skip dedupe {}: pure collection shell {} must not merge into non-shell {}",
                 reason, victim.fullName(), host.fullName()
             );
             return false;
@@ -1057,8 +1067,8 @@ public class DedupeClassPlugin extends OptionPlugin {
             return false;
         }
 
-        log.info(
-            "Dedupe {}: '{}' -> '{}' (nameKey={})",
+        log.debug(
+            "Dedupe {}: {} → {} (nameKey={})",
             reason, victim.fullName(), host.fullName(), nameKey(victim.shortName)
         );
 
@@ -1102,7 +1112,11 @@ public class DedupeClassPlugin extends OptionPlugin {
                 var childNorm = child.shortName.toLowerCase(Locale.ROOT);
                 for (var hc : directNestedBeans(model, host)) {
                     if (hc.shortName.toLowerCase(Locale.ROOT).equals(childNorm)) {
-                        log.debug("Skip dedupe: nested name clash {} under {}", child.shortName, host.fullName());
+                        log.debug(
+                            "Skip dedupe: nested name clash {} under {}",
+                            child.shortName,
+                            host.fullName()
+                        );
                         return false;
                     }
                 }
@@ -1165,9 +1179,10 @@ public class DedupeClassPlugin extends OptionPlugin {
                 }
             }
             if (match != null) {
-                log.info(
-                    "Dedupe exact-enum: '{}' -> '{}'",
-                    fullEnumName(victimEnum), fullEnumName(match)
+                log.debug(
+                    "Dedupe exact-enum: {} → {}",
+                    fullEnumName(victimEnum),
+                    fullEnumName(match)
                 );
                 session.countedMerges.add(IdentityPair.directed(victimEnum, match));
                 if (!session.dry) {
@@ -1298,7 +1313,7 @@ public class DedupeClassPlugin extends OptionPlugin {
         if (mergedPackageNameKeys.isEmpty()) {
             return;
         }
-        var cleared = 0;
+        var cleared = new ArrayList<String>();
         for (var elementInfo : model.getAllElements()) {
             if (!elementInfo.hasClass()) {
                 continue;
@@ -1319,18 +1334,29 @@ public class DedupeClassPlugin extends OptionPlugin {
                 continue;
             }
             setFieldValue(CELEMENTINFO_CLASSNAME_FIELD, elementInfo, null);
-            cleared++;
+            cleared.add(elementInfo.fullName());
         }
-        if (cleared > 0) {
-            log.info("Cleared {} redundant element class name(s) after dedupe", cleared);
+        if (!cleared.isEmpty()) {
+            log.info("Cleared {} redundant element class name(s) after dedupe", cleared.size());
+            log.debug(
+                "Cleared element class name(s):\n    {}",
+                String.join("\n    ", cleared)
+            );
         }
     }
 
     private static void warnObjectFactoryCollisions(Model model) {
+        var collisions = new ArrayList<String>();
         for (var group : ModelUtils.objectFactorySqueezedCollisions(model)) {
+            var squeezed = group.getFirst().getSqueezedName();
+            var names = group.stream().map(CClassInfo::fullName).toList();
+            collisions.add("squeezed '%s': %s".formatted(squeezed, names));
+        }
+        if (!collisions.isEmpty()) {
             log.warn(
-                "ObjectFactory squeezed-name collision after dedupe (package-local createXxx): {}",
-                group.stream().map(CClassInfo::fullName).toList()
+                "ObjectFactory name collision(s) after dedupe ({}):\n    {}",
+                collisions.size(),
+                String.join("\n    ", collisions)
             );
         }
     }
