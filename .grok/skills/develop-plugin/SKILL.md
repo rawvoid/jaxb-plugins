@@ -198,7 +198,7 @@ Canonical lists: SPI file above and **[wiki/README.md](../../../wiki/README.md)*
 | `DedupeClassPlugin`             | `-Xdedupe-class`               | Merge structurally redundant beans                            |
 | `RemoveUnusedClassPlugin`       | `-Xremove-unused-class`        | Remove unreferenced classes and enums                         |
 | `AnnotatePlugin`                | `-Xannotate`                   | Add/remove custom annotations (nested configs + `TextParser`) |
-| `GeneratedAnnoPlugin`           | `-Xgenerated-anno`             | Add `@jakarta.annotation.Generated`                           |
+| `GeneratedPlugin`               | `-Xgenerated`                  | Add `@jakarta.annotation.Generated`                           |
 | `JacksonPlugin`                 | `-Xjackson`                    | Class-level Jackson defaults + `-anno`                        |
 | `ValidationPlugin`              | `-Xvalidation`                 | Bean Validation constraints from XSD                          |
 | `JavaTimePlugin`                | `-Xjava-time`                  | Map XSD date/time to `java.time` + adapters                   |

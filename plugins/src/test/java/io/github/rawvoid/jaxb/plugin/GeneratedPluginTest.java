@@ -30,12 +30,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * XJC integration tests for {@link GeneratedAnnoPlugin}.
- * Uses dedicated {@code generated-anno.xsd} only.
+ * XJC integration tests for {@link GeneratedPlugin}.
+ * Uses dedicated {@code generated.xsd} only.
  */
-class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
+class GeneratedPluginTest extends AbstractXJCMojoTestCase {
 
-    private static final String PACKAGE_NAME = "com.github.rawvoid.xjc_plugins.generated_anno";
+    private static final String PACKAGE_NAME = "com.github.rawvoid.xjc_plugins.generated";
     private static final String ADAPTER_PACKAGE = PACKAGE_NAME + ".adapter";
     /**
      * XJC places global {@code jaxb:javaType} adapters under the XML Schema namespace package.
@@ -53,7 +53,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     private static final String SCHEMA_CLASSES =
         "(" + PACKAGE_NAME + "\\.(Root|Nested|Status|ObjectFactory)|" + XJC_ADAPTER_CLASS_REGEX + ")";
 
-    private final String optionCmd = optionCommand(GeneratedAnnoPlugin.class);
+    private final String optionCmd = optionCommand(GeneratedPlugin.class);
     private final String javaTimeCmd = optionCommand(JavaTimePlugin.class);
 
     private static String optionCommand(Class<? extends OptionPlugin> pluginClass) {
@@ -63,12 +63,12 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
 
     @BeforeEach
     void setSchema() {
-        schemaIncludes = List.of("generated-anno.xsd");
+        schemaIncludes = List.of("generated.xsd");
     }
 
     @Test
     void testUsage() {
-        var plugin = new GeneratedAnnoPlugin();
+        var plugin = new GeneratedPlugin();
         assertThat(plugin.getUsage()).isNotNull();
     }
 
@@ -197,7 +197,7 @@ class GeneratedAnnoPluginTest extends AbstractXJCMojoTestCase {
     /**
      * Adapters emitted by {@link JavaTimePlugin} into a sibling {@code *.adapter}
      * package are outside outline package contexts; they must still be annotated
-     * when {@code -Xgenerated-anno} runs after {@code -Xjava-time}.
+     * when {@code -Xgenerated} runs after {@code -Xjava-time}.
      */
     @Test
     void annotatesJavaTimeAdaptersInSeparatePackage() throws Exception {

@@ -1,4 +1,4 @@
-# GeneratedAnnoPlugin (`-Xgenerated-anno`)
+# GeneratedPlugin (`-Xgenerated`)
 
 ## Overview
 
@@ -14,7 +14,7 @@ Annotates all generated packages and classes with `@jakarta.annotation.Generated
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `-Xgenerated-anno` | flag | — | Enable the plugin |
+| `-Xgenerated` | flag | — | Enable the plugin |
 | `-value` | string | `JAXB RI v[BuildID]` | `value` attribute of `@Generated` |
 | `-comments` | string | *(none)* | `comments` attribute |
 | `-date` | boolean | `false` | When true, set `date` to `LocalDate.now()` (ISO date string) |
@@ -29,19 +29,19 @@ Annotates all generated packages and classes with `@jakarta.annotation.Generated
 ## Usage
 
 ```text
--Xgenerated-anno
--Xgenerated-anno -value=my-codegen -comments="from schema" -date=true
+-Xgenerated
+-Xgenerated -value=my-codegen -comments="from schema" -date=true
 
-# With plugins that create adapters in run(), put generated-anno last:
--Xjava-time -Xgenerated-anno
+# With plugins that create adapters in run(), put generated last:
+-Xjava-time -Xgenerated
 ```
 
 ## Limitations / notes
 
 - Uses the Jakarta annotation FQCN `jakarta.annotation.Generated` (not `javax.annotation.Generated`).
 - Date is calendar date only (`LocalDate`), not a full timestamp.
-- Plugin order matters for adapters created by other plugins during `run`: enable `-Xgenerated-anno` after those plugins so the adapters already exist.
+- Plugin order matters for adapters created by other plugins during `run`: enable `-Xgenerated` after those plugins so the adapters already exist.
 
 ## Source
 
-`plugins/src/main/java/io/github/rawvoid/jaxb/plugin/GeneratedAnnoPlugin.java`
+`plugins/src/main/java/io/github/rawvoid/jaxb/plugin/GeneratedPlugin.java`
