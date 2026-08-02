@@ -222,7 +222,7 @@ public class ElementWrapperPlugin extends OptionPlugin {
             }
 
             log.debug(
-                "Flattened {}.{} → {}",
+                "Flattened {}.{} (wrapper {})",
                 owner.fullName(),
                 outer.getName(false),
                 resolved.wrapper().fullName()

@@ -178,12 +178,14 @@ public class RenameClassPlugin extends OptionPlugin {
         return result;
     }
 
-    /** {@code Original→Desired} for a provisional rename (or unchanged name). */
+    /**
+     * Label for conflict details: FQCN when unchanged, otherwise {@code fullName→desiredShort}.
+     */
     private static String arrow(Candidate candidate, Map<Candidate, String> names) {
         var desired = names.get(candidate);
         return candidate.shortName.equals(desired)
-            ? candidate.shortName
-            : "%s→%s".formatted(candidate.shortName, desired);
+            ? candidate.fullName
+            : "%s→%s".formatted(candidate.fullName, desired);
     }
 
     private static String joinArrows(Collection<Candidate> group, Map<Candidate, String> names) {
@@ -280,9 +282,10 @@ public class RenameClassPlugin extends OptionPlugin {
         for (var candidate : candidates) {
             var next = names.get(candidate);
             if (!next.equals(candidate.shortName)) {
+                // fullName is the pre-rename FQCN (shortName is not rewritten on Candidate).
+                log.debug("Renamed {} → {}", candidate.fullName, next);
                 candidate.apply.accept(next);
                 renamed++;
-                log.debug("Renamed {} → {}", candidate.shortName, next);
             }
         }
         if (renamed > 0) {
@@ -378,13 +381,13 @@ public class RenameClassPlugin extends OptionPlugin {
                 if (undo == ancestor) {
                     conflicts.add(
                         "ancestor-nested: %s→%s conflicts with nested %s; kept %s".formatted(
-                            ancestor.shortName, undoDesired, child.fullName, ancestor.shortName
+                            ancestor.fullName, undoDesired, child.fullName, ancestor.fullName
                         )
                     );
                 } else {
                     conflicts.add(
                         "ancestor-nested: nested %s→%s conflicts with ancestor %s; kept %s".formatted(
-                            child.fullName, undoDesired, ancestor.fullName, child.shortName
+                            child.fullName, undoDesired, ancestor.fullName, child.fullName
                         )
                     );
                 }

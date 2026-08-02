@@ -143,16 +143,17 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
 
             var originalName = prop.getName(false);
             // Replace the original property at position i with all the new ones.
-            if (replaceProperty(bean, i, prop, replacements)) {
+            var addedNames = replaceProperty(bean, i, prop, replacements);
+            if (!addedNames.isEmpty()) {
                 // After replacement, i now points at the first new property.
                 // Advance past all inserted properties so the loop continues correctly.
-                i += replacements.size() - 1;
+                i += addedNames.size() - 1;
                 count++;
                 log.debug(
                     "Flattened {}.{} → {}",
                     bean.fullName(),
                     originalName,
-                    replacements.stream().map(r -> r.getName(false)).toList()
+                    addedNames
                 );
             }
         }
@@ -371,8 +372,10 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
      * new property. The appended properties are then moved from the tail back to
      * the original position.
      * </p>
+     *
+     * @return short names of properties that were actually appended (empty if none)
      */
-    private boolean replaceProperty(
+    private List<String> replaceProperty(
         CClassInfo owner, int index, CPropertyInfo original,
         List<CPropertyInfo> replacements
     ) {
@@ -380,11 +383,11 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
         var sizeBefore = properties.size();
 
         // 1. Append all replacements via addProperty (triggers setParent).
-        var added = 0;
+        var addedNames = new ArrayList<String>();
         for (var replacement : replacements) {
             owner.addProperty(replacement);
-            if (properties.size() == sizeBefore + added + 1) {
-                added++;
+            if (properties.size() == sizeBefore + addedNames.size() + 1) {
+                addedNames.add(replacement.getName(false));
             } else {
                 log.warn(
                     "Skip adding {}.{}: addProperty did not append",
@@ -394,26 +397,26 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
             }
         }
 
-        if (added == 0) {
+        if (addedNames.isEmpty()) {
             log.warn(
                 "Skip flattening {}.{}: no replacements were added",
                 owner.fullName(),
                 original.getName(false)
             );
-            return false;
+            return List.of();
         }
 
         // 2. Remove original at index.
         properties.remove(index);
 
-        // 3. Move the `added` properties from the tail to index.
+        // 3. Move the appended properties from the tail to index.
         //    Since removeLast() retrieves the last added property first, inserting
         //    them successively at `index` naturally restores their original order.
-        for (var j = 0; j < added; j++) {
+        for (var j = 0; j < addedNames.size(); j++) {
             properties.add(index, properties.removeLast());
         }
 
-        return true;
+        return addedNames;
     }
 
     /**
