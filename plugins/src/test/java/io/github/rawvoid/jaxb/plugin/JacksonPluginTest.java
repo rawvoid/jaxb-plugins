@@ -20,7 +20,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +50,7 @@ class JacksonPluginTest extends AbstractXJCMojoTestCase {
 
     private final String optionCmd = optionCommand(JacksonPlugin.class);
 
-    private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
+    private static String optionCommand(Class<? extends OptionPlugin> pluginClass) {
         var option = pluginClass.getAnnotation(Option.class);
         return option.prefix() + option.name();
     }

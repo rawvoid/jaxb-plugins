@@ -20,7 +20,7 @@ import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.Plugin;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Compact;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.junit.jupiter.api.Test;
@@ -38,7 +38,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class AbstractPluginTest {
+class OptionPluginTest {
 
     @Test
     void testUsage() {
@@ -110,7 +110,7 @@ class AbstractPluginTest {
             "-int-list2=4,5,6",
             "-magic-string=def",
             "-config",
-            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest",
+            "-class-name=io.github.rawvoid.jaxb.plugin.OptionPluginTest",
             "-index=0",
             "-enabled"
         ).toArray(new String[0]);
@@ -128,7 +128,7 @@ class AbstractPluginTest {
         assertThat(plugin.annotationList.get(1).annotation.getFirst().getAnnotationClass()).isEqualTo(jakarta.xml.bind.annotation.XmlRootElement.class);
         assertThat(plugin.annotationList.get(1).regex).isNull();
         assertThat(plugin.magicString).isEqualTo("abcdef");
-        assertThat(plugin.config.className).isEqualTo(AbstractPluginTest.class);
+        assertThat(plugin.config.className).isEqualTo(OptionPluginTest.class);
         assertThat(plugin.config.index).isEqualTo(0);
         assertThat(plugin.isEnabled).isTrue();
     }
@@ -140,7 +140,7 @@ class AbstractPluginTest {
         var args = List.of(
             "-Xdefault-required",
             "-config",
-            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest"
+            "-class-name=io.github.rawvoid.jaxb.plugin.OptionPluginTest"
         ).toArray(new String[0]);
 
         var count = plugin.parseArgument(new Options(), args, 0);
@@ -151,7 +151,7 @@ class AbstractPluginTest {
         assertThat(plugin.tags).containsExactly("alpha");
 
         assertThat(plugin.config).isNotNull();
-        assertThat(plugin.config.className).isEqualTo(AbstractPluginTest.class);
+        assertThat(plugin.config.className).isEqualTo(OptionPluginTest.class);
 
         var usage = plugin.getUsage();
         assertThat(usage).contains("-Xdefault-required");
@@ -401,7 +401,7 @@ class AbstractPluginTest {
     }
 
     @Option(prefix = "-X", name = "multi-format", description = "Multi-template compact")
-    private static class MultiFormatPlugin extends AbstractPlugin {
+    private static class MultiFormatPlugin extends OptionPlugin {
 
         @Option(name = "map", description = "Mappings")
         List<Entry> maps;
@@ -424,7 +424,7 @@ class AbstractPluginTest {
     }
 
     @Option(prefix = "-X", name = "field-compact", description = "Field-level compact override")
-    private static class FieldCompactPlugin extends AbstractPlugin {
+    private static class FieldCompactPlugin extends OptionPlugin {
 
         @Option(name = "default-map", description = "Uses type-level compact")
         List<Pair> defaultMap;
@@ -507,7 +507,7 @@ class AbstractPluginTest {
             "-Xtest-plugin",
             "-int-list=1",
             "-config",
-            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest",
+            "-class-name=io.github.rawvoid.jaxb.plugin.OptionPluginTest",
             "-index=1",
             "-int-list=2",
             "-int-list=3"
@@ -532,7 +532,7 @@ class AbstractPluginTest {
             "-Xtest-plugin",
             "-int-list2=1,2",
             "-config",
-            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest",
+            "-class-name=io.github.rawvoid.jaxb.plugin.OptionPluginTest",
             "-index=0",
             "-int-list2=3,4",
             "-int-list=1"
@@ -558,7 +558,7 @@ class AbstractPluginTest {
             "-annotation=@jakarta.xml.bind.annotation.XmlRootElement",
             "-regex=b.*",
             "-config",
-            "-class-name=io.github.rawvoid.jaxb.plugin.AbstractPluginTest",
+            "-class-name=io.github.rawvoid.jaxb.plugin.OptionPluginTest",
             "-int-list=1"
         ).toArray(new String[0]);
 
@@ -574,7 +574,7 @@ class AbstractPluginTest {
     }
 
     @Option(prefix = "-X", name = "mapping", description = "Nested list mapping options")
-    private static class MappingPlugin extends AbstractPlugin {
+    private static class MappingPlugin extends OptionPlugin {
 
         @Option(name = "package-name", description = "Package name mappings")
         List<NameMappingConfig> packageNames;
@@ -599,7 +599,7 @@ class AbstractPluginTest {
     }
 
     @Option(prefix = "-X", name = "list-compact", description = "Compact with List placeholder")
-    private static class ListPlaceholderCompactPlugin extends AbstractPlugin {
+    private static class ListPlaceholderCompactPlugin extends OptionPlugin {
 
         @Option(name = "group", required = true, description = "Groups")
         List<GroupConfig> groups;
@@ -619,7 +619,7 @@ class AbstractPluginTest {
     }
 
     @Option(prefix = "-X", name = "three-field", description = "Three-field compact like package-mapping")
-    private static class ThreeFieldCompactPlugin extends AbstractPlugin {
+    private static class ThreeFieldCompactPlugin extends OptionPlugin {
 
         @Option(name = "map", description = "Namespace package mappings")
         List<NsPkgPrefix> maps;
@@ -641,7 +641,7 @@ class AbstractPluginTest {
     }
 
     @Option(prefix = "-X", name = "three-field-only", description = "Three-field compact without package-only fallback")
-    private static class ThreeFieldOnlyCompactPlugin extends AbstractPlugin {
+    private static class ThreeFieldOnlyCompactPlugin extends OptionPlugin {
 
         @Option(name = "map", description = "Namespace package mappings")
         List<Entry> maps;
@@ -663,7 +663,7 @@ class AbstractPluginTest {
     }
 
     @Option(prefix = "-X", name = "default-required", description = "Test defaults + required")
-    private static class DefaultAndRequiredPlugin extends AbstractPlugin {
+    private static class DefaultAndRequiredPlugin extends OptionPlugin {
 
         @Option(name = "name", description = "Name", defaultValue = "bob")
         String name;
@@ -693,7 +693,7 @@ class AbstractPluginTest {
         Just a test plugin
         JAXB plugin to test the abstract plugin
         """)
-    private static class TestPlugin extends AbstractPlugin {
+    private static class TestPlugin extends OptionPlugin {
 
         @Option(name = "int-list", description = "The list of integers", required = true)
         List<Integer> intList;

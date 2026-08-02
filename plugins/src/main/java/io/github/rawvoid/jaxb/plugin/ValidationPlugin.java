@@ -32,7 +32,7 @@ import com.sun.xml.xsom.XSElementDecl;
 import com.sun.xml.xsom.XSFacet;
 import com.sun.xml.xsom.XSParticle;
 import com.sun.xml.xsom.XSSimpleType;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import org.xml.sax.ErrorHandler;
@@ -60,7 +60,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xvalidation", description = "Add Bean Validation annotations (JSR-380) based on XSD schema constraints")
-public class ValidationPlugin extends AbstractPlugin {
+public class ValidationPlugin extends OptionPlugin {
 
     private static final String CXF_NOISE_PATTERN = "\\c+";
     private static final String JAKARTA_VALID = "jakarta.validation.Valid";

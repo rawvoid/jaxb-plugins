@@ -19,7 +19,7 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import org.slf4j.Logger;
@@ -39,7 +39,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xremove-unused-class", description = "Removes unreferenced JAXB classes and enums from the model in postProcessModel")
-public class RemoveUnusedClassPlugin extends AbstractPlugin {
+public class RemoveUnusedClassPlugin extends OptionPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RemoveUnusedClassPlugin.class);
 

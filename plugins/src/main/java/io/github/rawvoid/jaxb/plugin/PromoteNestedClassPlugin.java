@@ -22,7 +22,7 @@ import com.sun.tools.xjc.model.CClassInfoParent;
 import com.sun.tools.xjc.model.CEnumLeafInfo;
 import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import org.slf4j.Logger;
@@ -93,7 +93,7 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
  * @author Rawvoid
  */
 @Option(name = "Xpromote-nested-class", description = "Lift nested classes and enums toward package scope until a name conflict")
-public class PromoteNestedClassPlugin extends AbstractPlugin {
+public class PromoteNestedClassPlugin extends OptionPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(PromoteNestedClassPlugin.class);
 

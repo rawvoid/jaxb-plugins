@@ -17,7 +17,7 @@
 package io.github.rawvoid.jaxb.plugin;
 
 import io.github.rawvoid.jaxb.AbstractXJCMojoTestCase;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ class RemoveSetterPluginTest extends AbstractXJCMojoTestCase {
 
     private final String optionCmd = optionCommand(RemoveSetterPlugin.class);
 
-    private static String optionCommand(Class<? extends AbstractPlugin> pluginClass) {
+    private static String optionCommand(Class<? extends OptionPlugin> pluginClass) {
         var option = pluginClass.getAnnotation(Option.class);
         return option.prefix() + option.name();
     }

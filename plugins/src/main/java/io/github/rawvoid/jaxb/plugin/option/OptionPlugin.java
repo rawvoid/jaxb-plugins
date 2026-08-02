@@ -20,7 +20,6 @@ import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.Plugin;
 
-import java.io.IOException;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -49,7 +48,7 @@ import java.util.stream.Collectors;
  * <pre>
  * {@code
  * @Option(name = "myPlugin", description = "My custom plugin")
- * public class MyPlugin extends AbstractPlugin {
+ * public class MyPlugin extends OptionPlugin {
  *     @Option(name = "output", description = "Output directory")
  *     private String outputDir;
  *
@@ -61,7 +60,7 @@ import java.util.stream.Collectors;
  *
  * @author Rawvoid
  */
-public abstract class AbstractPlugin extends Plugin {
+public abstract class OptionPlugin extends Plugin {
 
     private static final Pattern COMPACT_PLACEHOLDER = Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_-]*)}");
 
@@ -69,12 +68,12 @@ public abstract class AbstractPlugin extends Plugin {
     private final Map<String, TextParser<?>> textParsersByOptionName = new HashMap<>();
 
     /**
-     * Constructs a new AbstractPlugin and initializes default text parsers.
+     * Constructs a new OptionPlugin and initializes default text parsers.
      *
      * <p>Automatically registers text parsers for all primitive types and common types,
      * and for nested types annotated with {@link Compact}.</p>
      */
-    public AbstractPlugin() {
+    public OptionPlugin() {
         registerDefaultTextParsers();
         registerCompactParsersFrom(getClass());
     }
@@ -243,10 +242,9 @@ public abstract class AbstractPlugin extends Plugin {
      * @param i    the current argument index
      * @return the number of arguments consumed
      * @throws BadCommandLineException if argument parsing fails
-     * @throws IOException             if an I/O error occurs
      */
     @Override
-    public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException, IOException {
+    public int parseArgument(Options opt, String[] args, int i) throws BadCommandLineException {
         var option = getClass().getAnnotation(Option.class);
         var fullOptionName = getFullOptionName(option);
         try {
@@ -539,7 +537,7 @@ public abstract class AbstractPlugin extends Plugin {
         if (existing != null) {
             target.addAll(existing);
         }
-        target.addAll((Collection<Object>) parsedCollection);
+        target.addAll(parsedCollection);
         setFieldValue(object, optionField, target);
     }
 

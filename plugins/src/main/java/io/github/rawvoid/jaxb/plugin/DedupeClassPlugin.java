@@ -38,7 +38,7 @@ import com.sun.tools.xjc.model.Model;
 import com.sun.tools.xjc.model.TypeUse;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XmlString;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
 import jakarta.activation.MimeType;
@@ -97,7 +97,7 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
  * @author Rawvoid
  */
 @Option(name = "Xdedupe-class", description = "Merge structurally redundant generated beans (exact / optional subset)")
-public class DedupeClassPlugin extends AbstractPlugin {
+public class DedupeClassPlugin extends OptionPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(DedupeClassPlugin.class);
 

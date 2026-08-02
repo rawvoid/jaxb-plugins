@@ -20,7 +20,7 @@ import com.sun.codemodel.JJavaName;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.slf4j.Logger;
@@ -55,7 +55,7 @@ import java.util.*;
  */
 @Option(name = "Xrename-multi-element-prop",
     description = "Rename multi-element properties to a short plural base (items, items2, …)")
-public class RenameMultiElementPropPlugin extends AbstractPlugin {
+public class RenameMultiElementPropPlugin extends OptionPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RenameMultiElementPropPlugin.class);
 

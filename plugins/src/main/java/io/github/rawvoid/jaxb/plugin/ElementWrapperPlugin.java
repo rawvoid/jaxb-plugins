@@ -23,7 +23,7 @@ import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.XSElementDecl;
 import com.sun.xml.xsom.XSParticle;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
@@ -80,7 +80,7 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.removeElementInfo;
  * @author Rawvoid
  */
 @Option(name = "Xelement-wrapper", description = "Flatten single-collection wrapper types into @XmlElementWrapper properties")
-public class ElementWrapperPlugin extends AbstractPlugin {
+public class ElementWrapperPlugin extends OptionPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(ElementWrapperPlugin.class);
     /**

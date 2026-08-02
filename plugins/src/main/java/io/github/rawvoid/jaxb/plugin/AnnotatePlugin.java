@@ -19,7 +19,7 @@ package io.github.rawvoid.jaxb.plugin;
 import com.sun.codemodel.JAnnotatable;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import org.jvnet.jaxb.annox.model.XAnnotation;
@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xannotate", description = "Add custom annotations to generated Java artifacts")
-public class AnnotatePlugin extends AbstractPlugin {
+public class AnnotatePlugin extends OptionPlugin {
 
     @Option(name = "add-to-class", description = "Add annotations to generated classes")
     List<AddConfig> addToClassConfigs;

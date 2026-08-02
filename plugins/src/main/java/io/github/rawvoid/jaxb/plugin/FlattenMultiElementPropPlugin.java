@@ -22,7 +22,7 @@ import com.sun.tools.xjc.model.CElementPropertyInfo.CollectionMode;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.tools.xjc.reader.xmlschema.bindinfo.BindInfo;
 import com.sun.xml.xsom.XSElementDecl;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
 import org.glassfish.jaxb.core.v2.model.core.ID;
@@ -65,7 +65,7 @@ import java.util.*;
  */
 @Option(name = "Xflatten-multi-element-prop",
     description = "Flatten multi-element properties into individual single-element fields")
-public class FlattenMultiElementPropPlugin extends AbstractPlugin {
+public class FlattenMultiElementPropPlugin extends OptionPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(FlattenMultiElementPropPlugin.class);
 

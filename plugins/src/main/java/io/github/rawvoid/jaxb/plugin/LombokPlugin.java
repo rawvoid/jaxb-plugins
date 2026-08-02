@@ -20,7 +20,7 @@ import com.sun.codemodel.*;
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import io.github.rawvoid.jaxb.plugin.lombok.LombokSingulars;
@@ -69,7 +69,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xlombok", description = "Add Lombok annotations to generated classes and optionally remove getters/setters")
-public class LombokPlugin extends AbstractPlugin {
+public class LombokPlugin extends OptionPlugin {
 
     /**
      * Fully-qualified names of Lombok annotations (distinct from CLI option fields like {@code builder}).

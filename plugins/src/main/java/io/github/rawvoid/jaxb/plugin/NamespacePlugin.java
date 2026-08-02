@@ -21,7 +21,7 @@ import com.sun.codemodel.JAnnotationUse;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
 import com.sun.tools.xjc.outline.PackageOutline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Compact;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
@@ -74,7 +74,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xnamespace", description = "Customize Java package names and XML namespace prefixes")
-public class NamespacePlugin extends AbstractPlugin {
+public class NamespacePlugin extends OptionPlugin {
 
     private static final String BINDINGS_SYSTEM_ID =
         "urn:io.github.rawvoid:jaxb-plugins:namespace-package-mapping";

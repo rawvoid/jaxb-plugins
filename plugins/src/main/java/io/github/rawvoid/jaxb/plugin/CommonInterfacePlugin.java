@@ -26,7 +26,7 @@ import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.FieldOutline;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Compact;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
@@ -94,7 +94,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xcommon-interface", description = "Generate interfaces from common property accessors and implement them on matching classes")
-public class CommonInterfacePlugin extends AbstractPlugin {
+public class CommonInterfacePlugin extends OptionPlugin {
 
     private static final String LOMBOK_DATA = "lombok.Data";
 

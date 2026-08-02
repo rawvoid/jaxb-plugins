@@ -20,7 +20,7 @@ import com.sun.codemodel.JJavaName;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.model.*;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Compact;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.ModelUtils;
@@ -93,7 +93,7 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ReflectUtils.setFieldValue;
  * @author Rawvoid
  */
 @Option(name = "Xrename-class", description = "Rename generated class names in postProcessModel")
-public class RenameClassPlugin extends AbstractPlugin {
+public class RenameClassPlugin extends OptionPlugin {
 
     private static final Logger log = LoggerFactory.getLogger(RenameClassPlugin.class);
 

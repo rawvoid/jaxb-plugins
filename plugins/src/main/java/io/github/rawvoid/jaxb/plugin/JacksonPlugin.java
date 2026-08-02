@@ -20,7 +20,7 @@ import com.sun.codemodel.JDefinedClass;
 import com.sun.tools.xjc.BadCommandLineException;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import org.jvnet.jaxb.annox.model.XAnnotation;
@@ -57,7 +57,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xjackson", description = "Add Jackson annotations to generated classes (default: JsonInclude NON_NULL + ignoreUnknown)")
-public class JacksonPlugin extends AbstractPlugin {
+public class JacksonPlugin extends OptionPlugin {
 
     private static final String INCLUDE_NONE = "none";
     private static final String JSON_INCLUDE = "com.fasterxml.jackson.annotation.JsonInclude";

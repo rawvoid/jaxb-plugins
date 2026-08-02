@@ -18,7 +18,7 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Compact;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.glassfish.jaxb.core.api.impl.NameConverter;
@@ -40,7 +40,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xconvert-name", description = "Customize naming conversion rules for generated code")
-public class ConvertNamePlugin extends AbstractPlugin {
+public class ConvertNamePlugin extends OptionPlugin {
 
     /**
      * Custom {@link NameConverter} implementation class.
