@@ -32,9 +32,14 @@ import java.util.regex.Pattern;
 /**
  * XJC plugin that removes unreferenced JAXB classes and enums from the {@link Model}
  * during {@link #postProcessModel(Model, ErrorHandler)}.
- *
- * <p>Uses a graph reachability analysis (Mark &amp; Sweep) starting from global XML root elements
- * and user-configured white-list patterns to identify and prune unreachable classes and enums.</p>
+ * <p>
+ * Uses a graph reachability analysis (Mark &amp; Sweep) starting from global XML root elements
+ * and user-configured white-list patterns to identify and prune unreachable classes and enums.
+ * </p>
+ * <p>
+ * Logging: the removed count is {@code INFO}; the class/enum name list is {@code DEBUG}.
+ * When nothing is removed, only a {@code DEBUG} line is emitted.
+ * </p>
  *
  * @author Rawvoid
  */
@@ -48,9 +53,6 @@ public class RemoveUnusedClassPlugin extends OptionPlugin {
 
     @Option(name = "preserve-polymorphism", defaultValue = "false", description = "Whether to treat subclasses of a reachable base class as reachable (default: false)")
     Boolean preservePolymorphism = false;
-
-    @Option(name = "verbose", defaultValue = "false", description = "Enable detailed logging of reachability and deleted classes (default: false)")
-    Boolean verbose = false;
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) {
@@ -86,30 +88,45 @@ public class RemoveUnusedClassPlugin extends OptionPlugin {
             .toList();
 
         if (deadClasses.isEmpty() && deadEnums.isEmpty()) {
-            if (Boolean.TRUE.equals(verbose)) {
-                log.info("[Xremove-unused-class] No unreferenced classes or enums found.");
-            }
+            log.debug("No unreferenced classes or enums found");
             return;
         }
 
         // 4. Remove dead classes
+        var removedClasses = new ArrayList<String>(deadClasses.size());
         for (var deadClass : deadClasses) {
             ModelUtils.removeClass(model, deadClass);
-            if (Boolean.TRUE.equals(verbose)) {
-                log.info("[Xremove-unused-class] Removed unreferenced class: {}", deadClass.fullName());
-            }
+            removedClasses.add(deadClass.fullName());
         }
 
         // 5. Remove dead enums
+        var removedEnums = new ArrayList<String>(deadEnums.size());
         for (var deadEnum : deadEnums) {
             ModelUtils.removeEnum(model, deadEnum);
-            if (Boolean.TRUE.equals(verbose)) {
-                log.info("[Xremove-unused-class] Removed unreferenced enum: {}", deadEnum.fullName());
-            }
+            removedEnums.add(deadEnum.fullName());
         }
 
         // 6. Clean up orphan CElementInfo objects pointing to dead classes/enums
         cleanOrphanElements(model, deadClasses, deadEnums);
+
+        log.info(
+            "Removed {} unreferenced type(s) ({} class(es), {} enum(s))",
+            removedClasses.size() + removedEnums.size(),
+            removedClasses.size(),
+            removedEnums.size()
+        );
+        if (!removedClasses.isEmpty()) {
+            log.debug(
+                "Removed unreferenced class(es):\n    {}",
+                String.join("\n    ", removedClasses)
+            );
+        }
+        if (!removedEnums.isEmpty()) {
+            log.debug(
+                "Removed unreferenced enum(s):\n    {}",
+                String.join("\n    ", removedEnums)
+            );
+        }
     }
 
     private void collectRoots(Model model, Set<CTypeInfo> roots, Queue<CTypeInfo> queue) {
