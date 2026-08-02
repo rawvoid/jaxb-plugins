@@ -45,7 +45,7 @@ Plugins are discovered via SPI (`META-INF/services/com.sun.tools.xjc.Plugin`). E
 | Plugin | Option | Doc |
 |--------|--------|-----|
 | AnnotatePlugin | `-Xannotate` | [annotate](annotate.md) |
-| GeneratedAnnoPlugin | `-Xgenerated-anno` | [generated-anno](generated-anno.md) |
+| GeneratedPlugin | `-Xgenerated` | [generated](generated.md) |
 | JacksonPlugin | `-Xjackson` | [jackson](jackson.md) |
 | ValidationPlugin | `-Xvalidation` | [validation](validation.md) |
 | JavaTimePlugin | `-Xjava-time` | [java-time](java-time.md) |

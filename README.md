@@ -74,7 +74,7 @@ Other XJC integrations (CXF `cxf-xjc-plugin`, CLI, Gradle, etc.) work the same w
 | `-Xdedupe-class` | Merge structurally redundant beans |
 | `-Xremove-unused-class` | Remove unreferenced classes and enums |
 | `-Xannotate` | Add/remove custom annotations |
-| `-Xgenerated-anno` | Add `@jakarta.annotation.Generated` |
+| `-Xgenerated` | Add `@jakarta.annotation.Generated` |
 | `-Xjackson` | Class-level Jackson defaults |
 | `-Xvalidation` | Bean Validation constraints from XSD |
 | `-Xjava-time` | Map XSD date/time types to `java.time` + adapters |

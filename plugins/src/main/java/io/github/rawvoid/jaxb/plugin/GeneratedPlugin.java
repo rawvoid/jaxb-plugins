@@ -49,14 +49,14 @@ import java.util.Queue;
  * </ul>
  * <p>
  * When combining with plugins that create classes during {@code run}
- * (for example {@code -Xjava-time}), pass {@code -Xgenerated-anno} after those
+ * (for example {@code -Xjava-time}), pass {@code -Xgenerated} after those
  * plugins so their adapters already exist when this plugin runs.
  * </p>
  *
  * @author Rawvoid
  */
-@Option(name = "Xgenerated-anno", description = "Add jakarta.annotation.Generated annotations to generated classes and packages")
-public class GeneratedAnnoPlugin extends OptionPlugin {
+@Option(name = "Xgenerated", description = "Add jakarta.annotation.Generated annotations to generated classes and packages")
+public class GeneratedPlugin extends OptionPlugin {
 
     private static final String GENERATED_ANNOTATION_FQCN = "jakarta.annotation.Generated";
 

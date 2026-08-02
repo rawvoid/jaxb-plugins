@@ -26,7 +26,7 @@ io.github.rawvoid.jaxb.plugin.LombokPlugin
 io.github.rawvoid.jaxb.plugin.RenameClassPlugin
 io.github.rawvoid.jaxb.plugin.RenameMultiElementPropPlugin
 io.github.rawvoid.jaxb.plugin.FlattenMultiElementPropPlugin
-io.github.rawvoid.jaxb.plugin.GeneratedAnnoPlugin
+io.github.rawvoid.jaxb.plugin.GeneratedPlugin
 io.github.rawvoid.jaxb.plugin.JacksonPlugin
 io.github.rawvoid.jaxb.plugin.ValidationPlugin
 io.github.rawvoid.jaxb.plugin.InheritancePlugin
