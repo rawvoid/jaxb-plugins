@@ -77,10 +77,10 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.removeElementInfo;
  * {@code @XmlElementWrapper(nillable = true)} and drops the synthetic local element info.
  * </p>
  * <p>
- * Logging: each flattened field is {@code DEBUG}; the flatten count and removed wrapper list
- * are {@code INFO}. Skipped wrapper removals and stale annotation owners (plugin-order
- * issues) are one multi-line {@code WARN} each. Per-field flatten failures stay single-line
- * {@code WARN}.
+ * Logging: each flattened field and the removed-wrapper name list are {@code DEBUG}; the
+ * flatten count and removed-wrapper count are {@code INFO}. Skipped wrapper removals and
+ * stale annotation owners (plugin-order issues) are one multi-line {@code WARN} each.
+ * Per-field flatten failures stay single-line {@code WARN}.
  * </p>
  *
  * @author Rawvoid
@@ -435,9 +435,9 @@ public class ElementWrapperPlugin extends OptionPlugin {
         }
 
         if (!removed.isEmpty()) {
-            log.info(
-                "Removed {} wrapper class(es):\n    {}",
-                removed.size(),
+            log.info("Removed {} wrapper class(es)", removed.size());
+            log.debug(
+                "Removed wrapper class(es):\n    {}",
                 String.join("\n    ", removed)
             );
         }
