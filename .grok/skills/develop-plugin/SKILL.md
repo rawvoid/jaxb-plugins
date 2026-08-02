@@ -1,11 +1,11 @@
 ---
 name: develop-plugin
 description: >
-  Guide for developing JAXB/XJC plugins in this repository: AbstractPlugin, @Option,
+  Guide for developing JAXB/XJC plugins in this repository: OptionPlugin, @Option,
   SPI registration, model/outline hooks, plugin.xjc / plugin.lombok helpers, and
   AbstractXJCMojoTestCase tests. Use when adding a new plugin, extending an existing
   one, wiring -X… options, or the user runs /develop-plugin. Triggers: new plugin,
-  XJC plugin, AbstractPlugin, @Option, SPI Plugin, postProcessModel, jaxb plugin.
+  XJC plugin, OptionPlugin, @Option, SPI Plugin, postProcessModel, jaxb plugin.
 ---
 
 # Develop JAXB / XJC Plugin
@@ -21,19 +21,19 @@ Actionable workflow for adding or changing plugins under `plugins/`. Prefer exis
 
 ## Layout (where things live)
 
-| Piece | Path / package |
-|-------|----------------|
-| SPI plugins | `plugins/src/main/java/io/github/rawvoid/jaxb/plugin/` (`*Plugin`) |
-| Option framework | `…/plugin/option/` — `AbstractPlugin`, `@Option`, `@Compact`, `TextParser` |
-| XJC host helpers | `…/plugin/xjc/` — `ModelUtils`, `OutlineUtils`, `AnnotationUtils`, `ReflectUtils`, `ClassNameDetector`, … |
-| Lombok bridge | `…/plugin/lombok/` — `LombokShadow`, `LombokAccessors`, `LombokSingulars` |
-| SPI | `plugins/src/main/resources/META-INF/services/com.sun.tools.xjc.Plugin` |
-| Plugin tests | `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/` |
-| Helper tests | mirror main: `…/plugin/xjc/`, `…/plugin/lombok/` |
-| Scratch experiments | `…/jaxb/scratch/` — `@Disabled` manual probes only; **not** regression tests |
-| Schemas | `plugins/src/test/resources/schema/` |
-| Test base | `plugins/src/test/java/io/github/rawvoid/jaxb/AbstractXJCMojoTestCase.java` |
-| User docs | `wiki/` (index: `wiki/README.md`); root `README.md` is a short overview |
+| Piece               | Path / package                                                                                            |
+|---------------------|-----------------------------------------------------------------------------------------------------------|
+| SPI plugins         | `plugins/src/main/java/io/github/rawvoid/jaxb/plugin/` (`*Plugin`)                                        |
+| Option framework    | `…/plugin/option/` — `OptionPlugin`, `@Option`, `@Compact`, `TextParser`                                  |
+| XJC host helpers    | `…/plugin/xjc/` — `ModelUtils`, `OutlineUtils`, `AnnotationUtils`, `ReflectUtils`, `ClassNameDetector`, … |
+| Lombok bridge       | `…/plugin/lombok/` — `LombokShadow`, `LombokAccessors`, `LombokSingulars`                                 |
+| SPI                 | `plugins/src/main/resources/META-INF/services/com.sun.tools.xjc.Plugin`                                   |
+| Plugin tests        | `plugins/src/test/java/io/github/rawvoid/jaxb/plugin/`                                                    |
+| Helper tests        | mirror main: `…/plugin/xjc/`, `…/plugin/lombok/`                                                          |
+| Scratch experiments | `…/jaxb/scratch/` — `@Disabled` manual probes only; **not** regression tests                              |
+| Schemas             | `plugins/src/test/resources/schema/`                                                                      |
+| Test base           | `plugins/src/test/java/io/github/rawvoid/jaxb/AbstractXJCMojoTestCase.java`                               |
+| User docs           | `wiki/` (index: `wiki/README.md`); root `README.md` is a short overview                                   |
 
 Dependency direction: `*Plugin` → `plugin.option` / `plugin.xjc` / `plugin.lombok`. Helpers must not depend on concrete plugins.
 
@@ -53,8 +53,8 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 
 ## Step 2 — Scaffold the plugin
 
-1. Package: `io.github.rawvoid.jaxb.plugin` (imports: `plugin.option.AbstractPlugin`, `plugin.option.Option`)
-2. Class name: `*Plugin extends AbstractPlugin`
+1. Package: `io.github.rawvoid.jaxb.plugin` (imports: `plugin.option.OptionPlugin`, `plugin.option.Option`)
+2. Class name: `*Plugin extends OptionPlugin`
 3. Class-level `@Option(name = "X…", description = "…")`
 
 - `name` has **no** leading `-` (default `prefix` is `-` → CLI is `-Xfoo`)
@@ -69,14 +69,14 @@ Use the **earliest correct** hook. Do not rewrite CodeModel for problems that be
 ```java
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.xml.sax.ErrorHandler;
 
 import java.util.regex.Pattern;
 
 @Option(name = "Xmy-feature", description = "Short user-facing description")
-public class MyFeaturePlugin extends AbstractPlugin {
+public class MyFeaturePlugin extends OptionPlugin {
 
   @Option(name = "regex", description = "Optional name filter")
   Pattern regex;
@@ -93,7 +93,7 @@ public class MyFeaturePlugin extends AbstractPlugin {
 
 Simplest real examples: `RemoveGetterPlugin`, `RemoveSetterPlugin`.
 
-### Options (`@Option` + `AbstractPlugin`)
+### Options (`@Option` + `OptionPlugin`)
 
 | Field type                                     | CLI shape                       | Notes                                                                                                       |
 |------------------------------------------------|---------------------------------|-------------------------------------------------------------------------------------------------------------|
@@ -113,14 +113,14 @@ Useful attributes: `required`, `defaultValue`, `description`, `placeholder`, `de
 
 Package `io.github.rawvoid.jaxb.plugin.xjc` (and `plugin.lombok` for Lombok naming):
 
-| Type | Use when |
-|------|----------|
-| `ModelUtils` | Model graph, property parents, remove class from model |
-| `OutlineUtils` | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext` |
-| `AnnotationUtils` | Query/add/remove CodeModel annotations, apply annox `XAnnotation`, type refs in annotation members |
-| `ClassNameDetector` | Detect FQCN as a standalone token in type/source text (incl. non-ASCII identifiers) |
-| `ReflectUtils` | Localized reflection helpers |
-| `LombokAccessors` / `LombokSingulars` | Match Lombok default accessor / `@Singular` naming (`plugin.lombok`) |
+| Type                                  | Use when                                                                                           |
+|---------------------------------------|----------------------------------------------------------------------------------------------------|
+| `ModelUtils`                          | Model graph, property parents, remove class from model                                             |
+| `OutlineUtils`                        | Fix refs after class removal, ObjectFactory, `JAXBDebug#createContext`                             |
+| `AnnotationUtils`                     | Query/add/remove CodeModel annotations, apply annox `XAnnotation`, type refs in annotation members |
+| `ClassNameDetector`                   | Detect FQCN as a standalone token in type/source text (incl. non-ASCII identifiers)                |
+| `ReflectUtils`                        | Localized reflection helpers                                                                       |
+| `LombokAccessors` / `LombokSingulars` | Match Lombok default accessor / `@Singular` naming (`plugin.lombok`)                               |
 
 Prefer public XJC / CodeModel APIs. If package-private fields force reflection, keep it localized (static `Field` constants like `PromoteNestedClassPlugin` or `plugin.xjc`).
 
@@ -184,29 +184,29 @@ Reference: `PromoteNestedClassPluginTest`, `AnnotatePluginTest`, `LombokPluginTe
 
 Canonical lists: SPI file above and **[wiki/README.md](../../../wiki/README.md)** (user-facing index + inter-plugin notes). Keep this table aligned when adding a plugin.
 
-| Class | Option | Role |
-|-------|--------|------|
-| `RemoveGetterPlugin` | `-Xremove-getter` | Remove generated getters |
-| `RemoveSetterPlugin` | `-Xremove-setter` | Remove generated setters |
-| `LombokPlugin` | `-Xlombok` | Lombok annotations; optional accessor removal / builders |
-| `ConvertNamePlugin` | `-Xconvert-name` | Custom `NameConverter` in `postParseArgument` |
-| `RenameClassPlugin` | `-Xrename-class` | Rename class/enum/element types in the model |
-| `RenameMultiElementPropPlugin` | `-Xrename-multi-element-prop` | Rename multi-element properties (`items`, `items2`, …) |
-| `PromoteNestedClassPlugin` | `-Xpromote-nested-class` | Lift nested beans/enums toward package scope |
-| `ElementWrapperPlugin` | `-Xelement-wrapper` | Flatten pure collection shells + `@XmlElementWrapper` |
-| `FlattenMultiElementPropPlugin` | `-Xflatten-multi-element-prop` | Split multi-element properties into single fields |
-| `DedupeClassPlugin` | `-Xdedupe-class` | Merge structurally redundant beans |
-| `RemoveUnusedClassPlugin` | `-Xremove-unused-class` | Remove unreferenced classes and enums |
-| `AnnotatePlugin` | `-Xannotate` | Add/remove custom annotations (nested configs + `TextParser`) |
-| `GeneratedAnnoPlugin` | `-Xgenerated-anno` | Add `@jakarta.annotation.Generated` |
-| `JacksonPlugin` | `-Xjackson` | Class-level Jackson defaults + `-anno` |
-| `ValidationPlugin` | `-Xvalidation` | Bean Validation constraints from XSD |
-| `JavaTimePlugin` | `-Xjava-time` | Map XSD date/time to `java.time` + adapters |
-| `NamespacePlugin` | `-Xnamespace` | Namespace → package mappings and `@XmlSchema` prefixes |
-| `InheritancePlugin` | `-Xinheritance` | Inject `implements` / `extends` / `Serializable` |
-| `CommonInterfacePlugin` | `-Xcommon-interface` | Generate shared interfaces from common properties |
+| Class                           | Option                         | Role                                                          |
+|---------------------------------|--------------------------------|---------------------------------------------------------------|
+| `RemoveGetterPlugin`            | `-Xremove-getter`              | Remove generated getters                                      |
+| `RemoveSetterPlugin`            | `-Xremove-setter`              | Remove generated setters                                      |
+| `LombokPlugin`                  | `-Xlombok`                     | Lombok annotations; optional accessor removal / builders      |
+| `ConvertNamePlugin`             | `-Xconvert-name`               | Custom `NameConverter` in `postParseArgument`                 |
+| `RenameClassPlugin`             | `-Xrename-class`               | Rename class/enum/element types in the model                  |
+| `RenameMultiElementPropPlugin`  | `-Xrename-multi-element-prop`  | Rename multi-element properties (`items`, `items2`, …)        |
+| `PromoteNestedClassPlugin`      | `-Xpromote-nested-class`       | Lift nested beans/enums toward package scope                  |
+| `ElementWrapperPlugin`          | `-Xelement-wrapper`            | Flatten pure collection shells + `@XmlElementWrapper`         |
+| `FlattenMultiElementPropPlugin` | `-Xflatten-multi-element-prop` | Split multi-element properties into single fields             |
+| `DedupeClassPlugin`             | `-Xdedupe-class`               | Merge structurally redundant beans                            |
+| `RemoveUnusedClassPlugin`       | `-Xremove-unused-class`        | Remove unreferenced classes and enums                         |
+| `AnnotatePlugin`                | `-Xannotate`                   | Add/remove custom annotations (nested configs + `TextParser`) |
+| `GeneratedAnnoPlugin`           | `-Xgenerated-anno`             | Add `@jakarta.annotation.Generated`                           |
+| `JacksonPlugin`                 | `-Xjackson`                    | Class-level Jackson defaults + `-anno`                        |
+| `ValidationPlugin`              | `-Xvalidation`                 | Bean Validation constraints from XSD                          |
+| `JavaTimePlugin`                | `-Xjava-time`                  | Map XSD date/time to `java.time` + adapters                   |
+| `NamespacePlugin`               | `-Xnamespace`                  | Namespace → package mappings and `@XmlSchema` prefixes        |
+| `InheritancePlugin`             | `-Xinheritance`                | Inject `implements` / `extends` / `Serializable`              |
+| `CommonInterfacePlugin`         | `-Xcommon-interface`           | Generate shared interfaces from common properties             |
 
-Framework types (`plugin.option`): `AbstractPlugin`, `Option`, `Compact`, `TextParser`.
+Framework types (`plugin.option`): `OptionPlugin`, `Option`, `Compact`, `TextParser`.
 
 ## Workflow for the agent
 

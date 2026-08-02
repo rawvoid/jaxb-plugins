@@ -23,7 +23,7 @@ import com.sun.codemodel.JMod;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.ClassOutline;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Compact;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import org.xml.sax.ErrorHandler;
@@ -68,7 +68,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xinheritance", description = "Inject interfaces (implements) and superclasses (extends) into generated JAXB classes")
-public class InheritancePlugin extends AbstractPlugin {
+public class InheritancePlugin extends OptionPlugin {
 
     private static final String OBJECT_FQCN = "java.lang.Object";
 

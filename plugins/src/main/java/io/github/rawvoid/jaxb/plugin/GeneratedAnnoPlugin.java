@@ -21,7 +21,7 @@ import com.sun.codemodel.JClass;
 import com.sun.codemodel.JDefinedClass;
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import org.xml.sax.ErrorHandler;
@@ -56,7 +56,7 @@ import java.util.Queue;
  * @author Rawvoid
  */
 @Option(name = "Xgenerated-anno", description = "Add jakarta.annotation.Generated annotations to generated classes and packages")
-public class GeneratedAnnoPlugin extends AbstractPlugin {
+public class GeneratedAnnoPlugin extends OptionPlugin {
 
     private static final String GENERATED_ANNOTATION_FQCN = "jakarta.annotation.Generated";
 

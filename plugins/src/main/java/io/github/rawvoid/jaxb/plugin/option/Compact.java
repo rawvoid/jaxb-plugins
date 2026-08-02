@@ -26,7 +26,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /**
  * Declares compact single-text encoding(s) for a nested option type (or a specific list field).
  * <p>
- * When present, {@link AbstractPlugin} registers a {@link TextParser} so options can accept
+ * When present, {@link OptionPlugin} registers a {@link TextParser} so options can accept
  * {@code -option=value} form. Placeholders refer to nested {@link Option#name()} values.
  * Templates are tried <strong>in declaration order</strong>; put more specific patterns first.
  * </p>

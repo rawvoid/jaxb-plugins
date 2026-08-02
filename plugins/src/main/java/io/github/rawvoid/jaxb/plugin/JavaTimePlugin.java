@@ -23,7 +23,7 @@ import com.sun.tools.xjc.model.CElementPropertyInfo;
 import com.sun.tools.xjc.model.CPropertyInfo;
 import com.sun.tools.xjc.model.CValuePropertyInfo;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.AnnotationUtils;
 import jakarta.xml.bind.annotation.adapters.XmlAdapter;
@@ -53,7 +53,7 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 @Option(name = "Xjava-time", description = "Enable java.time date/time API support in generated JAXB classes")
-public class JavaTimePlugin extends AbstractPlugin {
+public class JavaTimePlugin extends OptionPlugin {
 
     @Option(name = "adapter-package",
         description = "Package name for auto-generated XmlAdapter classes (default: derived from common package of generated classes)")

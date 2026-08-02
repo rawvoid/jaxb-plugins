@@ -18,7 +18,7 @@ package io.github.rawvoid.jaxb.plugin;
 
 import com.sun.tools.xjc.Options;
 import com.sun.tools.xjc.outline.Outline;
-import io.github.rawvoid.jaxb.plugin.option.AbstractPlugin;
+import io.github.rawvoid.jaxb.plugin.option.OptionPlugin;
 import io.github.rawvoid.jaxb.plugin.option.Option;
 import io.github.rawvoid.jaxb.plugin.xjc.OutlineUtils;
 import org.xml.sax.ErrorHandler;
@@ -33,7 +33,7 @@ import org.xml.sax.ErrorHandler;
  * @author Rawvoid
  */
 @Option(name = "Xremove-setter", description = "Remove generated setter methods for fields")
-public class RemoveSetterPlugin extends AbstractPlugin {
+public class RemoveSetterPlugin extends OptionPlugin {
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {
