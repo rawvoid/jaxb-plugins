@@ -416,7 +416,7 @@ public class ElementWrapperPlugin extends OptionPlugin {
             log.info("Removed wrapper classes:\n    {}", String.join("\n    ", removed));
         }
         if (!kept.isEmpty()) {
-            log.info("Skipped removing wrapper classes:\n    {}", String.join("\n    ", kept));
+            log.warn("Skipped removing wrapper classes:\n    {}", String.join("\n    ", kept));
         }
     }
 
