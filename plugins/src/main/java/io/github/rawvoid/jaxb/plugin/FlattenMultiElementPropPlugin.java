@@ -60,6 +60,10 @@ import java.util.*;
  * <strong>Mutual exclusion:</strong> do not enable this plugin together with
  * {@link RenameMultiElementPropPlugin} — one renames while the other splits.
  * </p>
+ * <p>
+ * Logging: each successful split is {@code DEBUG}; the property count is {@code INFO}.
+ * Failed {@code addProperty} / empty replacement cases are single-line {@code WARN}.
+ * </p>
  *
  * @author Rawvoid
  */
@@ -112,7 +116,7 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
             flattened += handleClass(bean);
         }
         if (flattened > 0) {
-            log.info("Flattened {} multi-element property(ies) into individual fields", flattened);
+            log.info("Flattened {} multi-element property(ies)", flattened);
         }
     }
 
@@ -137,12 +141,19 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
                 continue;
             }
 
+            var originalName = prop.getName(false);
             // Replace the original property at position i with all the new ones.
             if (replaceProperty(bean, i, prop, replacements)) {
                 // After replacement, i now points at the first new property.
                 // Advance past all inserted properties so the loop continues correctly.
                 i += replacements.size() - 1;
                 count++;
+                log.debug(
+                    "Flattened {}.{} → {}",
+                    bean.fullName(),
+                    originalName,
+                    replacements.stream().map(r -> r.getName(false)).toList()
+                );
             }
         }
         return count;
@@ -375,14 +386,20 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
             if (properties.size() == sizeBefore + added + 1) {
                 added++;
             } else {
-                log.warn("Skip adding {}.{}: addProperty did not append",
-                    owner.fullName(), replacement.getName(false));
+                log.warn(
+                    "Skip adding {}.{}: addProperty did not append",
+                    owner.fullName(),
+                    replacement.getName(false)
+                );
             }
         }
 
         if (added == 0) {
-            log.warn("Skip flattening {}.{}: no replacements were added",
-                owner.fullName(), original.getName(false));
+            log.warn(
+                "Skip flattening {}.{}: no replacements were added",
+                owner.fullName(),
+                original.getName(false)
+            );
             return false;
         }
 
