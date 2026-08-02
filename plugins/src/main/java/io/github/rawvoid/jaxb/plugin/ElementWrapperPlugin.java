@@ -76,6 +76,12 @@ import static io.github.rawvoid.jaxb.plugin.xjc.ModelUtils.removeElementInfo;
  * rewrites that shape into a repeated element list with
  * {@code @XmlElementWrapper(nillable = true)} and drops the synthetic local element info.
  * </p>
+ * <p>
+ * Logging: each flattened field is {@code DEBUG}; the flatten count and removed wrapper list
+ * are {@code INFO}. Skipped wrapper removals and stale annotation owners (plugin-order
+ * issues) are one multi-line {@code WARN} each. Per-field flatten failures stay single-line
+ * {@code WARN}.
+ * </p>
  *
  * @author Rawvoid
  */
@@ -136,21 +142,24 @@ public class ElementWrapperPlugin extends OptionPlugin {
 
     @Override
     public boolean run(Outline outline, Options opt, ErrorHandler errorHandler) throws SAXException {
+        var skipped = new ArrayList<String>();
         for (var flattened : flattenedFields) {
             // Never use Outline#getClazz to test liveness: it lazily creates ClassOutline for
             // beans already removed from the model and desynchronizes beans vs classes.
             if (!outline.getModel().beans().containsValue(flattened.owner())) {
                 // Stale after a later merge (e.g. dedupe): the class is not generated. Isomorphic
                 // hosts already have their own FlattenedField from this plugin's model pass.
-                log.info(
-                    "Skipping @XmlElementWrapper for removed flatten owner '{}' property '{}' "
-                        + "(prefer -Xelement-wrapper after other model-mutating plugins)",
-                    flattened.owner().fullName(),
-                    flattened.propertyName()
-                );
+                skipped.add("%s.%s".formatted(flattened.owner().fullName(), flattened.propertyName()));
                 continue;
             }
             annotateXmlElementWrapper(outline, flattened);
+        }
+        if (!skipped.isEmpty()) {
+            log.warn(
+                "Skipped {} @XmlElementWrapper annotation(s); owner removed (prefer -Xelement-wrapper after other model-mutating plugins):\n    {}",
+                skipped.size(),
+                String.join("\n    ", skipped)
+            );
         }
         return true;
     }
@@ -205,12 +214,19 @@ public class ElementWrapperPlugin extends OptionPlugin {
 
             if (resolved.orphanElementInfo() != null
                 && !removeElementInfo(model, resolved.orphanElementInfo())) {
-                log.warn("Could not remove synthetic element info for {}.{}",
-                    owner.fullName(), outer.getName(false));
+                log.warn(
+                    "Could not remove synthetic element info for {}.{}",
+                    owner.fullName(),
+                    outer.getName(false)
+                );
             }
 
-            log.debug("Flattened {}.{} (wrapper {})",
-                owner.fullName(), outer.getName(false), resolved.wrapper().fullName());
+            log.debug(
+                "Flattened {}.{} → {}",
+                owner.fullName(),
+                outer.getName(false),
+                resolved.wrapper().fullName()
+            );
         }
     }
 
@@ -367,8 +383,11 @@ public class ElementWrapperPlugin extends OptionPlugin {
         CElementPropertyInfo replacement
     ) {
         if (replacement.ref().isEmpty()) {
-            log.warn("Skip flattening {}.{}: replacement has no type refs",
-                owner.fullName(), outer.getName(false));
+            log.warn(
+                "Skip flattening {}.{}: replacement has no type refs",
+                owner.fullName(),
+                outer.getName(false)
+            );
             return false;
         }
 
@@ -378,8 +397,11 @@ public class ElementWrapperPlugin extends OptionPlugin {
         owner.addProperty(replacement);
         if (properties.size() != sizeBefore + 1 || properties.getLast() != replacement) {
             // addProperty no-op'd — model unchanged.
-            log.warn("Skip flattening {}.{}: addProperty did not append the replacement",
-                owner.fullName(), outer.getName(false));
+            log.warn(
+                "Skip flattening {}.{}: addProperty did not append the replacement",
+                owner.fullName(),
+                outer.getName(false)
+            );
             return false;
         }
 
@@ -402,21 +424,29 @@ public class ElementWrapperPlugin extends OptionPlugin {
                 continue;
             }
             if (isReferenced(model, wrapper)) {
-                kept.add(wrapper.fullName());
+                kept.add("%s (still referenced)".formatted(wrapper.fullName()));
                 continue;
             }
             if (removeClass(model, wrapper)) {
                 removed.add(wrapper.fullName());
             } else {
-                kept.add(wrapper.fullName());
+                kept.add("%s (removeClass failed)".formatted(wrapper.fullName()));
             }
         }
 
         if (!removed.isEmpty()) {
-            log.info("Removed wrapper classes:\n    {}", String.join("\n    ", removed));
+            log.info(
+                "Removed {} wrapper class(es):\n    {}",
+                removed.size(),
+                String.join("\n    ", removed)
+            );
         }
         if (!kept.isEmpty()) {
-            log.warn("Skipped removing wrapper classes:\n    {}", String.join("\n    ", kept));
+            log.warn(
+                "Skipped removing {} wrapper class(es):\n    {}",
+                kept.size(),
+                String.join("\n    ", kept)
+            );
         }
     }
 
@@ -467,8 +497,11 @@ public class ElementWrapperPlugin extends OptionPlugin {
         var classOutline = outline.getClazz(flattened.owner());
         var field = classOutline.implClass.fields().get(flattened.propertyName());
         if (field == null) {
-            log.warn("Could not find field {} on {}",
-                flattened.propertyName(), flattened.owner().fullName());
+            log.warn(
+                "Could not find field {} on {}",
+                flattened.propertyName(),
+                flattened.owner().fullName()
+            );
             return;
         }
 
