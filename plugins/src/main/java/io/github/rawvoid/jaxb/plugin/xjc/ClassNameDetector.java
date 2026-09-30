@@ -16,6 +16,7 @@
 
 package io.github.rawvoid.jaxb.plugin.xjc;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -25,6 +26,8 @@ import java.util.regex.Pattern;
  * @author Rawvoid
  */
 public final class ClassNameDetector {
+
+    private static final ConcurrentHashMap<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
     private ClassNameDetector() {
     }
@@ -40,9 +43,18 @@ public final class ClassNameDetector {
         if (text == null || fullClassName == null || fullClassName.isEmpty()) {
             return false;
         }
+        if (text.equals(fullClassName)) {
+            return true;
+        }
+        if (!text.contains(fullClassName)) {
+            return false;
+        }
 
-        var escaped = Pattern.quote(fullClassName);
-        var regex = "(?<![\\p{javaJavaIdentifierPart}.])" + escaped + "(?![\\p{javaJavaIdentifierPart}.])";
-        return Pattern.compile(regex).matcher(text).find();
+        var pattern = PATTERN_CACHE.computeIfAbsent(fullClassName, fqcn -> {
+            var escaped = Pattern.quote(fqcn);
+            var regex = "(?<![\\p{javaJavaIdentifierPart}.])" + escaped + "(?![\\p{javaJavaIdentifierPart}.])";
+            return Pattern.compile(regex);
+        });
+        return pattern.matcher(text).find();
     }
 }

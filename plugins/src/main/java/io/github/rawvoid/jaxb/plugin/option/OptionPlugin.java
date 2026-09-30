@@ -484,11 +484,12 @@ public abstract class OptionPlugin extends Plugin {
             if (arg.equals(fullOptionName)) {
                 return new OptionMatch(field, option, null);
             }
-            var pattern = Pattern.compile(
-                "^" + Pattern.quote(fullOptionName) + "\\s*" + Pattern.quote(option.delimiter()) + "(.*)");
-            var matcher = pattern.matcher(arg);
-            if (matcher.matches()) {
-                return new OptionMatch(field, option, matcher.group(1));
+            if (arg.startsWith(fullOptionName)) {
+                var remainder = arg.substring(fullOptionName.length()).stripLeading();
+                var delimiter = option.delimiter();
+                if (remainder.startsWith(delimiter)) {
+                    return new OptionMatch(field, option, remainder.substring(delimiter.length()));
+                }
             }
         }
         return null;
