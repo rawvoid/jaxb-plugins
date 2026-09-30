@@ -80,11 +80,11 @@ public class InheritancePlugin extends OptionPlugin {
 
     @Option(name = "serializable", defaultValue = "false",
         description = "Add implements java.io.Serializable and serialVersionUID when missing")
-    Boolean serializable;
+    Boolean serializable = false;
 
     @Option(name = "serial-version-uid", defaultValue = "1",
         description = "serialVersionUID value used when -serializable is true (default: 1)")
-    Long serialVersionUid;
+    Long serialVersionUid = 1L;
 
     @Compact(formats = {"/{name}/->{to}", "{name}->{to}"})
     public static class InheritanceConfig {

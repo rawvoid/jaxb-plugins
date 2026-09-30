@@ -74,7 +74,7 @@ public class ValidationPlugin extends OptionPlugin {
 
     @Option(name = "disable-valid", defaultValue = "false",
         description = "Disable automatic @Valid annotation on complex or collection properties")
-    Boolean disableValid;
+    Boolean disableValid = false;
 
     private String constraintPkg;
     private String validFqcn;

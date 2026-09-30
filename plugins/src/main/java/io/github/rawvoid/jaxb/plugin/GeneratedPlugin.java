@@ -67,7 +67,7 @@ public class GeneratedPlugin extends OptionPlugin {
     String comments;
 
     @Option(name = "date", defaultValue = "false", description = "Include generation date in @Generated annotation (default: false)")
-    Boolean date;
+    Boolean date = false;
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) {

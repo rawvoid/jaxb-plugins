@@ -115,15 +115,15 @@ public class DedupeClassPlugin extends OptionPlugin {
 
     @Option(name = "merge-subset", defaultValue = "false",
         description = "Merge subset beans into superset hosts (default: false)")
-    Boolean mergeSubset;
+    Boolean mergeSubset = false;
 
     @Option(name = "anonymous-only", defaultValue = "true",
         description = "Only delete anonymous beans; named types may still be hosts (default: true)")
-    Boolean anonymousOnly;
+    Boolean anonymousOnly = true;
 
     @Option(name = "dry-run", defaultValue = "false",
         description = "Log planned merges without changing the model (default: false)")
-    Boolean dryRun;
+    Boolean dryRun = false;
 
     /**
      * {@code null} = auto (on when {@link ElementWrapperPlugin} is active), {@code true}/{@code false} force.

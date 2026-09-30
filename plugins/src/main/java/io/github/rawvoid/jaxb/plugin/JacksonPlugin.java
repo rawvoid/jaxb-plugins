@@ -80,11 +80,11 @@ public class JacksonPlugin extends OptionPlugin {
 
     @Option(name = "include", defaultValue = "NON_NULL",
         description = "JsonInclude.Include value, or 'none' to skip @JsonInclude (default: NON_NULL)")
-    String include;
+    String include = "NON_NULL";
 
     @Option(name = "ignore-unknown", defaultValue = "true",
         description = "Add @JsonIgnoreProperties(ignoreUnknown = true) when true (default: true)")
-    Boolean ignoreUnknown;
+    Boolean ignoreUnknown = true;
 
     @Option(name = "class-name", description = "Regex to match fully-qualified class names")
     List<Pattern> classNames;

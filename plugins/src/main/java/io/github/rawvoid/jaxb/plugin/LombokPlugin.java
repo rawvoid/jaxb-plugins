@@ -90,23 +90,23 @@ public class LombokPlugin extends OptionPlugin {
 
     @Option(name = "remove-getter", defaultValue = "true",
         description = "Remove generated getter methods (default: true)")
-    Boolean removeGetter;
+    Boolean removeGetter = true;
 
     @Option(name = "keep-list-getter", defaultValue = "false",
         description = "When removing getters, keep XJC getters for List/collection properties (lazy-init live list)")
-    Boolean keepListGetter;
+    Boolean keepListGetter = false;
 
     @Option(name = "remove-setter", defaultValue = "true",
         description = "Remove generated setter methods (default: true)")
-    Boolean removeSetter;
+    Boolean removeSetter = true;
 
     @Option(name = "builder", defaultValue = "false",
         description = "Smart builders: @Builder or @SuperBuilder by inheritance; @Singular on collections (exclusive with -super-builder)")
-    Boolean builder;
+    Boolean builder = false;
 
     @Option(name = "super-builder", defaultValue = "false",
         description = "Add @SuperBuilder(toBuilder=true) on every matched class; @Singular on collections (exclusive with -builder)")
-    Boolean superBuilder;
+    Boolean superBuilder = false;
 
     public LombokPlugin() {
         registerTextParser(XAnnotation.class, AnnotationUtils.xAnnotationTextParser());
