@@ -236,18 +236,14 @@ public final class ModelUtils {
     }
 
     /**
-     * Removes a class from the model and unlinks it from its base class hierarchy.
+     * Removes a class from the model and unlinks its inheritance hierarchy.
      * <p>
-     * <strong>Warning:</strong> This method will re-parent all direct subclasses to the base class
-     * of the class being removed. If the class has no base class, subclasses will become root classes.
-     * <p>
-     * Before removal, this method checks for external references to the class. If any external
-     * references exist (from properties, nested classes, element declarations, etc.), an exception
-     * is thrown to prevent leaving dangling references in the model.
+     * Unlinks the class from its base class (if present) and unlinks any direct subclasses.
+     * </p>
      *
      * @param model     the JAXB model containing the class
      * @param classInfo the class to be removed from the model
-     * @throws IllegalStateException if external references exist or the unlink operation fails
+     * @return {@code true} if the class was present in the model and removed
      */
     public static boolean removeClass(Model model, CClassInfo classInfo) {
         // Get the base class (parent in inheritance hierarchy)

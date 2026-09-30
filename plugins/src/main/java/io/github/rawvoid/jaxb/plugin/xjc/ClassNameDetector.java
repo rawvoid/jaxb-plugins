@@ -24,7 +24,10 @@ import java.util.regex.Pattern;
  *
  * @author Rawvoid
  */
-public class ClassNameDetector {
+public final class ClassNameDetector {
+
+    private ClassNameDetector() {
+    }
 
     /**
      * Checks if the given text contains the specified fully qualified class name as a standalone token.

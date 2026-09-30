@@ -24,7 +24,10 @@ import java.lang.reflect.Method;
 /**
  * @author Rawvoid
  */
-public class ReflectUtils {
+public final class ReflectUtils {
+
+    private ReflectUtils() {
+    }
 
     public static Field getField(Class<?> type, String name) {
         try {
@@ -45,6 +48,7 @@ public class ReflectUtils {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static <T> T getFieldValue(Field field, Object instance) {
         try {
             return (T) field.get(instance);
@@ -80,6 +84,7 @@ public class ReflectUtils {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static <T> T invokeMethod(Method method, Object instance, Object... args) {
         try {
             return (T) method.invoke(instance, args);
@@ -107,6 +112,7 @@ public class ReflectUtils {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static <T> T newInstance(Constructor<?> constructor, Object... args) {
         try {
             return (T) constructor.newInstance(args);
