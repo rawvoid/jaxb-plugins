@@ -128,11 +128,15 @@ public class AnnotatePlugin extends OptionPlugin {
      * @param configs    the list of configuration objects
      */
     public void addAnnotation(JAnnotatable target, String targetName, List<AddConfig> configs) {
+        if (configs == null || configs.isEmpty()) {
+            return;
+        }
         var matchedConfigs = configs.stream()
             .filter(config -> config.targets == null || config.targets.isEmpty() || config.targets.stream()
                 .anyMatch(targetPattern -> targetPattern.matcher(targetName).matches()))
             .toList();
         matchedConfigs.stream()
+            .filter(config -> config.xAnnotations != null)
             .flatMap(config -> config.xAnnotations.stream())
             .forEach(xAnnotation -> AnnotationUtils.applyXAnnotation(target, xAnnotation));
     }
@@ -145,13 +149,19 @@ public class AnnotatePlugin extends OptionPlugin {
      * @param configs    the list of configuration objects
      */
     public void removeAnnotation(JAnnotatable target, String targetName, List<RemoveConfig> configs) {
+        if (configs == null || configs.isEmpty()) {
+            return;
+        }
         var matchedConfigs = configs.stream()
             .filter(config -> config.targets == null || config.targets.isEmpty() || config.targets.stream()
                 .anyMatch(targetPattern -> targetPattern.matcher(targetName).matches()))
             .toList();
 
-        matchedConfigs.forEach(config -> config.annotations.forEach(annoClass ->
-            AnnotationUtils.removeAnnotations(target, annoClass)));
+        matchedConfigs.forEach(config -> {
+            if (config.annotations != null) {
+                config.annotations.forEach(annoClass -> AnnotationUtils.removeAnnotations(target, annoClass));
+            }
+        });
     }
 
     /**

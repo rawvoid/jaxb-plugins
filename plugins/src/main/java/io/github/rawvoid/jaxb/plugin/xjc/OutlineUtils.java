@@ -22,7 +22,6 @@ import com.sun.tools.xjc.outline.Outline;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.StringJoiner;
@@ -427,6 +426,7 @@ public final class OutlineUtils {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static JType newJNarrowedClass(JType currentType, JDefinedClass targetType, JDefinedClass newTargetType) {
         var clazz = currentType.getClass();
         if (!clazz.getSimpleName().equals("JNarrowedClass")) {
@@ -437,22 +437,29 @@ public final class OutlineUtils {
             var basisField = clazz.getDeclaredField("basis");
             basisField.setAccessible(true);
             var basis = (JClass) basisField.get(currentType);
+            var newBasis = basis == targetType ? newTargetType : basis;
 
             var argsField = clazz.getDeclaredField("args");
             argsField.setAccessible(true);
             var args = (List<JClass>) argsField.get(currentType);
 
-            args = new ArrayList<>(args);
-            args.replaceAll(arg -> arg == targetType ? newTargetType : arg);
-
+            var newArgs = new ArrayList<JClass>(args.size());
+            for (var arg : args) {
+                if (arg == targetType) {
+                    newArgs.add(newTargetType);
+                } else if (arg != null && arg.getClass().getSimpleName().equals("JNarrowedClass")) {
+                    newArgs.add((JClass) newJNarrowedClass(arg, targetType, newTargetType));
+                } else {
+                    newArgs.add(arg);
+                }
+            }
 
             var constructor = clazz.getDeclaredConstructor(JClass.class, List.class);
             constructor.setAccessible(true);
 
-            return constructor.newInstance(basis, args);
-        } catch (NoSuchFieldException | IllegalAccessException | NoSuchMethodException | InstantiationException |
-                 InvocationTargetException e) {
-            throw new RuntimeException(e);
+            return constructor.newInstance(newBasis, newArgs);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to instantiate narrowed class for " + currentType.fullName(), e);
         }
     }
 
