@@ -111,6 +111,14 @@ public class FlattenMultiElementPropPlugin extends OptionPlugin {
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
+        if (model.options != null && model.options.activePlugins != null) {
+            for (var plugin : model.options.activePlugins) {
+                if (plugin instanceof RenameMultiElementPropPlugin) {
+                    log.warn("Both -Xflatten-multi-element-prop and -Xrename-multi-element-prop are enabled; this combination may lead to unexpected behavior.");
+                    break;
+                }
+            }
+        }
         var flattened = 0;
         for (var bean : model.beans().values()) {
             flattened += handleClass(bean);

@@ -94,6 +94,14 @@ public class RenameMultiElementPropPlugin extends OptionPlugin {
 
     @Override
     public void postProcessModel(Model model, ErrorHandler errorHandler) {
+        if (model.options != null && model.options.activePlugins != null) {
+            for (var plugin : model.options.activePlugins) {
+                if (plugin instanceof FlattenMultiElementPropPlugin) {
+                    log.warn("Both -Xrename-multi-element-prop and -Xflatten-multi-element-prop are enabled; this combination may lead to unexpected behavior.");
+                    break;
+                }
+            }
+        }
         if (name == null || name.isBlank() || !isValidBaseName(name)) {
             if (name != null && !name.isBlank()) {
                 log.warn("Invalid -name '{}'; falling back to 'items'", name);
