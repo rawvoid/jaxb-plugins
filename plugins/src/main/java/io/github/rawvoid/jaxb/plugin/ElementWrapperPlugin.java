@@ -95,7 +95,7 @@ public class ElementWrapperPlugin extends OptionPlugin {
     private final List<FlattenedField> flattenedFields = new ArrayList<>();
 
     @Option(name = "remove-wrapper-class", defaultValue = "true", description = "Whether to remove the wrapper class")
-    Boolean removeWrapperClass = true;
+    Boolean removeWrapperClass;
 
     /**
      * Reads {@code nillable} from the original XSD element particle when available.
