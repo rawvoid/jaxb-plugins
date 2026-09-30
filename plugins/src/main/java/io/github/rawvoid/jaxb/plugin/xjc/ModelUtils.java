@@ -417,9 +417,18 @@ public final class ModelUtils {
      */
     @SuppressWarnings("UnusedReturnValue")
     public static boolean unlinkSubClass(CClassInfo baseClass) {
-        var set = new HashSet<Boolean>();
-        baseClass.listSubclasses().forEachRemaining(subClass -> set.add(unlinkSubClass(baseClass, subClass)));
-        return set.size() == 1 && set.contains(Boolean.TRUE);
+        var subClasses = new ArrayList<CClassInfo>();
+        baseClass.listSubclasses().forEachRemaining(subClasses::add);
+        if (subClasses.isEmpty()) {
+            return true;
+        }
+        var allSuccess = true;
+        for (var subClass : subClasses) {
+            if (!unlinkSubClass(baseClass, subClass)) {
+                allSuccess = false;
+            }
+        }
+        return allSuccess;
     }
 
     /**

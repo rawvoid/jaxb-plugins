@@ -122,6 +122,9 @@ public class JavaTimePlugin extends OptionPlugin {
      * @return the type mapping configuration that matches the given criteria, or null if no match is found
      */
     public TypeMappingConfig findTypeMappingConfig(String beanClassName, CPropertyInfo propertyInfo, QName schemaType) {
+        if (typeMappings == null || typeMappings.isEmpty()) {
+            return null;
+        }
         var fieldFullName = beanClassName + "." + propertyInfo.getName(false);
         return typeMappings.stream()
             .filter(config -> {
