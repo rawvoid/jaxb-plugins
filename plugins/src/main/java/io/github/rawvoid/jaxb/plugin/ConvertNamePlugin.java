@@ -135,8 +135,11 @@ public class ConvertNamePlugin extends OptionPlugin {
                         if (Objects.equals(config.input, token)) {
                             return config.to;
                         }
-                    } else if (config.name != null && config.name.matcher(internalName).matches()) {
-                        return internalName.replaceAll(config.name.pattern(), config.to);
+                    } else if (config.name != null) {
+                        var matcher = config.name.matcher(internalName);
+                        if (matcher.matches()) {
+                            return matcher.replaceAll(config.to);
+                        }
                     }
                 }
 

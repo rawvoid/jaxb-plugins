@@ -30,6 +30,8 @@ package io.github.rawvoid.jaxb.plugin.lombok;
  */
 public final class LombokShadow {
 
+    private static volatile ClassLoader cachedClassLoader;
+
     private LombokShadow() {
     }
 
@@ -38,10 +40,19 @@ public final class LombokShadow {
      * @throws ReflectiveOperationException if {@code lombok.launch.Main} is missing or the API changed
      */
     public static ClassLoader classLoader() throws ReflectiveOperationException {
-        var main = Class.forName("lombok.launch.Main");
-        var getShadow = main.getDeclaredMethod("getShadowClassLoader");
-        getShadow.setAccessible(true);
-        return (ClassLoader) getShadow.invoke(null);
+        var loader = cachedClassLoader;
+        if (loader != null) {
+            return loader;
+        }
+        synchronized (LombokShadow.class) {
+            if (cachedClassLoader == null) {
+                var main = Class.forName("lombok.launch.Main");
+                var getShadow = main.getDeclaredMethod("getShadowClassLoader");
+                getShadow.setAccessible(true);
+                cachedClassLoader = (ClassLoader) getShadow.invoke(null);
+            }
+            return cachedClassLoader;
+        }
     }
 
     /**
