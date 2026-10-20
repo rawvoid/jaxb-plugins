@@ -53,13 +53,15 @@ import java.util.regex.Pattern;
  *         <li>{@code -super-builder}: every matched class gets
  *             {@code @SuperBuilder(toBuilder = true)} (including abstract types). No inheritance
  *             heuristic.</li>
- *         <li>Either mode also adds NoArgs/AllArgs constructors as appropriate, and annotates
- *             {@link Collection}/{@link Map} fields with {@code @Singular(ignoreNullCollections = true)}
- *             (singular names via Lombok {@code Singulars.autoSingularize}; explicit field name when
- *             auto fails).</li>
+ *         <li>Either mode also adds NoArgs/AllArgs constructors as appropriate.</li>
  *         <li>{@code @SuperBuilder} remains under {@code lombok.experimental}.</li>
  *       </ul>
  *   </li>
+ *   <li>{@code -singular} annotates {@link Collection}/{@link Map} fields with
+ *       {@code @Singular(ignoreNullCollections = true)} (singular names via Lombok
+ *       {@code Singulars.autoSingularize}; explicit field name when auto fails).
+ *       It requires {@code -builder} or {@code -super-builder}; using it alone is rejected.
+ *       Without it, an unset collection stays null instead of {@code Collections.emptyList()}.</li>
  *   <li>{@code @EqualsAndHashCode(callSuper = true)} is auto-added only when the class has a non-{@code Object}
  *       superclass and the resolved annotation set includes {@code @Data}. If the user already supplies
  *       {@code @EqualsAndHashCode}, it is left unchanged.</li>
@@ -101,12 +103,16 @@ public class LombokPlugin extends OptionPlugin {
     Boolean removeSetter;
 
     @Option(name = "builder", defaultValue = "false",
-        description = "Smart builders: @Builder or @SuperBuilder by inheritance; @Singular on collections (exclusive with -super-builder)")
+        description = "Smart builders: @Builder or @SuperBuilder by inheritance (exclusive with -super-builder)")
     Boolean builder;
 
     @Option(name = "super-builder", defaultValue = "false",
-        description = "Add @SuperBuilder(toBuilder=true) on every matched class; @Singular on collections (exclusive with -builder)")
+        description = "Add @SuperBuilder(toBuilder=true) on every matched class (exclusive with -builder)")
     Boolean superBuilder;
+
+    @Option(name = "singular", defaultValue = "false",
+        description = "Annotate Collection and Map fields with @Singular. Requires -builder or -super-builder")
+    Boolean singular;
 
     public LombokPlugin() {
         registerTextParser(XAnnotation.class, AnnotationUtils.xAnnotationTextParser());
@@ -195,11 +201,16 @@ public class LombokPlugin extends OptionPlugin {
             throw new BadCommandLineException(
                 "-builder and -super-builder are mutually exclusive; enable only one");
         }
+        if (Boolean.TRUE.equals(singular)
+            && !Boolean.TRUE.equals(builder)
+            && !Boolean.TRUE.equals(superBuilder)) {
+            throw new BadCommandLineException(
+                "-singular requires -builder or -super-builder");
+        }
     }
 
     @Override
     public boolean run(Outline outline, Options options, ErrorHandler errorHandler) throws SAXException {
-        var buildersEnabled = Boolean.TRUE.equals(builder) || Boolean.TRUE.equals(superBuilder);
         // Only -builder needs inheritance detection; -super-builder annotates every class.
         var superBuilderNames = Boolean.TRUE.equals(builder)
             ? collectSuperBuilderClassNames(outline)
@@ -215,7 +226,7 @@ public class LombokPlugin extends OptionPlugin {
             var resolved = resolveAnnotations(implClass, superBuilderNames);
             applyAnnotations(implClass, resolved);
 
-            if (buildersEnabled) {
+            if (Boolean.TRUE.equals(singular)) {
                 annotateSingularOnCollectionFields(implClass);
             }
 

@@ -12,7 +12,7 @@ Does not generate bytecode; consumers must provide Lombok and annotation process
 
 | Hook | Role |
 |------|------|
-| `postParseArgument` | Reject simultaneous `-builder` and `-super-builder` |
+| `postParseArgument` | Reject simultaneous `-builder` and `-super-builder`; reject `-singular` without either |
 | `run` | Resolve annotations, apply them, optional `@Singular`, remove accessors |
 
 ## Options
@@ -25,8 +25,9 @@ Does not generate bytecode; consumers must provide Lombok and annotation process
 | `-remove-getter` | boolean | `true` | Remove generated getter methods |
 | `-keep-list-getter` | boolean | `false` | When removing getters, keep XJC getters for List/collection properties (lazy-init live list) |
 | `-remove-setter` | boolean | `true` | Remove generated setter methods |
-| `-builder` | boolean | `false` | Smart builders: `@Builder` or `@SuperBuilder` by inheritance; `@Singular` on collections (**exclusive** with `-super-builder`) |
-| `-super-builder` | boolean | `false` | `@SuperBuilder(toBuilder=true)` on every matched class; `@Singular` on collections (**exclusive** with `-builder`) |
+| `-builder` | boolean | `false` | Smart builders: `@Builder` or `@SuperBuilder` by inheritance (**exclusive** with `-super-builder`) |
+| `-super-builder` | boolean | `false` | `@SuperBuilder(toBuilder=true)` on every matched class (**exclusive** with `-builder`) |
+| `-singular` | boolean | `false` | `@Singular(ignoreNullCollections=true)` on `Collection`/`Map` fields. Requires `-builder` or `-super-builder` |
 
 ## Behavior
 
@@ -41,8 +42,9 @@ Does not generate bytecode; consumers must provide Lombok and annotation process
   - Standalone concrete types → `@Builder(toBuilder = true)`
   - Types in an inheritance chain (non-`Object` super, including episode/external parents, or having generated subclasses) → `@SuperBuilder(toBuilder = true)`
 - **`-super-builder`:** every matched class gets `@SuperBuilder(toBuilder = true)` (including abstract types). No inheritance heuristic.
-- Either mode also adds `@NoArgsConstructor` / `@AllArgsConstructor` as appropriate (AllArgs only when there are fields and the class is not abstract), and annotates `Collection`/`Map` fields with `@Singular(ignoreNullCollections = true)` (singular names via Lombok `Singulars.autoSingularize`; explicit field name when auto fails).
+- Either mode also adds `@NoArgsConstructor` / `@AllArgsConstructor` as appropriate (AllArgs only when there are fields and the class is not abstract).
 - `@SuperBuilder` remains under `lombok.experimental`.
+- **`-singular`:** annotates `Collection`/`Map` fields with `@Singular(ignoreNullCollections = true)` (singular names via Lombok `Singulars.autoSingularize`; explicit field name when auto fails). Requires `-builder` or `-super-builder`. Without it, an unset collection stays null.
 
 ### Accessors
 
@@ -58,6 +60,7 @@ Does not generate bytecode; consumers must provide Lombok and annotation process
 -Xlombok
 -Xlombok -anno=@lombok.Value -remove-getter=true -remove-setter=true
 -Xlombok -builder=true -keep-list-getter=true
+-Xlombok -builder -singular
 -Xlombok -super-builder=true -class-name=com\.example\..*
 ```
 
