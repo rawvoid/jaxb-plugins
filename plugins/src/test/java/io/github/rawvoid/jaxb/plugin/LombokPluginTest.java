@@ -155,6 +155,15 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).contains("@AllArgsConstructor");
             assertThat(hasPropertyGetterInSource(source)).isFalse();
             assertThat(hasPropertySetterInSource(source)).isFalse();
+            assertThat(source).doesNotContain("@Singular");
+        });
+    }
+
+    @Test
+    void testSingularWithBuilder() throws Exception {
+        var args = List.of("-Xlombok", "-builder", "-singular");
+        testExecute(args, PERSON, (source, clazz) -> {
+            assertThat(source).contains("@Builder");
             // Plural list: auto-singularize works → @Singular without value=…
             assertThat(source).contains("nicknames");
             assertThat(source).contains("@Singular");
@@ -195,7 +204,7 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
             assertThat(source).contains("toBuilder = true");
             assertThat(source).doesNotContain("@lombok.Builder");
             assertThat(source).contains("@NoArgsConstructor");
-            assertThat(source).contains("@Singular");
+            assertThat(source).doesNotContain("@Singular");
         });
         testExecute(args, PKG + "\\.BaseType", (source, clazz) -> {
             assertThat(source).contains("@SuperBuilder");
@@ -211,6 +220,15 @@ class LombokPluginTest extends AbstractXJCMojoTestCase {
         assertThatThrownBy(() -> plugin.parseArgument(new Options(), args, 0))
             .isInstanceOf(BadCommandLineException.class)
             .hasMessageContaining("mutually exclusive");
+    }
+
+    @Test
+    void testSingularRequiresABuilder() {
+        var plugin = new LombokPlugin();
+        var args = new String[]{"-Xlombok", "-singular"};
+        assertThatThrownBy(() -> plugin.parseArgument(new Options(), args, 0))
+            .isInstanceOf(BadCommandLineException.class)
+            .hasMessageContaining("-singular requires -builder or -super-builder");
     }
 
     @Test
